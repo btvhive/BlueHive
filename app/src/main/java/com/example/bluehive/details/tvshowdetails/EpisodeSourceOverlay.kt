@@ -20,6 +20,13 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 import com.example.bluehive.details.shared.playback.StreamSource
+import androidx.compose.ui.platform.LocalDensity
+import com.example.bluehive.api.SourceCatalog
+import com.example.bluehive.api.isJapaneseAnimation
+import com.example.bluehive.api.buildJapaneseAnimationSources
+import com.example.bluehive.details.shared.state.ExtrasState
+import com.example.bluehive.details.shared.playback.AnimePlaybackController
+import com.example.bluehive.details.shared.playback.SourcePlaybackController
 
 // =====================================================================================================================>  Episode overlay section
 @Composable
@@ -231,3 +238,210 @@ private fun EpisodeOverlayStreamerButton(
     )
 }
 // =====================================================================================================================> Episode overlay section
+
+/**
+ * The source buttons for this episode.
+ *
+ * NOW BACKEND-OWNED. The list, its order, the button labels and the url shapes
+ * all come from config/sources.conf on the server via SourceCatalog, so a dead
+ * source is switched off by editing one line there rather than by shipping a
+ * build. The hardcoded list that used to live here is still compiled in as
+ * SourceCatalog's built-in fallback, so an unreachable backend behaves exactly
+ * as this function did before.
+ *
+ * Still synchronous: SourceCatalog answers from memory or disk and never does
+ * IO here, which is what lets the focus-requester pool size itself during
+ * composition.
+ */
+internal fun getStreamingSources(
+    mediaType: String,
+    mediaId: Int,
+    seasonNumber: Int,
+    episodeNumber: Int
+): List<StreamSource> {
+    if (!mediaType.equals("movie", true)) {
+        return com.example.bluehive.api.SourceCatalog
+            .sources(BlueHiveApplication.appContext, "tv", mediaId, seasonNumber, episodeNumber)
+            .map { StreamSource(it.label, it.name, it.url) }
+    }
+    // Only a title of the other type gets here, and it has no buttons on
+    // this screen. The hard-coded list that followed could never run and
+    // was removed in Stage 7 of the details redesign; the same sources are
+    // SourceCatalog's built-ins.
+    return emptyList()
+}
+
+/**
+ * The "Watch on ..." buttons under the tile whose source overlay is open,
+ * placed at the still's position: English / Japanese for an anime, else the
+ * source grid. A press records the episode in [episodesState] and starts the
+ * anime flow or the source chain; Back closes the overlay and returns to the
+ * tile.
+ *
+ * Moved here from the screen in Stage 8 of the details redesign.
+ */
+@Composable
+internal fun EpisodeSourceOverlay(
+    extras: ExtrasState,
+    episodesState: EpisodesState,
+    focusMap: TvFocusMap,
+    anime: AnimePlaybackController,
+    sourcePlayback: SourcePlaybackController,
+    mediaType: String,
+    mediaId: Int,
+    genres: String?,
+    originalLanguage: String?,
+    passionFont: FontFamily,
+    stopTrailerAndSelectEpisode: (season: Int, episode: Int, epName: String?) -> Unit,
+    /** A brand-new anime with no AniList mapping yet: the screen shows its notice. */
+    onUnavailable: () -> Unit,
+) {
+    // ✅ Position of the selected episode still in root coordinates
+    val density = LocalDensity.current
+
+    if (
+        !extras.isOn &&
+        episodesState.selectedEpisodeOverlayIndex != -1 &&
+        episodesState.overlayAnchor != null &&
+        episodesState.selectedEpisodeOverlayIndex in episodesState.episodes.indices
+    ) {
+        val anchor = episodesState.overlayAnchor!!
+
+        val selectedEpisode = episodesState.episodes[episodesState.selectedEpisodeOverlayIndex]
+
+        // fall back to index+1 if episodeNumber is null
+        val episodeNumber = selectedEpisode.episodeNumber
+
+        // Build sources for this episode.
+        // Japanese animation → 2 buttons (Miruro + VidFast); else the standard set.
+        val episodeSources by produceState(
+            initialValue = emptyList(),
+            mediaType, mediaId, episodesState.selectedSeason, episodeNumber, genres, originalLanguage
+        ) {
+            if (isJapaneseAnimation(genres, originalLanguage)) {
+                value = buildJapaneseAnimationSources(
+                    mediaType     = mediaType,
+                    tmdbId        = mediaId,
+                    seasonNumber  = episodesState.selectedSeason,
+                    episodeNumber = episodeNumber,
+                ) { c, n, u -> StreamSource(c, n, u) }
+            } else {
+                // READ FIRST, REFRESH SECOND, READ AGAIN. The first read
+                // is synchronous and fills the buttons immediately from
+                // cache; the refresh then upgrades them if the server has
+                // changed since. Fetching before the first assignment
+                // would make every title wait on the network to draw its
+                // own buttons, which is a worse trade than being one
+                // screen late to a kill switch.
+                value = getStreamingSources(
+                    mediaType = mediaType,
+                    mediaId = mediaId,
+                    seasonNumber = episodesState.selectedSeason,
+                    episodeNumber = episodeNumber
+                )
+                com.example.bluehive.api.SourceCatalog
+                    .warm(BlueHiveApplication.appContext ?: return@produceState)
+                value = getStreamingSources(
+                    mediaType = mediaType,
+                    mediaId = mediaId,
+                    seasonNumber = episodesState.selectedSeason,
+                    episodeNumber = episodeNumber
+                )
+            }
+        }
+
+        val gridOffsetX = with(density) { anchor.x.toDp() }
+        val gridOffsetY = with(density) {
+            (anchor.y + 97.5.dp.toPx() + 12.dp.toPx()).toDp()
+        }
+
+        Box(
+            modifier = Modifier
+                .offset(x = gridOffsetX, y = gridOffsetY)
+        ) {
+            if (isJapaneseAnimation(genres, originalLanguage)) {
+                // Anime: exactly DuB / SuB. DuB+SuB run the Miruro flow
+                // (the URL already carries ?ep=, so the extractor clicks
+                // the right episode).
+                val miruroUrl = episodeSources.firstOrNull { it.name.equals("Miruro", true) }?.url
+                AnimeEpisodeProviderButtons(
+                    passionFont     = passionFont,
+                    miruroUrl       = miruroUrl,
+                    // Empty means produceState has not finished; once it
+                    // has, the list always holds at least VidFast.
+                    resolving       = episodeSources.isEmpty(),
+                    focusRequesters = focusMap.providers,
+                    onDub = { url ->
+                        val epName = selectedEpisode.title
+                        stopTrailerAndSelectEpisode(episodesState.selectedSeason, episodeNumber, epName)
+                        // NOT marked watched here. Picking DuB only opens the
+                        // server prompt — extraction can still fail, find no
+                        // servers, or be cancelled. The mark happens where the
+                        // stream actually plays (see the extractor result
+                        // handler, alongside logWatchHistory).
+                        focusMap.lastStream = focusMap.providers.getOrNull(0)
+                        anime.pendingUrl         = url
+                        anime.pendingDub         = true
+                        episodesState.pendingSeason      = episodesState.selectedSeason
+                        episodesState.pendingEpisode     = episodeNumber
+                        episodesState.pendingEpisodeName = epName
+                        anime.showDefaultPrompt  = true
+                    },
+                    onSub = { url ->
+                        val epName = selectedEpisode.title
+                        stopTrailerAndSelectEpisode(episodesState.selectedSeason, episodeNumber, epName)
+                        // NOT marked watched here — same reason as onDub above.
+                        focusMap.lastStream = focusMap.providers.getOrNull(1)
+                        anime.pendingUrl         = url
+                        anime.pendingDub         = false
+                        episodesState.pendingSeason      = episodesState.selectedSeason
+                        episodesState.pendingEpisode     = episodeNumber
+                        episodesState.pendingEpisodeName = epName
+                        anime.showDefaultPrompt  = true
+                    },
+                    onUnavailable = onUnavailable,
+                    onBack = {
+                        episodesState.selectedEpisodeOverlayIndex = -1
+                        val targetIndex = episodesState.lastFocusedEpisodeIndex
+                            .coerceIn(0, episodesState.focusRequesters.lastIndex)
+                        episodesState.focusRequesters[targetIndex].requestFocus()
+                    }
+                )
+            } else {
+                EpisodeProviderInlineButtons(
+                    passionFont = passionFont,
+                    sources = episodeSources,
+                    focusRequesters = focusMap.providers,
+                    onSourceSelected = { source ->
+                        val epName = selectedEpisode.title
+
+                        // Remember which button launched this so focus comes
+                        // back here when the player exits (THE RULE).
+                        focusMap.lastStream = focusMap.providers.getOrNull(
+                            episodeSources.indexOfFirst { it.name == source.name }
+                        )
+
+                        // Every source: server-side m3u8 extraction, then our
+                        // own player. The server reports every source as
+                        // extractable; one it could not extract fails into the
+                        // same chain as a dead one. The episode overlay STAYS
+                        // open behind the player, which keeps this button
+                        // attached so focus can return to it on the way back.
+                        episodesState.pendingSeason      = episodesState.selectedSeason
+                        episodesState.pendingEpisode     = episodeNumber
+                        episodesState.pendingEpisodeName = epName
+                        sourcePlayback.start(source)
+                    },
+                    onBack = {
+                        episodesState.selectedEpisodeOverlayIndex = -1
+
+                        val targetIndex = episodesState.lastFocusedEpisodeIndex
+                            .coerceIn(0, episodesState.focusRequesters.lastIndex)
+
+                        episodesState.focusRequesters[targetIndex].requestFocus()
+                    },
+                )
+            }
+        }
+    }
+}

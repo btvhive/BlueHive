@@ -65,6 +65,12 @@ class EpisodesState internal constructor(
     // instead of assuming a fire-and-forget requestFocus() succeeded.
     var episodeFocusLanded by mutableStateOf(false)
 
+    // The episode a press recorded: what the player is asked for. Set by the
+    // source overlay's buttons; both playback controllers' requests read it.
+    var pendingSeason      by mutableIntStateOf(1)
+    var pendingEpisode     by mutableIntStateOf(1)
+    var pendingEpisodeName by mutableStateOf<String?>(null)
+
     // ── Watched-episode markers ──────────────────────────────────────────────
     // (season, episode) pairs this profile has started, for THIS show. Drives the
     // corner fold on each episode card. Fetched once per show; failures leave the

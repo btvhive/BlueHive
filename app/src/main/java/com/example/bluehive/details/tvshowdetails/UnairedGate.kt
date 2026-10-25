@@ -1,11 +1,15 @@
 package com.example.bluehive.details.tvshowdetails
 
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.unit.dp
+import com.example.bluehive.details.shared.layout.DetailsToast
+import androidx.compose.ui.text.font.FontFamily
 
 /**
  * How long a first press on an unaired episode stays armed.
@@ -41,3 +45,26 @@ class UnairedGate internal constructor() {
 
 @Composable
 fun rememberUnairedGate(): UnairedGate = remember { UnairedGate() }
+
+/**
+ * Says what the first press did and what a second will do. Carries the
+ * date so the viewer can judge for themselves whether we have it wrong --
+ * which is the entire point of offering the override.
+ */
+@Composable
+internal fun BoxScope.UnairedNotice(unairedGate: UnairedGate, episodesState: EpisodesState, dongleRegular: FontFamily) {
+    if (unairedGate.armedIndex >= 0) {
+        val armedDate = formatEpisodeAirDate(
+            episodesState.episodes.getOrNull(unairedGate.armedIndex)?.airDate
+        )
+        DetailsToast(
+            if (armedDate.isNotEmpty())
+                "This episode airs $armedDate — press again to try anyway"
+            else
+                "This episode hasn't aired yet — press again to try anyway",
+            dongleRegular,
+            centered = true,
+            maxWidth = 720.dp,
+        )
+    }
+}
