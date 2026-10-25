@@ -14,20 +14,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.Image
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import com.example.bluehive.utilities.*
-import coil.compose.AsyncImage
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.rememberTextMeasurer
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -38,7 +30,6 @@ import com.example.bluehive.utilities.launchIfActive
 import com.example.bluehive.utilities.runCatchingCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import com.example.bluehive.utilities.DetailsTrailerPlayer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.input.key.*
@@ -51,8 +42,6 @@ import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.SourceCatalog
 import com.example.bluehive.api.ExtractOutcome
 import com.example.bluehive.api.FavoriteRequest
-import com.example.bluehive.utilities.AppShapes
-import androidx.compose.ui.text.style.TextAlign
 import com.example.bluehive.sidebarComponents.FavoritesScreenActivity
 import com.example.bluehive.sidebarComponents.HistoryScreenActivity
 import com.example.bluehive.searchBarComponent.SearchBarActivity
@@ -70,7 +59,6 @@ import com.example.bluehive.webview.ExtractionLoadingOverlay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.android.awaitFrame
 import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
 import com.example.bluehive.webview.hls.HlsExtract
 import com.example.bluehive.webview.hls.HlsPlayerActivity
 import com.example.bluehive.api.extractStreamAwait
@@ -82,6 +70,12 @@ import com.example.bluehive.details.shared.playback.extractionErrorMessage
 import com.example.bluehive.details.shared.playback.miruroSourceLabel
 import com.example.bluehive.details.shared.playback.parseExtractReason
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
+import com.example.bluehive.details.shared.layout.DetailsBackdrop
+import com.example.bluehive.details.shared.layout.DetailsGradient
+import com.example.bluehive.details.shared.layout.DetailsLogoOrTitle
+import com.example.bluehive.details.shared.layout.DetailsOverview
+import com.example.bluehive.details.shared.layout.DetailsToast
+import com.example.bluehive.details.shared.layout.DetailsTrailerLayer
 
 
 
@@ -1598,348 +1592,54 @@ fun MoviesDetailsScreenContent(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Background image layer
-        Image(
-            painter = painterResource(id = R.drawable.backdrop_details),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
+        // Background, content rating, star and score, and the backdrop picture
+        // (hidden once the trailer has played) -- see DetailsBackdrop.
+        DetailsBackdrop(
+            contentRating       = contentRating,
+            voteAverage         = voteAverage,
+            backdropUrl         = backdropUrl,
+            showBackdrop        = !hasTrailerBeenPlayed,
+            backdropDescription = "Movie backdrop",
+            dongleRegular       = dongleRegular,
         )
-
-
-        // ========================================================================================================================================= > // Content Rating
-        if (!contentRating.isNullOrBlank() && contentRating != "N/A") {
-            Text(
-                text = if (!contentRating.isNullOrBlank() && contentRating != "N/A") {
-                    "Rated: $contentRating"
-                } else {
-                    "Rated: N/A"
-                },  // Changed this line
-                color = Color(0xFFFFFFFF),
-                fontSize = 16.sp,
-                fontFamily = dongleRegular,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 258.8.dp, top = 16.75.dp)
-            )
-        }
-        // ========================================================================================================================================= >
-
-
-
-
-        // ========================================================================================================================================= > // vote_average
-        Image(
-            painter = painterResource(id = R.drawable.star),
-            contentDescription = "Rating star",
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 337.dp, top = 21.dp)   // ⬅️ star position (edit this independently)
-                .size(11.dp)
-        )
-
-        Text(
-            text = "${String.format("%.1f", voteAverage)}/10",  // Format to 1 decimal place
-            color = Color(0xFFFFFFFF),
-            fontSize = 16.sp,
-            fontFamily = dongleRegular,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 352.dp, top = 16.75.dp)  // Adjust position as needed
-        )
-        // ========================================================================================================================================= >
-
-
-        // ========================================================================================================================================= > // BACKDROP OVERLAY - Top-right corner with custom rounded bottom-left corner
-        if (!backdropUrl.isNullOrBlank() && backdropUrl != "N/A" && !hasTrailerBeenPlayed) {
-            AsyncImage(
-                model = backdropUrl,
-                contentDescription = "Movie backdrop",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .width(519.dp)
-                    .height(292.dp)
-                    .clip(AppShapes.bottomLeftRoundedShape),
-                contentScale = ContentScale.Crop,
-                onLoading = { Log.d("BackdropDebug", "⏳ Backdrop loading...") },
-                onSuccess = { Log.d("BackdropDebug", "✅ Backdrop loaded!") },
-                onError = { e -> Log.e("BackdropDebug", "❌ Failed: ${e.result.throwable.message}") }
-            )
-        }
 
 
         var trailerPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
 
         // This renders BEHIND the gradient overlay due to Box ordering
-        if (!trailerUrl.isNullOrBlank()) {
-            DetailsTrailerPlayer(
-                trailerUrl = trailerUrl,
-                isPlaying = isTrailerPlaying,
-                showPlayerView = hasTrailerBeenPlayed,
-                shouldExtract = shouldExtractTrailer,
-                onPlaybackStateChanged = { playing ->
-                    isTrailerPlaying = playing
-                },
-                onPlayerReady = { player ->
-                    trailerPlayer = player
-                    isExtractingTrailer = false  // ✅ Extraction complete
-                },
-                modifier = Modifier.align(Alignment.TopEnd)
-            )
-        }
-
-
-        if (!backdropUrl.isNullOrBlank() && backdropUrl != "N/A") {
-            // GRADIENT OVERLAY - Add this right after the backdrop
-            Image(
-                painter = painterResource(id = R.drawable.backdrop_details_gradient),
-                contentDescription = "Gradient overlay",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .width(569.dp)
-                    .height(362.dp),
-                contentScale = ContentScale.FillBounds
-            )
-        }
-        // ========================================================================================================================================= >
-
-
-        // ========================================================================================================================================= > logo parsing - it's already a full URL
-        val fullLogoUrl = remember(logoUrl) {
-            when {
-                logoUrl.isNullOrBlank() -> {
-                    Log.d("LogoDebug", "❌ Logo URL is null or blank")
-                    null
-                }
-                logoUrl == "N/A" -> {
-                    Log.d("LogoDebug", "❌ Logo URL is N/A")
-                    null
-                }
-                else -> {
-                    Log.d("LogoDebug", "✅ Logo URL: $logoUrl")
-                    logoUrl // It's already a complete URL!
-                }
-            }
-        }
-
-        if (fullLogoUrl != null) {
-            Log.d("LogoDebug", "🖼️ Rendering logo: $fullLogoUrl")
-            AsyncImage(
-                model = fullLogoUrl,
-                contentDescription = "Logo",
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = 25.dp, start = 40.dp)
-                    .size(width = 180.dp, height = 100.dp),
-                contentScale = ContentScale.Fit,
-                onLoading = {
-                    Log.d("LogoDebug", "⏳ Logo loading...")
-                },
-                onSuccess = {
-                    Log.d("LogoDebug", "✅ Logo loaded successfully!")
-                },
-                onError = { error ->
-                    Log.e("LogoDebug", "❌ Logo failed to load: ${error.result.throwable.message}")
-                }
-            )
-        } else {
-            Log.d("LogoDebug", "❌ No logo to display — rendering title instead")
-            val titleFontSize = remember(mediaTitle) {
-                when {
-                    mediaTitle.length <= 20 -> 41.sp
-                    mediaTitle.length <= 23 -> 35.sp
-                    mediaTitle.length <= 33 -> 32.sp
-                    mediaTitle.length <= 40 -> 30.sp
-                    else -> 25.sp
-                }
-            }
-            val wrappedTitle = remember(mediaTitle) {
-                val words = mediaTitle.split(" ")
-                val lines = mutableListOf<String>()
-                var currentLine = ""
-                for (word in words) {
-                    val candidate = if (currentLine.isEmpty()) word else "$currentLine $word"
-                    if (candidate.length <= 10) {
-                        currentLine = candidate
-                    } else {
-                        if (currentLine.isNotEmpty()) lines.add(currentLine)
-                        currentLine = word
-                    }
-                }
-                if (currentLine.isNotEmpty()) lines.add(currentLine)
-                lines.joinToString("\n")
-            }
-
-            val lineCount = remember(wrappedTitle) { wrappedTitle.count { it == '\n' } + 1 }
-            val titleTopPadding = remember(lineCount) {
-                when (lineCount) {
-                    1 -> 40.dp
-                    2 -> 25.dp
-                    else -> 8.dp
-                }
-            }
-
-            Text(
-                text = wrappedTitle,
-                color = Color.White.copy(alpha = 0.88f),
-                fontSize = titleFontSize,
-                lineHeight = titleFontSize * 0.87f,
-                fontFamily = AppTypography.lalezarRegular,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(top = titleTopPadding, start = 30.dp)
-                    .width(200.dp),
-                textAlign = TextAlign.Center,
-                maxLines = 6,
-                overflow = TextOverflow.Clip
-            )
-        }
-        // ========================================================================================================================================= >
-
-
-
-
-
-        // ========================================================================================================================================= > // Revenue
-        if (displayRevenue > 0) {
-            Text(
-                text = "Revenue:          $${"%,d".format(displayRevenue)}.00",
-                color = Color(0xFF8B8B8B),
-                fontSize = 17.sp,
-                fontFamily = dongleRegular,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 258.25.dp, top = 34.dp)
-            )
-        }
-        // ========================================================================================================================================= >
-
-
-        // ========================================================================================================================================= > // Budget
-        if (displayBudget > 0) {
-            Text(
-                text = "Budget:            $${"%,d".format(displayBudget)}.00",
-                color = Color(0xFF8B8B8B),
-                fontSize = 17.sp,
-                fontFamily = dongleRegular,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 258.25.dp, top = 48.dp)
-            )
-        }
-        // ========================================================================================================================================= >
-
-
-
-        // ========================================================================================================================================= > // release_date
-        Text(
-            text = if (!releaseDate.isNullOrBlank() && releaseDate != "N/A") {
-                val dateParts = releaseDate.split("-")
-                if (dateParts.size == 3) {
-                    "Release Date:      ${dateParts[1]}/${dateParts[2]}/${dateParts[0]}"  // Format as MM/DD/YYYY
-                } else {
-                    releaseDate
-                }
-            } else {
-                "Release Date:      N/A"
+        DetailsTrailerLayer(
+            trailerUrl = trailerUrl,
+            trailerPlayer = trailerPlayer,
+            isPlaying = isTrailerPlaying,
+            showPlayerView = hasTrailerBeenPlayed,
+            shouldExtract = shouldExtractTrailer,
+            onPlaybackStateChanged = { playing ->
+                isTrailerPlaying = playing
             },
-            color = Color(0xFF8B8B8B),
-            fontSize = 16.sp,
-            fontFamily = dongleRegular,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 258.25.dp, top = 63.dp)  // Adjust position as needed
-        )
-        // ========================================================================================================================================= >
-
-
-        // ========================================================================================================================================= > // original language
-        // ✅ Always show language, fall back to N/A
-        Text(
-            text = "Language:         " + (
-                    if (!originalLanguage.isNullOrBlank() && originalLanguage != "N/A")
-                        originalLanguage
-                    else
-                        "N/A"
-                    ),
-            color = Color(0xFF8B8B8B),
-            fontSize = 17.sp,
-            fontFamily = dongleRegular,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 258.25.dp, top = 75.dp)
+            onPlayerReady = { player ->
+                trailerPlayer = player
+                isExtractingTrailer = false  // ✅ Extraction complete
+            },
+            modifier = Modifier.align(Alignment.TopEnd),
+            releaseOnLeave = false,
         )
 
+
+        DetailsGradient(backdropUrl)
         // ========================================================================================================================================= >
 
 
-        // ========================================================================================================================================= > // Genres
-        if (!genres.isNullOrBlank() && genres != "N/A") {
-            Text(
-                text = genres,
-                color = Color(0xFF8B8B8B),
-                fontSize = 16.sp,
-                fontFamily = dongleRegular,
-                lineHeight = 12.sp,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 258.25.dp, top = 96.dp)
-                    .width(160.dp)  // Add width constraint so it wraps nicely
-            )
-        }else {
-            Log.d("GenresDebug", "❌ Not rendering genres - value: '$genres'")
-        }
-        // ========================================================================================================================================= >
-
-
-
-        // ========================================================================================================================================= > Overview text display with dynamic font sizing
-        if (!overview.isNullOrBlank()) {
-            var fontSize by remember { mutableStateOf(18.sp) }
-            var lineHeight by remember { mutableStateOf(14.sp) }
-
-            // Measure text to determine if we need smaller font
-            val textMeasurer = rememberTextMeasurer()
-
-            LaunchedEffect(overview) {
-                val textLayoutResult = textMeasurer.measure(
-                    text = androidx.compose.ui.text.AnnotatedString(overview),
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontSize = 18.sp,
-                        fontFamily = dongleRegular,
-                        lineHeight = 14.sp  // Include line height in measurement
-                    ),
-                    constraints = androidx.compose.ui.unit.Constraints(
-                        maxWidth = (400 * 2.75).toInt(), // dp to px approximation
-                        maxHeight = (105.75 * 2.75).toInt() // Add height constraint!
-                    )
-                )
-
-                // Check if text overflows OR doesn't fit in the height
-                if (textLayoutResult.lineCount > 5 || textLayoutResult.didOverflowHeight) {
-                    fontSize = 16.sp
-                    lineHeight = 13.7.sp
-                } else {
-                    lineHeight = 14.sp
-                }
-            }
-
-            Text(
-                text = overview,
-                color = Color(0xFF8B8B8B),
-                fontSize = fontSize,
-                fontFamily = dongleRegular,
-                lineHeight = lineHeight,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 28.25.dp, top = 175.dp)
-                    //.background(Color.Red.copy(alpha = 0.5f))  // Debug background
-                    .height(108.25.dp)
-                    .width(400.dp),
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        // ========================================================================================================================================= >
+        // Logo or title, the labels, then genres and the overview -- in the
+        // order they were always drawn.
+        DetailsLogoOrTitle(logoUrl = logoUrl, mediaTitle = mediaTitle)
+        MovieInfoLabels(
+            displayRevenue   = displayRevenue,
+            displayBudget    = displayBudget,
+            releaseDate      = releaseDate,
+            originalLanguage = originalLanguage,
+            dongleRegular    = dongleRegular,
+        )
+        DetailsOverview(genres = genres, overview = overview, dongleRegular = dongleRegular)
 
 
 
@@ -2180,32 +1880,15 @@ fun MoviesDetailsScreenContent(
 
         // "No dub available" toast
         if (showNoDub) {
-            Text(
-                "No dub available for this title",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontFamily = dongleRegular,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 70.dp)
-                    .background(Color(0xE6000000), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 26.dp, vertical = 12.dp)
-            )
+            DetailsToast("No dub available for this title", dongleRegular)
         }
 
         // ── "Not in our search engine yet" — no AniList mapping for this movie ──
         if (showNotYetAvailable) {
-            Text(
+            DetailsToast(
                 "This title isn't in our anime search engine yet — try VidFast below",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontFamily = dongleRegular,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 70.dp)
-                    .background(Color(0xE6000000), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 26.dp, vertical = 12.dp)
+                dongleRegular,
+                centered = true,
             )
         }
 
@@ -2294,17 +1977,7 @@ fun MoviesDetailsScreenContent(
 
         // ── Transient "couldn't load" toast ─────────────────────────────────
         if (showServerError) {
-            Text(
-                "Couldn't reach the site — please try again",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontFamily = dongleRegular,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 70.dp)
-                    .background(Color(0xE6000000), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 26.dp, vertical = 12.dp)
-            )
+            DetailsToast("Couldn't reach the site — please try again", dongleRegular)
         }
 
 

@@ -31,7 +31,6 @@ import androidx.compose.ui.layout.ContentScale
 import com.example.bluehive.utilities.*
 import coil.compose.AsyncImage
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
@@ -43,7 +42,6 @@ import com.example.bluehive.utilities.launchIfActive
 import com.example.bluehive.utilities.runCatchingCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import com.example.bluehive.utilities.DetailsTrailerPlayer
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.LocalActivity
 import androidx.compose.animation.core.animateDpAsState
@@ -128,6 +126,12 @@ import com.example.bluehive.details.shared.playback.extractionErrorMessage
 import com.example.bluehive.details.shared.playback.miruroSourceLabel
 import com.example.bluehive.details.shared.playback.parseExtractReason
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
+import com.example.bluehive.details.shared.layout.DetailsBackdrop
+import com.example.bluehive.details.shared.layout.DetailsGradient
+import com.example.bluehive.details.shared.layout.DetailsLogoOrTitle
+import com.example.bluehive.details.shared.layout.DetailsOverview
+import com.example.bluehive.details.shared.layout.DetailsToast
+import com.example.bluehive.details.shared.layout.DetailsTrailerLayer
 
 
 // ⬅️➡️ Hold-to-repeat navigation speed for the episode LazyRow: the minimum time (ms)
@@ -779,51 +783,6 @@ fun EpisodeBadge(
 
 
 
-/**
- * The trailer player and its release-on-leave, lifted out of
- * TVShowsDetailsScreenContent.
- *
- * WHY THIS IS ITS OWN FUNCTION. In v371-v375 R8 mis-allocated registers in that
- * one huge method: on one path a Long sat in the register it later tested as
- * `trailerUrl` here, ART rejected the whole TVShowsDetailsScreenComposeKt class
- * ("type Long (Low Half) unexpected as arg to if-eqz") and every TV details
- * page -- and every movie source button, which calls into this file -- crashed
- * with a VerifyError. Moving this block out shrinks the method R8 has to colour.
- * Check any release with `cmd package compile -m verify -f` before shipping.
- */
-@UnstableApi
-@Composable
-private fun DetailsTrailerLayer(
-    trailerUrl: String?,
-    trailerPlayer: ExoPlayer?,
-    isPlaying: Boolean,
-    showPlayerView: Boolean,
-    shouldExtract: Boolean,
-    onPlaybackStateChanged: (Boolean) -> Unit,
-    onPlayerReady: (ExoPlayer?) -> Unit,
-    modifier: Modifier,
-) {
-    val currentTrailerPlayer by rememberUpdatedState(trailerPlayer)
-
-    // ✅ Make sure we release ExoPlayer when the details screen leaves the tree
-    DisposableEffect(Unit) {
-        onDispose {
-            currentTrailerPlayer?.release()
-        }
-    }
-
-    if (!trailerUrl.isNullOrBlank()) {
-        DetailsTrailerPlayer(
-            trailerUrl = trailerUrl,
-            isPlaying = isPlaying,
-            showPlayerView = showPlayerView,
-            shouldExtract = shouldExtract,
-            onPlaybackStateChanged = onPlaybackStateChanged,
-            onPlayerReady = onPlayerReady,
-            modifier = modifier
-        )
-    }
-}
 
 @SuppressLint("DefaultLocale")
 @UnstableApi
@@ -2322,74 +2281,16 @@ fun TVShowsDetailsScreenContent(
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Background image layer
-        Image(
-            painter = painterResource(id = R.drawable.backdrop_details),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
+        // Background, content rating, star and score, and the backdrop picture
+        // (hidden once the trailer has played) -- see DetailsBackdrop.
+        DetailsBackdrop(
+            contentRating       = contentRating,
+            voteAverage         = voteAverage,
+            backdropUrl         = backdropUrl,
+            showBackdrop        = !hasTrailerBeenPlayed,
+            backdropDescription = "TVShowsDetailsScreenCompose backdrop",
+            dongleRegular       = dongleRegular,
         )
-
-
-        // ========================================================================================================================================= > // Content Rating
-        if (!contentRating.isNullOrBlank() && contentRating != "N/A") {
-            Text(
-                text = if (contentRating.isNotBlank()) {
-                    "Rated: $contentRating"
-                } else {
-                    "Rated: N/A"
-                },  // Changed this line
-                color = Color(0xFFFFFFFF),
-                fontSize = 16.sp,
-                fontFamily = dongleRegular,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 258.8.dp, top = 16.75.dp)
-            )
-        }
-        // ========================================================================================================================================= >
-
-
-
-
-        // ========================================================================================================================================= > // vote_average
-        Image(
-            painter = painterResource(id = R.drawable.star),
-            contentDescription = "Rating star",
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 337.dp, top = 21.dp)   // ⬅️ star position (edit this independently)
-                .size(11.dp)
-        )
-
-        Text(
-            text = "${String.format("%.1f", voteAverage)}/10",  // Format to 1 decimal place
-            color = Color(0xFFFFFFFF),
-            fontSize = 16.sp,
-            fontFamily = dongleRegular,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 352.dp, top = 16.75.dp)  // Adjust position as needed
-        )
-        // ========================================================================================================================================= >
-
-
-        // ========================================================================================================================================= > // BACKDROP OVERLAY - Top-right corner with custom rounded bottom-left corner
-        if (!backdropUrl.isNullOrBlank() && backdropUrl != "N/A" && !hasTrailerBeenPlayed) {
-            AsyncImage(
-                model = backdropUrl,
-                contentDescription = "TVShowsDetailsScreenCompose backdrop",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .width(519.dp)
-                    .height(292.dp)
-                    .clip(AppShapes.bottomLeftRoundedShape),
-                contentScale = ContentScale.Crop,
-                onLoading = { Log.d("BackdropDebug", "⏳ Backdrop loading...") },
-                onSuccess = { Log.d("BackdropDebug", "✅ Backdrop loaded!") },
-                onError = { e -> Log.e("BackdropDebug", "❌ Failed: ${e.result.throwable.message}") }
-            )
-        }
 
 
         // Keep this near the top of the Box:
@@ -2410,40 +2311,27 @@ fun TVShowsDetailsScreenContent(
                 trailerPlayer = player
                 isExtractingTrailer = false  // ✅ Extraction complete
             },
-            modifier = Modifier.align(Alignment.TopEnd)
+            modifier = Modifier.align(Alignment.TopEnd),
+            releaseOnLeave = true,
         )
 
 
 
-        if (!backdropUrl.isNullOrBlank() && backdropUrl != "N/A") {
-            // GRADIENT OVERLAY - Add this right after the backdrop
-            Image(
-                painter = painterResource(id = R.drawable.backdrop_details_gradient),
-                contentDescription = "Gradient overlay",
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .width(569.dp)
-                    .height(362.dp),
-                contentScale = ContentScale.FillBounds
-            )
-        }
+        DetailsGradient(backdropUrl)
         // ========================================================================================================================================= >
 
 
-        // Logo (or the wrapped title when there is no logo), the four metadata
-        // labels, genres and the overview. Lives in TvDetailsInfoBlock -- see
-        // there for why it was moved out of this function.
-        TvDetailsInfoBlock(
-            logoUrl          = logoUrl,
-            mediaTitle       = mediaTitle,
+        // Logo or title, the four labels, then genres and the overview: the
+        // order they were drawn in when this was one block (TvDetailsInfoBlock).
+        DetailsLogoOrTitle(logoUrl = logoUrl, mediaTitle = mediaTitle)
+        TvInfoLabels(
             seasonsLabel     = seasonsLabel,
             statusLabel      = statusLabel,
             releaseDateLabel = releaseDateLabel,
             languageLabel    = languageLabel,
-            genres           = genres,
-            overview         = overview,
             dongleRegular    = dongleRegular,
         )
+        DetailsOverview(genres = genres, overview = overview, dongleRegular = dongleRegular)
 
 
         // Favorite Button - Uses internal offset for positioning
@@ -3465,17 +3353,7 @@ fun TVShowsDetailsScreenContent(
         }
 
         if (showNoDub) {
-            Text(
-                "No dub available for this episode",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontFamily = dongleRegular,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 70.dp)
-                    .background(Color(0xE6000000), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 26.dp, vertical = 12.dp)
-            )
+            DetailsToast("No dub available for this episode", dongleRegular)
         }
 
         if (isCheckingServers) {
@@ -3558,17 +3436,7 @@ fun TVShowsDetailsScreenContent(
         }
 
         if (showServerError) {
-            Text(
-                "Couldn't reach the site — please try again",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontFamily = dongleRegular,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 70.dp)
-                    .background(Color(0xE6000000), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 26.dp, vertical = 12.dp)
-            )
+            DetailsToast("Couldn't reach the site — please try again", dongleRegular)
         }
 
         // Says what the first press did and what a second will do. Carries the
@@ -3578,295 +3446,29 @@ fun TVShowsDetailsScreenContent(
             val armedDate = formatEpisodeAirDate(
                 episodes.getOrNull(unairedArmedIndex)?.airDate
             )
-            Text(
+            DetailsToast(
                 if (armedDate.isNotEmpty())
                     "This episode airs $armedDate — press again to try anyway"
                 else
                     "This episode hasn't aired yet — press again to try anyway",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontFamily = dongleRegular,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 70.dp)
-                    .widthIn(max = 720.dp)
-                    .background(Color(0xE6000000), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 26.dp, vertical = 12.dp)
+                dongleRegular,
+                centered = true,
+                maxWidth = 720.dp,
             )
         }
 
         if (showNotYetAvailable) {
-            Text(
+            DetailsToast(
                 "This show isn't in our search engines yet — it's brand new, so check back in a week or so",
-                color = Color.White,
-                fontSize = 18.sp,
-                fontFamily = dongleRegular,
-                textAlign = TextAlign.Center,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 70.dp)
-                    .widthIn(max = 720.dp)
-                    .background(Color(0xE6000000), RoundedCornerShape(10.dp))
-                    .padding(horizontal = 26.dp, vertical = 12.dp)
+                dongleRegular,
+                centered = true,
+                maxWidth = 720.dp,
             )
         }
 
 
 
     }
-}
-
-
-/**
- * The title block of the TV details screen: the logo -- or, when a show has
- * none, its title wrapped to fit the same space -- then the seasons, status,
- * release-date and language labels, the genres, and the overview.
- *
- * THE FIRST PIECE CUT OUT OF TVShowsDetailsScreenContent, and why that matters.
- * That function was a single 2,832-line composable, and on 2026-09-21 R8 turned
- * it into bytecode ART refused to load ("Verifier rejected class ... type
- * Conflict unexpected as arg to if-eqz"), so opening any show killed the app.
- * A -keep rule in proguard-rules.pro guards against that today; splitting the
- * function is the cure, because what R8 got wrong was allocating registers
- * across one enormous method. Every block moved out shrinks that method.
- *
- * WHY THIS BLOCK FIRST: it is display-only. It reads nine values, writes nothing
- * outside itself, and owns no focus requesters -- so it could move without
- * touching any of the D-pad wiring that runs through the rest of the screen.
- * Every line below is exactly as it was, only re-indented.
- *
- * A BoxScope EXTENSION because each element positions itself with
- * Modifier.align() against the screen's main Box. Called from inside that Box,
- * its children are emitted straight into it, so every position is unchanged --
- * a plain composable would wrap them in a layout of its own and move them.
- */
-@Composable
-private fun BoxScope.TvDetailsInfoBlock(
-    logoUrl:          String?,
-    mediaTitle:       String,
-    seasonsLabel:     String,
-    statusLabel:      String,
-    releaseDateLabel: String,
-    languageLabel:    String,
-    genres:           String?,
-    overview:         String?,
-    dongleRegular:    FontFamily,
-) {
-    // ========================================================================================================================================= > logo parsing - it's already a full URL
-    val fullLogoUrl = remember(logoUrl) {
-        when {
-            logoUrl.isNullOrBlank() -> {
-                Log.d("LogoDebug", "❌ Logo URL is null or blank")
-                null
-            }
-            logoUrl == "N/A" -> {
-                Log.d("LogoDebug", "❌ Logo URL is N/A")
-                null
-            }
-            else -> {
-                Log.d("LogoDebug", "✅ Logo URL: $logoUrl")
-                logoUrl // It's already a complete URL!
-            }
-        }
-    }
-
-    if (fullLogoUrl != null) {
-        Log.d("LogoDebug", "🖼️ Rendering logo: $fullLogoUrl")
-        AsyncImage(
-            model = fullLogoUrl,
-            contentDescription = "Logo",
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 25.dp, start = 40.dp)
-                .size(width = 180.dp, height = 100.dp),
-            contentScale = ContentScale.Fit,
-            onLoading = {
-                Log.d("LogoDebug", "⏳ Logo loading...")
-            },
-            onSuccess = {
-                Log.d("LogoDebug", "✅ Logo loaded successfully!")
-            },
-            onError = { error ->
-                Log.e("LogoDebug", "❌ Logo failed to load: ${error.result.throwable.message}")
-            }
-        )
-    } else {
-        Log.d("LogoDebug", "❌ No logo to display — rendering title instead")
-        val titleFontSize = remember(mediaTitle) {
-            when {
-                mediaTitle.length <= 20 -> 41.sp
-                mediaTitle.length <= 23 -> 35.sp
-                mediaTitle.length <= 33 -> 32.sp
-                mediaTitle.length <= 40 -> 30.sp
-                else -> 25.sp
-            }
-        }
-        val wrappedTitle = remember(mediaTitle) {
-            val words = mediaTitle.split(" ")
-            val lines = mutableListOf<String>()
-            var currentLine = ""
-            for (word in words) {
-                val candidate = if (currentLine.isEmpty()) word else "$currentLine $word"
-                if (candidate.length <= 10) {
-                    currentLine = candidate
-                } else {
-                    if (currentLine.isNotEmpty()) lines.add(currentLine)
-                    currentLine = word
-                }
-            }
-            if (currentLine.isNotEmpty()) lines.add(currentLine)
-            lines.joinToString("\n")
-        }
-
-        val lineCount = remember(wrappedTitle) { wrappedTitle.count { it == '\n' } + 1 }
-        val titleTopPadding = remember(lineCount) {
-            when (lineCount) {
-                1 -> 40.dp
-                2 -> 25.dp
-                else -> 8.dp
-            }
-        }
-
-        Text(
-            text = wrappedTitle,
-            color = Color.White.copy(alpha = 0.88f),
-            fontSize = titleFontSize,
-            lineHeight = titleFontSize * 0.87f,
-            fontFamily = AppTypography.lalezarRegular,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = titleTopPadding, start = 30.dp)
-                .width(200.dp),
-            textAlign = TextAlign.Center,
-            maxLines = 6,
-            overflow = TextOverflow.Clip
-        )
-    }
-    // ========================================================================================================================================= >
-
-
-
-    // ========================================================================================================================================= > // Revenue
-    Text(
-        text = seasonsLabel,
-        color = Color(0xFF8B8B8B),
-        fontSize = 17.sp,
-        fontFamily = dongleRegular,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 258.25.dp, top = 34.dp)
-    )
-    // ========================================================================================================================================= >
-
-
-    // ========================================================================================================================================= > // Budget
-    Text(
-        text = statusLabel,
-        color = Color(0xFF8B8B8B),
-        fontSize = 17.sp,
-        fontFamily = dongleRegular,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 258.25.dp, top = 48.dp)
-    )
-    // ========================================================================================================================================= >
-
-
-    // ========================================================================================================================================= > // release_date
-    Text(
-        text = releaseDateLabel,
-        color = Color(0xFF8B8B8B),
-        fontSize = 16.sp,
-        fontFamily = dongleRegular,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 258.25.dp, top = 63.dp)
-    )
-
-    // ========================================================================================================================================= >
-
-
-    // ========================================================================================================================================= > // original language
-    Text(
-        text = languageLabel,
-        color = Color(0xFF8B8B8B),
-        fontSize = 17.sp,
-        fontFamily = dongleRegular,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 258.25.dp, top = 75.dp)
-    )
-    // ========================================================================================================================================= >
-
-
-    // ========================================================================================================================================= > // Genres
-    if (!genres.isNullOrBlank() && genres != "N/A") {
-        Text(
-            text = genres,
-            color = Color(0xFF8B8B8B),
-            fontSize = 16.sp,
-            fontFamily = dongleRegular,
-            lineHeight = 12.sp,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 258.25.dp, top = 96.dp)
-                .width(160.dp)  // Add width constraint so it wraps nicely
-        )
-    }else {
-        Log.d("GenresDebug", "❌ Not rendering genres - value: '$genres'")
-    }
-    // ========================================================================================================================================= >
-
-
-
-    // ========================================================================================================================================= > Overview text display with dynamic font sizing
-    if (!overview.isNullOrBlank()) {
-        var fontSize by remember { mutableStateOf(18.sp) }
-        var lineHeight by remember { mutableStateOf(14.sp) }
-
-        // Measure text to determine if we need smaller font
-        val textMeasurer = rememberTextMeasurer()
-
-        LaunchedEffect(overview) {
-            val textLayoutResult = textMeasurer.measure(
-                text = androidx.compose.ui.text.AnnotatedString(overview),
-                style = androidx.compose.ui.text.TextStyle(
-                    fontSize = 18.sp,
-                    fontFamily = dongleRegular,
-                    lineHeight = 14.sp  // Include line height in measurement
-                ),
-                constraints = androidx.compose.ui.unit.Constraints(
-                    maxWidth = (400 * 2.75).toInt(), // dp to px approximation
-                    maxHeight = (105.75 * 2.75).toInt() // Add height constraint!
-                )
-            )
-
-            // Check if text overflows OR doesn't fit in the height
-            if (textLayoutResult.lineCount > 5 || textLayoutResult.didOverflowHeight) {
-                fontSize = 16.sp
-                lineHeight = 13.7.sp
-            } else {
-                lineHeight = 14.sp
-            }
-        }
-
-        Text(
-            text = overview,
-            color = Color(0xFF8B8B8B),
-            fontSize = fontSize,
-            fontFamily = dongleRegular,
-            lineHeight = lineHeight,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 28.25.dp, top = 175.dp)
-                //.background(Color.Red.copy(alpha = 0.5f))  // Debug background
-                .height(108.25.dp)
-                .width(400.dp),
-            overflow = TextOverflow.Ellipsis
-        )
-    }
-    // ========================================================================================================================================= >
 }
 
 

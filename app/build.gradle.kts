@@ -465,11 +465,12 @@ val verifyReleaseOnDevice by tasks.registering {
 // lowered after each split stage, until Stage 10 empties the list. The rest of
 // the app is reported, not enforced.
 //
-// The ceilings sit about 1% above the largest size seen, because R8 re-decides
-// inlining across the whole app on every build and a function moves a little
-// without its source changing. Stage 1 showed it: moving five helpers out of
-// the kept TV class let R8 inline them, and the two functions grew by 42 and 22
-// units with no new code. New code is far bigger than that margin.
+// The ceilings sit about 1% above the size measured at the last stage, because
+// R8 re-decides inlining across the whole app on every build and a function
+// moves a little without its source changing. Stage 1 showed it: moving five
+// helpers out of the kept TV class let R8 inline them, and the two functions
+// grew by 42 and 22 units with no new code. New code is far bigger than that
+// margin.
 //
 // Each method is matched to the class it was WRITTEN in through R8's mapping
 // file. R8 relocates static methods freely (FavoritesScreen ships inside
@@ -483,11 +484,14 @@ val checkMethodSizes by tasks.registering {
     doLast {
         val maxUnits = 2_500
         val maxRegisters = 100
-        // Being split by the redesign (units to registers). Largest seen so far:
-        // TV 11,339 / 287, movie 8,704 / 193 (v376-v377).
+        // Being split by the redesign (units to registers). At the last stage:
+        // TV 9,800 / 251, movie 6,307 / 163 (v378, Stage 2). The TV ceiling also
+        // keeps that function under ART's 10,000-unit huge-method limit. Above
+        // it ART never compiles the method, so it runs in the interpreter
+        // (dex2oat --dump-stats, docs/details-redesign-baseline.md).
         val shrinking = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (11_450 to 290),
-            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (8_800 to 196),
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (9_900 to 254),
+            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (6_370 to 165),
         )
         // App methods at least this big carry the same R8 risk: reported, not enforced.
         val warnUnits = 5_000

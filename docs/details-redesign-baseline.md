@@ -143,3 +143,18 @@ From `framestats`. Opening or closing the overlay re-runs the whole TV screen fu
 - **onn box:** returned to the Favorites screen it was on.
 
 **Still to measure:** loading-overlay recompositions, with a debug build and Layout Inspector, at a later stage.
+
+---
+
+## After each stage
+
+Release builds, measured the same way as above. Each stage is its own commit.
+
+| Stage | Build | TV function | Movie function | Huge methods ART skips | Verified on the onn box |
+|---|---|---|---|---|---|
+| 0 | v376 | 11,297 units, 287 registers | 8,682 units, 191 registers | 2, including the TV function | 12,710 classes, 0 failures |
+| 1 | v377 | 11,339, 280 | 8,704, 193 | not measured | 12,712 classes, 0 failures |
+| 2 | v378 | **9,800, 251** | **6,307, 163** | **1: the TV function is compiled now** | 12,715 classes, 0 failures |
+
+- **Stage 1** only moved code. R8 then inlined the five moved helpers into both functions, which is why they grew slightly.
+- **Stage 2** took the TV function under ART's 10,000-unit limit, so ART compiles it instead of interpreting it (`dex2oat --dump-stats`: 76,730 of 76,732 methods compiled). The `checkMethodSizes` ceiling of 9,900 keeps it under the limit. Its speed has not been measured yet.
