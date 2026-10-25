@@ -390,8 +390,11 @@ val verifyReleaseOnDevice by tasks.registering {
     val script = layout.projectDirectory.file("verify-on-device.sh")
     val scratch = layout.buildDirectory.dir("tmp/verifyReleaseOnDevice")
     val adbExe = androidComponents.sdkComponents.adb
-    val wanted = (findProperty("verifyDevice") as String?) ?: "192.168.1.74:5555"
-    val skip = hasProperty("skipDeviceVerify")
+    // project., because inside this block a bare hasProperty is the TASK's own,
+    // which never sees -P flags: -PskipDeviceVerify was ignored until 2026-10-25
+    // and the check ran on the TV anyway.
+    val wanted = (project.findProperty("verifyDevice") as String?) ?: "192.168.1.74:5555"
+    val skip = project.hasProperty("skipDeviceVerify")
 
     doLast {
         if (skip) {
