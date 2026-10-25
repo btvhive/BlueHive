@@ -22,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.bluehive.R
+import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.utilities.AppShapes
 
 /**
@@ -42,8 +43,8 @@ fun BoxScope.DetailsBackdrop(
     contentRating: String?,
     voteAverage: Double,
     backdropUrl: String?,
-    /** False once the trailer has played: the player shows instead. */
-    showBackdrop: Boolean,
+    /** The picture hides once the trailer has played: the player shows instead. */
+    trailer: TrailerState,
     /** The picture's accessibility label. The two screens word it differently. */
     backdropDescription: String,
     dongleRegular: FontFamily,
@@ -101,7 +102,7 @@ fun BoxScope.DetailsBackdrop(
 
 
     // ========================================================================================================================================= > // BACKDROP OVERLAY - Top-right corner with custom rounded bottom-left corner
-    if (!backdropUrl.isNullOrBlank() && backdropUrl != "N/A" && showBackdrop) {
+    if (!backdropUrl.isNullOrBlank() && backdropUrl != "N/A" && !trailer.hasPlayed) {
         AsyncImage(
             model = backdropUrl,
             contentDescription = backdropDescription,

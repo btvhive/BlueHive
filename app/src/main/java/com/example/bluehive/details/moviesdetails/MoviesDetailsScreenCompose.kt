@@ -19,7 +19,6 @@ import com.example.bluehive.utilities.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.repository.RecommendationsRepository
 import kotlinx.coroutines.launch
@@ -37,7 +36,6 @@ import androidx.compose.ui.focus.focusRequester
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.SourceCatalog
 import com.example.bluehive.api.ExtractOutcome
-import com.example.bluehive.api.FavoriteRequest
 import com.example.bluehive.sidebarComponents.FavoritesScreenActivity
 import com.example.bluehive.sidebarComponents.HistoryScreenActivity
 import com.example.bluehive.searchBarComponent.SearchBarActivity
@@ -72,8 +70,13 @@ import com.example.bluehive.details.shared.layout.DetailsHeaderButtons
 import com.example.bluehive.details.shared.layout.DetailsLogoOrTitle
 import com.example.bluehive.details.shared.layout.DetailsOverview
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
+import com.example.bluehive.details.shared.layout.DetailsRecommendations
 import com.example.bluehive.details.shared.layout.DetailsToast
 import com.example.bluehive.details.shared.layout.DetailsTrailerLayer
+import com.example.bluehive.details.shared.state.DetailsBackHandlers
+import com.example.bluehive.details.shared.state.rememberExtrasState
+import com.example.bluehive.details.shared.state.rememberFavoriteState
+import com.example.bluehive.details.shared.state.rememberTrailerState
 
 
 
@@ -453,34 +456,31 @@ fun MoviesDetailsScreenContent(
         withContext(Dispatchers.IO) { BeeLogo.prime(context) }
     }
 
-    // ✅ Add state for extras toggle and recommendations
-    var isExtrasToggled by remember(startInExtras) { mutableStateOf(startInExtras) }
-
-    // ── Back collapses Extras before it leaves the page ─────────────────────
-    //
-    // Pressing back while the recommendations row is showing returns to the
-    // normal state; a second press then leaves, which is what "back" means
-    // everywhere else — undo the last thing you did, not the whole journey.
-    //
-    // DELIBERATELY REGISTERED HERE, above the overlay handlers further down.
-    // OnBackPressedDispatcher runs the MOST RECENTLY added enabled callback, and
-    // Compose adds them in composition order — so anything declared below this
-    // (the server picker, the extraction guard) still wins while it is open. Put
-    // this last and back would collapse Extras out from under an open overlay.
-    //
-    // When disabled it does not intercept at all, so back falls through to the
-    // Activity's own callback and the page closes exactly as before.
-    BackHandler(enabled = isExtrasToggled) {
-        BlueHiveApplication.playBackOutSound()
-        isExtrasToggled = false
-    }
-
-    var recommendations by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
+
+    // Extras: the switch and its recommendations row -- see ExtrasState. On
+    // this screen the row loads on a background thread, and opening in Extras
+    // always fetches (architecture §10, #5 and #13).
+    val extras = rememberExtrasState(
+        scope            = coroutineScope,
+        repository       = recommendationsRepository,
+        tmdbId           = tmdbId,
+        mediaType        = mediaType,
+        startInExtras    = startInExtras,
+        loadInBackground = true,
+        prefetched       = null,
+    )
+
+    // Back collapses Extras before it leaves the page. Registered here, above
+    // the overlay handlers further down, so those still win while one is open
+    // -- see DetailsBackHandlers.
+    DetailsBackHandlers(extras)
+
     var blockHeaderInitialFocus by remember(startInExtras) { mutableStateOf(startInExtras) }
 
-    var isTrailerPlaying by remember { mutableStateOf(false) }
-    var hasTrailerBeenPlayed by remember { mutableStateOf(false) }
+    // The backdrop trailer: playing, started, extracting, its player -- see
+    // TrailerState.
+    val trailer = rememberTrailerState(trailerUrl)
 
     /**
      * Silence the backdrop trailer. Called where a playback ACTUALLY starts, and
@@ -497,17 +497,14 @@ fun MoviesDetailsScreenContent(
      * Idempotent, so a path crossing two launch points costs nothing.
      */
     fun stopTrailer() {
-        isTrailerPlaying = false
-        hasTrailerBeenPlayed = false
+        trailer.stop()
     }
-    var shouldExtractTrailer by remember { mutableStateOf(false) }
 
     // Focus requesters
     val favoriteFocusRequester = remember { FocusRequester() }
     val extrasFocusRequester = remember { FocusRequester() }
     val trailerFocusRequester = remember { FocusRequester() }
 
-    var isExtractingTrailer by remember { mutableStateOf(false) }
     var isExtracting   by remember { mutableStateOf(false) }
     // Which attempt of the failover chain is on screen. Exists to re-key the
     // stage timer further down; see the comment there.
@@ -617,9 +614,18 @@ fun MoviesDetailsScreenContent(
         }
     }
 
-    var isFavorited by remember { mutableStateOf(false) }
     val activity = LocalActivity.current as? MoviesDetailsScreenCompose
     val favoriteProfileId = activity?.profileId ?: -1
+
+    // Favorites: checked on open, toggled by the header button -- see
+    // FavoriteState. This screen sends no title with a toggle (§10, #3).
+    val favorite = rememberFavoriteState(
+        scope     = coroutineScope,
+        profileId = favoriteProfileId,
+        tmdbId    = tmdbId,
+        mediaType = mediaType,
+        title     = null,
+    )
 
     // ── Automatic server failover ────────────────────────────────────────────
     // When the default (or chosen) server is down — a hard extract failure, or a
@@ -1367,20 +1373,6 @@ fun MoviesDetailsScreenContent(
     }
 
 
-    LaunchedEffect(tmdbId, mediaType, favoriteProfileId) {
-        if (favoriteProfileId != -1) {
-            try {
-                val status = ApiClient.bluehiveApi.checkFavorite(
-                    profileId   = favoriteProfileId,
-                    mediaTmdbId = tmdbId,
-                    mediaType   = mediaType,
-                )
-                isFavorited = status.is_favorited
-            } catch (_: Exception) {}
-        }
-    }
-
-
     // Get streaming sources based on media type.
     // Japanese animation (anime) → dedicated DuB / SuB set.
     // Everything else keeps the standard 6 buttons.
@@ -1530,10 +1522,10 @@ fun MoviesDetailsScreenContent(
     }
 
     // ✅ Log again when recommendations load — also off the main thread.
-    LaunchedEffect(recommendations) {
-        if (recommendations.isNotEmpty()) {
+    LaunchedEffect(extras.recommendations) {
+        if (extras.recommendations.isNotEmpty()) {
             // 1 backdrop + 1 logo + 20 recommendations + 6 provider buttons
-            val totalImages = 1 + 1 + recommendations.size + 6
+            val totalImages = 1 + 1 + extras.recommendations.size + 6
 
             withContext(Dispatchers.IO) {
                 CacheMonitor.logCacheStats(
@@ -1546,34 +1538,8 @@ fun MoviesDetailsScreenContent(
     }
 
 
-    // ✅ If we were asked to start in Extras (when returning from history),
-    // preload recommendations and keep Extras toggled on.
-    LaunchedEffect(startInExtras, tmdbId, mediaType) {
-        if (startInExtras && recommendations.isEmpty()) {
-            coroutineScope.launch(Dispatchers.IO) {
-                try {
-                    val result = recommendationsRepository.getRecommendations(tmdbId, mediaType)
-                    withContext(Dispatchers.Main) {
-                        recommendations = result
-                        isExtrasToggled = true
-                        Log.d(
-                            "Recommendations",
-                            "Preloaded ${recommendations.size} recommendations for $tmdbId ($mediaType)"
-                        )
-                    }
-                } catch (e: Exception) {
-                    Log.e(
-                        "Recommendations",
-                        "Error preloading recommendations for $tmdbId ($mediaType)",
-                        e
-                    )
-                }
-            }
-        }
-    }
-
-    LaunchedEffect(startInExtras, recommendations) {
-        if (startInExtras && recommendations.isNotEmpty()) {
+    LaunchedEffect(startInExtras, extras.recommendations) {
+        if (startInExtras && extras.recommendations.isNotEmpty()) {
             blockHeaderInitialFocus = false
         }
     }
@@ -1602,28 +1568,15 @@ fun MoviesDetailsScreenContent(
             contentRating       = contentRating,
             voteAverage         = voteAverage,
             backdropUrl         = backdropUrl,
-            showBackdrop        = !hasTrailerBeenPlayed,
+            trailer             = trailer,
             backdropDescription = "Movie backdrop",
             dongleRegular       = dongleRegular,
         )
 
 
-        var trailerPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
-
         // This renders BEHIND the gradient overlay due to Box ordering
         DetailsTrailerLayer(
-            trailerUrl = trailerUrl,
-            trailerPlayer = trailerPlayer,
-            isPlaying = isTrailerPlaying,
-            showPlayerView = hasTrailerBeenPlayed,
-            shouldExtract = shouldExtractTrailer,
-            onPlaybackStateChanged = { playing ->
-                isTrailerPlaying = playing
-            },
-            onPlayerReady = { player ->
-                trailerPlayer = player
-                isExtractingTrailer = false  // ✅ Extraction complete
-            },
+            trailer = trailer,
             modifier = Modifier.align(Alignment.TopEnd),
             releaseOnLeave = false,
         )
@@ -1648,75 +1601,22 @@ fun MoviesDetailsScreenContent(
 
 
         // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:
-        // see DetailsHeaderButtons. What each press does stays here.
+        // see DetailsHeaderButtons. Each press runs a state holder's method.
         DetailsHeaderButtons(
             fontFamily = passionFont,
             pressTiming = MovieHeaderPressTiming,
             enableFocus = !blockHeaderInitialFocus,
             favoriteFocusRequester = favoriteFocusRequester,
-            isFavorited = isFavorited,
-            onToggleFavorite = {
-                if (favoriteProfileId != -1) {
-                    coroutineScope.launch {
-                        try {
-                            val result = ApiClient.bluehiveApi.toggleFavorite(
-                                FavoriteRequest(
-                                    profile_id = favoriteProfileId,
-                                    media_tmdb_id = tmdbId,
-                                    media_type = mediaType,
-                                )
-                            )
-                            isFavorited = result.is_favorited
-                        } catch (e: Exception) {
-                            Log.e("Favorites", "Toggle failed: ${e.message}")
-                        }
-                    }
-                }
-            },
             extrasFocusRequester = extrasFocusRequester,
-            isExtrasToggled = isExtrasToggled,
-            onExtrasClick = {
-                isExtrasToggled = !isExtrasToggled
-                if (isExtrasToggled && recommendations.isEmpty()) {   // Load recommendations when toggled on
-                    coroutineScope.launch(Dispatchers.IO) {   // 👈 run on background thread
-                        val result = recommendationsRepository.getRecommendations(tmdbId, mediaType)
-
-                        withContext(Dispatchers.Main) {       // 👈 switch back to UI to update state
-                            recommendations = result
-                            Log.d("Recommendations", "Loaded ${recommendations.size} recommendations")
-                        }
-                    }
-                }
-            },
             trailerFocusRequester = trailerFocusRequester,
-            isTrailerPlaying = isTrailerPlaying,
-            trailerAvailable = !trailerUrl.isNullOrBlank(),
-            onTrailerClick = {
-                if (!trailerUrl.isNullOrBlank()) {
-                    if (!hasTrailerBeenPlayed) {
-                        shouldExtractTrailer = true
-                        isExtractingTrailer = true  // ✅ Show loading state
-                        hasTrailerBeenPlayed = true
-                    }
-                    isTrailerPlaying = !isTrailerPlaying
-                }
-            },
-            isExtractingTrailer = isExtractingTrailer,
-            onRewind = {
-                if (isTrailerPlaying) {
-                    seekBackward(trailerPlayer)
-                }
-            },
-            onFastForward = {
-                if (isTrailerPlaying) {
-                    seekForward(trailerPlayer)
-                }
-            },
+            favorite = favorite,
+            extras = extras,
+            trailer = trailer,
         )
 
         // ✅ Conditionally show StreamerButtons OR RecommendedMediaSection
 
-        if (!isExtrasToggled) {
+        if (!extras.isOn) {
             if (isAnime) {
                 // ── Anime: DuB / SuB ────────────────────────────────────
                 AnimeDubButton(
@@ -1808,23 +1708,19 @@ fun MoviesDetailsScreenContent(
             }
 
         } else {
-            // ✅ Show recommended media section
-            if (recommendations.isNotEmpty()) {
-                RecommendedMediaSection(
-                    recommendations = recommendations,
-                    onMediaClick = { media ->
-                        isTrailerPlaying = false
-                        hasTrailerBeenPlayed = false
-                        onMediaClick(media)
-                    },
-                    onNavigateUp = {
-                        BlueHiveApplication.playHoverSound()
-                        extrasFocusRequester.requestFocus()
-                        extrasFocusRequester.requestFocus()
-                        Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonGlow should be the extra button's focus glow")
-                    }
-                )
-            }
+            DetailsRecommendations(
+                extras = extras,
+                onOpen = { media ->
+                    trailer.stop()
+                    onMediaClick(media)
+                },
+                onNavigateUp = {
+                    BlueHiveApplication.playHoverSound()
+                    extrasFocusRequester.requestFocus()
+                    extrasFocusRequester.requestFocus()
+                    Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonGlow should be the extra button's focus glow")
+                }
+            )
         }
 
 

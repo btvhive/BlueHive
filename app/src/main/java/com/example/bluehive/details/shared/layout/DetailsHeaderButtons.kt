@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
+import com.example.bluehive.details.shared.state.ExtrasState
+import com.example.bluehive.details.shared.state.FavoriteState
+import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.utilities.ExtrasButtonColors
 import com.example.bluehive.utilities.FavoriteButtonColors
 import com.example.bluehive.utilities.ModularButton
@@ -47,13 +50,14 @@ data class DetailsPressTiming(val durationMillis: Int, val bounceBackDelayMillis
  *
  * Each screen had its own copy of all five, identical except for how long a
  * press takes, which stays per screen through [pressTiming] (architecture §10,
- * #1). What a press DOES stays in each screen too, passed in as the on...
- * lambdas: on TV the favorite toggle also sends the title, and the two screens
- * load Extras on different threads.
+ * #1). What a press does lives in the page's state holders (Stage 4): the
+ * screens' differences are settings of those -- on TV the favorite toggle also
+ * sends the title, and the two screens load Extras on different threads.
  *
  * Moved here word for word in Stage 3 of the details redesign. A BoxScope
  * extension so each button keeps its absolute offset in the screen's Box and
  * the D-pad moves between them exactly as before -- never wrap it in a layout.
+ * It reads the holders itself, so a press re-runs only this, not the screen.
  */
 @Composable
 fun BoxScope.DetailsHeaderButtons(
@@ -62,18 +66,11 @@ fun BoxScope.DetailsHeaderButtons(
     /** False while the screen keeps first focus off the header. */
     enableFocus: Boolean,
     favoriteFocusRequester: FocusRequester,
-    isFavorited: Boolean,
-    onToggleFavorite: () -> Unit,
     extrasFocusRequester: FocusRequester,
-    isExtrasToggled: Boolean,
-    onExtrasClick: () -> Unit,
     trailerFocusRequester: FocusRequester,
-    isTrailerPlaying: Boolean,
-    trailerAvailable: Boolean,
-    onTrailerClick: () -> Unit,
-    isExtractingTrailer: Boolean,
-    onRewind: () -> Unit,
-    onFastForward: () -> Unit,
+    favorite: FavoriteState,
+    extras: ExtrasState,
+    trailer: TrailerState,
 ) {
     // Favorite Button - Uses internal offset for positioning
     DetailsFavoriteButton(
@@ -81,17 +78,17 @@ fun BoxScope.DetailsHeaderButtons(
         focusRequester = favoriteFocusRequester,
         pressTiming = pressTiming,
         enableFocus = enableFocus,
-        isFavorited = isFavorited,
-        onToggle = onToggleFavorite
+        isFavorited = favorite.isFavorited,
+        onToggle = { favorite.toggle() }
     )
 
     DetailsExtrasButton(
         fontFamily = fontFamily,
         focusRequester = extrasFocusRequester,
         pressTiming = pressTiming,
-        isToggled = isExtrasToggled,
+        isToggled = extras.isOn,
         enableFocus = enableFocus,
-        onClick = onExtrasClick
+        onClick = { extras.toggle() }
     )
 
 
@@ -100,14 +97,14 @@ fun BoxScope.DetailsHeaderButtons(
         fontFamily = fontFamily,
         focusRequester = trailerFocusRequester,
         pressTiming = pressTiming,
-        isPlaying = isTrailerPlaying,
-        trailerAvailable = trailerAvailable,
+        isPlaying = trailer.isPlaying,
+        trailerAvailable = trailer.isAvailable,
         enableFocus = enableFocus,
-        onClick = onTrailerClick
+        onClick = { trailer.onButtonPressed() }
     )
 
     // Optional: Show loading indicator
-    if (isExtractingTrailer) {
+    if (trailer.isExtracting) {
         Text(
             text = "Loading trailer...",
             color = Color.White,
@@ -123,7 +120,7 @@ fun BoxScope.DetailsHeaderButtons(
         focusRequester = remember { FocusRequester() },
         pressTiming = pressTiming,
         enableFocus = enableFocus,
-        onClick = onRewind
+        onClick = { trailer.rewind() }
     )
 
     DetailsFastForwardButton(
@@ -131,7 +128,7 @@ fun BoxScope.DetailsHeaderButtons(
         focusRequester = remember { FocusRequester() },
         pressTiming = pressTiming,
         enableFocus = enableFocus,
-        onClick = onFastForward
+        onClick = { trailer.fastForward() }
     )
 }
 

@@ -6,7 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
 import androidx.media3.common.util.UnstableApi
-import androidx.media3.exoplayer.ExoPlayer
+import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.utilities.DetailsTrailerPlayer
 
 /**
@@ -20,17 +20,14 @@ import com.example.bluehive.utilities.DetailsTrailerPlayer
  * page -- and every movie source button, which calls into this file -- crashed
  * with a VerifyError. Moving this block out shrinks the method R8 has to colour.
  * Check any release with `cmd package compile -m verify -f` before shipping.
+ *
+ * Since Stage 4 of the details redesign it reads the page's [TrailerState]
+ * itself, so a play/pause no longer re-runs the whole screen function.
  */
 @UnstableApi
 @Composable
 fun DetailsTrailerLayer(
-    trailerUrl: String?,
-    trailerPlayer: ExoPlayer?,
-    isPlaying: Boolean,
-    showPlayerView: Boolean,
-    shouldExtract: Boolean,
-    onPlaybackStateChanged: (Boolean) -> Unit,
-    onPlayerReady: (ExoPlayer?) -> Unit,
+    trailer: TrailerState,
     modifier: Modifier,
     /**
      * Release the player again when the screen leaves. The TV screen has
@@ -41,7 +38,7 @@ fun DetailsTrailerLayer(
     releaseOnLeave: Boolean,
 ) {
     if (releaseOnLeave) {
-        val currentTrailerPlayer by rememberUpdatedState(trailerPlayer)
+        val currentTrailerPlayer by rememberUpdatedState(trailer.player)
 
         // ✅ Make sure we release ExoPlayer when the details screen leaves the tree
         DisposableEffect(Unit) {
@@ -51,14 +48,19 @@ fun DetailsTrailerLayer(
         }
     }
 
+    val trailerUrl = trailer.url
     if (!trailerUrl.isNullOrBlank()) {
         DetailsTrailerPlayer(
             trailerUrl = trailerUrl,
-            isPlaying = isPlaying,
-            showPlayerView = showPlayerView,
-            shouldExtract = shouldExtract,
-            onPlaybackStateChanged = onPlaybackStateChanged,
-            onPlayerReady = onPlayerReady,
+            isPlaying = trailer.isPlaying,
+            showPlayerView = trailer.hasPlayed,
+            shouldExtract = trailer.shouldExtract,
+            onPlaybackStateChanged = { playing ->
+                trailer.onPlaybackStateChanged(playing)
+            },
+            onPlayerReady = { player ->
+                trailer.onPlayerReady(player)
+            },
             modifier = modifier
         )
     }

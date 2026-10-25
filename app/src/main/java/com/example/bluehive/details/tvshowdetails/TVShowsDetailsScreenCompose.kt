@@ -93,7 +93,6 @@ import androidx.compose.ui.layout.positionInRoot
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.SourceCatalog
 import com.example.bluehive.api.ExtractOutcome
-import com.example.bluehive.api.FavoriteRequest
 import com.example.bluehive.sidebarComponents.FavoritesScreenActivity
 import com.example.bluehive.sidebarComponents.HistoryScreenActivity
 import kotlinx.coroutines.async
@@ -131,8 +130,13 @@ import com.example.bluehive.details.shared.layout.DetailsHeaderButtons
 import com.example.bluehive.details.shared.layout.DetailsLogoOrTitle
 import com.example.bluehive.details.shared.layout.DetailsOverview
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
+import com.example.bluehive.details.shared.layout.DetailsRecommendations
 import com.example.bluehive.details.shared.layout.DetailsToast
 import com.example.bluehive.details.shared.layout.DetailsTrailerLayer
+import com.example.bluehive.details.shared.state.DetailsBackHandlers
+import com.example.bluehive.details.shared.state.rememberExtrasState
+import com.example.bluehive.details.shared.state.rememberFavoriteState
+import com.example.bluehive.details.shared.state.rememberTrailerState
 
 
 // ⬅️➡️ Hold-to-repeat navigation speed for the episode LazyRow: the minimum time (ms)
@@ -870,58 +874,34 @@ fun TVShowsDetailsScreenContent(
 
 
 
-    // ✅ Add state for extras toggle and recommendations
-    var isExtrasToggled by remember(startInExtras) { mutableStateOf(startInExtras) }
-
-    // ── Back collapses Extras before it leaves the page ─────────────────────
-    //
-    // Pressing back while the recommendations row is showing returns to the
-    // normal state; a second press then leaves, which is what "back" means
-    // everywhere else — undo the last thing you did, not the whole journey.
-    //
-    // DELIBERATELY REGISTERED HERE, above the overlay handlers further down.
-    // OnBackPressedDispatcher runs the MOST RECENTLY added enabled callback, and
-    // Compose adds them in composition order — so anything declared below this
-    // (the server picker, the extraction guard) still wins while it is open. Put
-    // this last and back would collapse Extras out from under an open overlay.
-    //
-    // When disabled it does not intercept at all, so back falls through to the
-    // Activity's own callback and the page closes exactly as before.
-    BackHandler(enabled = isExtrasToggled) {
-        BlueHiveApplication.playBackOutSound()
-        isExtrasToggled = false
-    }
-
-    var recommendations by remember { mutableStateOf<List<MediaItem>>(emptyList()) }
     val coroutineScope = rememberCoroutineScope()
+
+    // Extras: the switch and its recommendations row -- see ExtrasState. On
+    // this screen the row loads on the main thread, and a page opened from
+    // another show's Extras uses the prefetched row (architecture §10, #5 and
+    // #13).
+    val extras = rememberExtrasState(
+        scope            = coroutineScope,
+        repository       = recommendationsRepository,
+        tmdbId           = tmdbId,
+        mediaType        = mediaType,
+        startInExtras    = startInExtras,
+        loadInBackground = false,
+        prefetched       = prefetch?.recommendations,
+    )
+
+    // Back collapses Extras before it leaves the page. Registered here, above
+    // the overlay handlers further down, so those still win while one is open
+    // -- see DetailsBackHandlers.
+    DetailsBackHandlers(extras)
+
     var blockHeaderInitialFocus by remember(startInExtras) {
         mutableStateOf(startInExtras || resumeToEpisode)
     }
     var isInitialEpisodeLoad by remember { mutableStateOf(resumeToEpisode) }
 
-    // ✅ When returning from history and asked to start in Extras,
-    // preload recommendations and keep Extras toggled on.
-    LaunchedEffect(startInExtras, tmdbId, mediaType) {
-        val prefetchedRecs = prefetch?.recommendations
-        if (!prefetchedRecs.isNullOrEmpty()) {
-            recommendations = prefetchedRecs
-            isExtrasToggled = startInExtras
-            Log.d("Prefetch", "✅ Recommendations loaded from prefetch cache (${prefetchedRecs.size} items)")
-        } else if (startInExtras && recommendations.isEmpty()) {
-            try {
-                val result = recommendationsRepository.getRecommendations(tmdbId, mediaType)
-                recommendations = result
-                isExtrasToggled = true
-            } catch (e: Exception) {
-                Log.e("TVRecommendations", "Error preloading recommendations", e)
-            }
-        }
-    }
-
-
-
-    LaunchedEffect(startInExtras, recommendations) {
-        if (startInExtras && recommendations.isNotEmpty()) {
+    LaunchedEffect(startInExtras, extras.recommendations) {
+        if (startInExtras && extras.recommendations.isNotEmpty()) {
             blockHeaderInitialFocus = false
         }
     }
@@ -1014,9 +994,9 @@ fun TVShowsDetailsScreenContent(
     var overlayAnchor by remember { mutableStateOf<Offset?>(null) }
 
 
-    var isTrailerPlaying by remember { mutableStateOf(false) }
-    var hasTrailerBeenPlayed by remember { mutableStateOf(false) }
-    var shouldExtractTrailer by remember { mutableStateOf(false) }
+    // The backdrop trailer: playing, started, extracting, its player -- see
+    // TrailerState.
+    val trailer = rememberTrailerState(trailerUrl)
 
     /**
      * Silence the backdrop trailer, then record the episode being watched.
@@ -1034,13 +1014,11 @@ fun TVShowsDetailsScreenContent(
      * them. Wrapping rather than copying that pattern means a sixth path cannot
      * quietly forget: onEpisodeSelected is what a launch path must call anyway.
      *
-     * DetailsTrailerPlayer keys its play/pause off isPlaying, so clearing the
-     * flag stops playback; hasTrailerBeenPlayed hides the player view so the
-     * backdrop image returns.
+     * trailer.stop() clears isPlaying, which DetailsTrailerPlayer pauses on,
+     * and hasPlayed, which hides the player view so the backdrop image returns.
      */
     fun stopTrailerAndSelectEpisode(season: Int, episode: Int, epName: String?) {
-        isTrailerPlaying = false
-        hasTrailerBeenPlayed = false
+        trailer.stop()
         onEpisodeSelected(season, episode, epName)
     }
 
@@ -1132,12 +1110,19 @@ fun TVShowsDetailsScreenContent(
         }
     }
 
-    var isExtractingTrailer by remember { mutableStateOf(false) }
 
-
-    var isFavorited by remember { mutableStateOf(false) }
     val activity = LocalActivity.current as? TVShowsDetailsScreenCompose
     val favoriteProfileId = activity?.profileId ?: -1
+
+    // Favorites: checked on open, toggled by the header button -- see
+    // FavoriteState. This screen sends the title with a toggle (§10, #3).
+    val favorite = rememberFavoriteState(
+        scope     = coroutineScope,
+        profileId = favoriteProfileId,
+        tmdbId    = tmdbId,
+        mediaType = mediaType,
+        title     = mediaTitle,
+    )
 
     // ── Watched-episode markers ──────────────────────────────────────────────
     // (season, episode) pairs this profile has started, for THIS show. Drives the
@@ -2153,22 +2138,6 @@ fun TVShowsDetailsScreenContent(
         if (showNotYetAvailable) { delay(4000); showNotYetAvailable = false }
     }
 
-    // Check favorite status on load
-    LaunchedEffect(tmdbId, mediaType, favoriteProfileId) {
-        if (favoriteProfileId != -1) {
-            try {
-                val status = ApiClient.bluehiveApi.checkFavorite(
-                    profileId   = favoriteProfileId,
-                    mediaTmdbId = tmdbId,
-                    mediaType   = mediaType,
-                )
-                isFavorited = status.is_favorited
-            } catch (_: Exception) {}
-        }
-    }
-
-
-
     // ── Season loads are SERIALISED, and stale answers are discarded ─────────
     //
     // This used to fire a bare coroutineScope.launch per call with no job held
@@ -2266,10 +2235,10 @@ fun TVShowsDetailsScreenContent(
     }
 
     // ✅ Log again when recommendations load — also off the main thread.
-    LaunchedEffect(recommendations) {
-        if (recommendations.isNotEmpty()) {
+    LaunchedEffect(extras.recommendations) {
+        if (extras.recommendations.isNotEmpty()) {
             // 1 backdrop + 1 logo + 20 recommendations + 6 provider buttons
-            val totalImages = 1 + 1 + recommendations.size + 6
+            val totalImages = 1 + 1 + extras.recommendations.size + 6
 
             withContext(Dispatchers.IO) {
                 CacheMonitor.logCacheStats(
@@ -2294,30 +2263,16 @@ fun TVShowsDetailsScreenContent(
             contentRating       = contentRating,
             voteAverage         = voteAverage,
             backdropUrl         = backdropUrl,
-            showBackdrop        = !hasTrailerBeenPlayed,
+            trailer             = trailer,
             backdropDescription = "TVShowsDetailsScreenCompose backdrop",
             dongleRegular       = dongleRegular,
         )
 
 
-        // Keep this near the top of the Box:
-        var trailerPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
-
         // This renders BEHIND the gradient overlay due to Box ordering.
         // Its own function on purpose -- see DetailsTrailerLayer.
         DetailsTrailerLayer(
-            trailerUrl = trailerUrl,
-            trailerPlayer = trailerPlayer,
-            isPlaying = isTrailerPlaying,
-            showPlayerView = hasTrailerBeenPlayed,
-            shouldExtract = shouldExtractTrailer,
-            onPlaybackStateChanged = { playing ->
-                isTrailerPlaying = playing
-            },
-            onPlayerReady = { player ->
-                trailerPlayer = player
-                isExtractingTrailer = false  // ✅ Extraction complete
-            },
+            trailer = trailer,
             modifier = Modifier.align(Alignment.TopEnd),
             releaseOnLeave = true,
         )
@@ -2342,76 +2297,24 @@ fun TVShowsDetailsScreenContent(
 
 
         // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:
-        // see DetailsHeaderButtons. What each press does stays here.
+        // see DetailsHeaderButtons. Each press runs a state holder's method.
         DetailsHeaderButtons(
             fontFamily = passionFont,
             pressTiming = TvHeaderPressTiming,
             enableFocus = !blockHeaderInitialFocus,
             favoriteFocusRequester = favoriteFocusRequester,
-            isFavorited = isFavorited,
-            onToggleFavorite = {
-                if (favoriteProfileId != -1) {
-                    coroutineScope.launch {
-                        try {
-                            val result = ApiClient.bluehiveApi.toggleFavorite(
-                                FavoriteRequest(
-                                    profile_id = favoriteProfileId,
-                                    media_tmdb_id = tmdbId,
-                                    media_type = mediaType,
-                                    media_title = mediaTitle,
-                                )
-                            )
-                            isFavorited = result.is_favorited
-                        } catch (e: Exception) {
-                            Log.e("Favorites", "Toggle failed: ${e.message}")
-                        }
-                    }
-                }
-            },
             extrasFocusRequester = extrasFocusRequester,
-            isExtrasToggled = isExtrasToggled,
-            onExtrasClick = {
-                isExtrasToggled = !isExtrasToggled
-
-                // Load recommendations when toggled on
-                if (isExtrasToggled && recommendations.isEmpty()) {
-                    coroutineScope.launch {                            // runs on Main
-                        val result = recommendationsRepository.getRecommendations(tmdbId, mediaType)
-                        recommendations = result                       // safe: returns on Main
-                    }
-                }
-            },
             trailerFocusRequester = trailerFocusRequester,
-            isTrailerPlaying = isTrailerPlaying,
-            trailerAvailable = !trailerUrl.isNullOrBlank(),
-            onTrailerClick = {
-                if (!trailerUrl.isNullOrBlank()) {
-                    if (!hasTrailerBeenPlayed) {
-                        shouldExtractTrailer = true
-                        isExtractingTrailer = true  // ✅ Show loading state
-                        hasTrailerBeenPlayed = true
-                    }
-                    isTrailerPlaying = !isTrailerPlaying
-                }
-            },
-            isExtractingTrailer = isExtractingTrailer,
-            onRewind = {
-                if (isTrailerPlaying) {
-                    seekBackward(trailerPlayer)
-                }
-            },
-            onFastForward = {
-                if (isTrailerPlaying) {
-                    seekForward(trailerPlayer)
-                }
-            },
+            favorite = favorite,
+            extras = extras,
+            trailer = trailer,
         )
 
 
         val app = context.applicationContext as? BlueHiveApplication
 
         // ✅ Conditionally show StreamerButtons OR RecommendedMediaSection
-        if (!isExtrasToggled) {
+        if (!extras.isOn) {
             Image(
                 painter = painterResource(id = R.drawable.top_lower_body),
                 contentDescription = null,
@@ -3087,7 +2990,7 @@ fun TVShowsDetailsScreenContent(
 
 
             if (
-                !isExtrasToggled &&
+                !extras.isOn &&
                 selectedEpisodeOverlayIndex != -1 &&
                 overlayAnchor != null &&
                 selectedEpisodeOverlayIndex in episodes.indices
@@ -3235,14 +3138,10 @@ fun TVShowsDetailsScreenContent(
 
 
         } else {
-            // ✅ Show recommended media section
-            if (recommendations.isNotEmpty()) {
-                RecommendedMediaSection(
-                    recommendations = recommendations,
-
-                        onMediaClick = { media ->
-                    isTrailerPlaying = false
-                    hasTrailerBeenPlayed = false
+            DetailsRecommendations(
+                extras = extras,
+                onOpen = { media ->
+                    trailer.stop()
                     coroutineScope.launch {
                         // Fire both requests concurrently during the button animation delay
                         val episodesDeferred = if (media.mediaType == "tv") {
@@ -3273,13 +3172,12 @@ fun TVShowsDetailsScreenContent(
                         onMediaClick(media)
                     }
                 },
-                    onNavigateUp = {
-                        BlueHiveApplication.playHoverSound()
-                        extrasFocusRequester.requestFocus()
-                        Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonglow should be the extra button's focus glow")
-                    }
-                )
-            }
+                onNavigateUp = {
+                    BlueHiveApplication.playHoverSound()
+                    extrasFocusRequester.requestFocus()
+                    Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonglow should be the extra button's focus glow")
+                }
+            )
         }
 
 
