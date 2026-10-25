@@ -465,12 +465,14 @@ val verifyReleaseOnDevice by tasks.registering {
 // lowered after each split stage, until Stage 10 empties the list. The rest of
 // the app is reported, not enforced.
 //
-// The ceilings sit about 1% above the size measured at the last stage, because
-// R8 re-decides inlining across the whole app on every build and a function
-// moves a little without its source changing. Stage 1 showed it: moving five
-// helpers out of the kept TV class let R8 inline them, and the two functions
-// grew by 42 and 22 units with no new code. New code is far bigger than that
-// margin.
+// The ceilings sit about 1% (code units) and 2.5% (registers) above the size
+// measured at the last stage, because R8 re-decides inlining across the whole
+// app on every build and a function moves a little without its source
+// changing. Stage 1 showed it: moving five helpers out of the kept TV class let
+// R8 inline them, and the two functions grew by 42 and 22 units with no new
+// code. Registers move by a few at a time: at Stage 6b the TV function, its
+// source untouched, went from 155 to 159 when the movie screen's overlays moved
+// into shared code. New code is far bigger than these margins.
 //
 // Each method is matched to the class it was WRITTEN in through R8's mapping
 // file. R8 relocates static methods freely (FavoritesScreen ships inside
@@ -485,13 +487,13 @@ val checkMethodSizes by tasks.registering {
         val maxUnits = 2_500
         val maxRegisters = 100
         // Being split by the redesign (units to registers). At the last stage:
-        // TV 5,220 / 155, movie 3,721 / 134 (v382, Stage 5). The TV ceiling also
+        // TV 5,210 / 159, movie 3,376 / 109 (v385, Stage 6b). The TV ceiling also
         // keeps that function under ART's 10,000-unit huge-method limit. Above
         // it ART never compiles the method, so it runs in the interpreter
         // (dex2oat --dump-stats, docs/details-redesign-baseline.md).
         val shrinking = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (5_280 to 157),
-            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (3_760 to 136),
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (5_280 to 163),
+            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (3_410 to 112),
         )
         // Pieces split out of the TV function but still in its file -- its
         // lambdas and local functions, named TVShowsDetailsScreenContent$... --
@@ -501,7 +503,7 @@ val checkMethodSizes by tasks.registering {
         // under the budget; only splitting it by what it captures can. Matched
         // by prefix because R8 numbers lambdas afresh whenever the file changes.
         val shrinkingParts = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent$" to (2_570 to 112),
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent$" to (2_570 to 113),
         )
         // App methods at least this big carry the same R8 risk: reported, not enforced.
         val warnUnits = 5_000

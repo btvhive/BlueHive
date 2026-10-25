@@ -61,9 +61,12 @@ import com.example.bluehive.details.shared.playback.extractionErrorMessage
 import com.example.bluehive.details.shared.playback.miruroSourceLabel
 import com.example.bluehive.details.shared.playback.parseExtractReason
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
+import com.example.bluehive.details.shared.playback.PlaybackErrorOverlay
+import com.example.bluehive.details.shared.playback.PlaybackLoadingOverlay
 import com.example.bluehive.details.shared.playback.PlaybackRequest
 import com.example.bluehive.details.shared.playback.PlayerIntents
 import com.example.bluehive.details.shared.playback.StreamSource
+import com.example.bluehive.details.shared.playback.rememberPlaybackSession
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
@@ -494,27 +497,10 @@ fun MoviesDetailsScreenContent(
     val extrasFocusRequester = remember { FocusRequester() }
     val trailerFocusRequester = remember { FocusRequester() }
 
-    var isExtracting   by remember { mutableStateOf(false) }
-    // Which attempt of the failover chain is on screen. Exists to re-key the
-    // stage timer further down; see the comment there.
-    var extractAttempt by remember { mutableIntStateOf(0) }
-
-    // ── BACK during an extraction ───────────────────────────────────────
-    //
-    // Two pieces, and BOTH are needed. The job handle lets BACK stop the
-    // client's polling loop. The flag is what actually prevents the launch:
-    // the extraction is wrapped in runCatching, which CATCHES the
-    // CancellationException, so a cancelled coroutine still falls through to
-    // `body == null` and would raise the failure modal. Cancelling alone
-    // fixes the wasted requests and none of the user-visible damage.
-    //
-    // Without this, pressing BACK hid the overlay but the coroutine ran on —
-    // up to ExtractAwait.DEADLINE_MS (120s) — and then launched the player or
-    // threw a full-screen error over whatever the user had moved on to.
-    var extractJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var extractCancelled by remember { mutableStateOf(false) }
-    var extractStage   by remember { mutableIntStateOf(0) }
-    var extractPending by remember { mutableStateOf(false) }   // guards the 1.5s pre-launch window
+    // The page's loading screen, shared by the source chain and the anime
+    // flow: extracting, pending, stage, the job BACK cancels -- see
+    // PlaybackSession.
+    val session = rememberPlaybackSession()
     var showNoDub      by remember { mutableStateOf(false) }   // transient "No dub available" toast
     // Shown when this anime movie has no AniList mapping yet, so there is no Miruro
     // URL to extract from. Without this, DuB/SuB were a SILENT no-op — the guard
@@ -527,22 +513,6 @@ fun MoviesDetailsScreenContent(
     var showServerPicker  by remember { mutableStateOf(false) } // phase 1 result: the picker
     var showServerError   by remember { mutableStateOf(false) } // transient failure toast
 
-    // ── Backend-extracted sources ───────────────────────────────────────────
-    // Every source button goes straight to server-side m3u8 extraction and our
-    // own player. The "open the site directly" alternative was GeckoView, which
-    // was removed in v371 along with the Settings > Playback method switch.
-    var isBackendExtract by remember { mutableStateOf(false) }
-    var backendStatus    by remember { mutableStateOf("") }
-    // The loading screen's "trying 2 of 4": how many sources this chain can
-    // try in all, fixed when the viewer presses a source (attempt 1).
-    var chainTotal       by remember { mutableIntStateOf(1) }
-    // Amber line under it once a source has failed -- "VidNest didn't work,
-    // trying VidFast" -- kept up for the rest of the chain. backendStatus was
-    // meant to carry this, but the overlay never read it, so a failover was
-    // invisible: the same stage words simply started over.
-    var extractNote      by remember { mutableStateOf<String?>(null) }
-    /** Non-null shows ExtractionErrorOverlay — a failure the user can act on. */
-    var extractionError  by remember { mutableStateOf<String?>(null) }
     var pendingUrl        by remember { mutableStateOf<String?>(null) }
     var pendingDub        by remember { mutableStateOf(false) }
     var serverOptions     by remember { mutableStateOf<List<ServerOption>>(emptyList()) }
@@ -579,7 +549,7 @@ fun MoviesDetailsScreenContent(
     // very resume this fires on. The TV screen already carried both guards; this one
     // carried neither.
     RestoreFocusOnPlayerReturn("MovieDetailsFocus") {
-        if (extractionError != null) return@RestoreFocusOnPlayerReturn emptyList()
+        if (session.extractionError != null) return@RestoreFocusOnPlayerReturn emptyList()
         if (showServerPicker || isCheckingServers || showDefaultPrompt) {
             return@RestoreFocusOnPlayerReturn emptyList()
         }
@@ -645,8 +615,8 @@ fun MoviesDetailsScreenContent(
     val extractorLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        isExtracting   = false
-        extractPending = false
+        session.isExtracting   = false
+        session.extractPending = false
         if (result.resultCode == Activity.RESULT_OK) {
             val data    = result.data
             val m3u8    = data?.getStringExtra(MiruroExtractorActivity.RESULT_M3U8)
@@ -818,6 +788,10 @@ fun MoviesDetailsScreenContent(
         }
     }
 
+    // ── Backend-extracted sources ───────────────────────────────────────────
+    // Every source button goes straight to server-side m3u8 extraction and our
+    // own player. The "open the site directly" alternative was GeckoView, which
+    // was removed in v371 along with the Settings > Playback method switch.
     /**
      * Server-side extraction for VidFast / VidEasy / VidSpark, then our own player.
      *
@@ -844,25 +818,25 @@ fun MoviesDetailsScreenContent(
         /** Where to start, in ms: 0 for a press, the dead source's spot for a failover. */
         startAtMs: Long = 0L,
     ) {
-        extractCancelled = false
-        isExtracting     = true
-        isBackendExtract = true
-        extractPending   = true
-        extractStage     = 1
+        session.extractCancelled = false
+        session.isExtracting     = true
+        session.isBackendExtract = true
+        session.extractPending   = true
+        session.extractStage     = 1
         // EVERY attempt stamps this, not only the failover ones. Setting it only
         // on failover left it holding the previous title's last attempt number,
         // so the first failover of the NEXT title could write the same value,
         // fail to change the key, and freeze the stage dots -- the exact bug
         // this field exists to prevent.
-        extractAttempt   = attempt
-        backendStatus    = "Finding your stream…"
+        session.extractAttempt   = attempt
+        session.backendStatus    = "Finding your stream…"
         // A fresh press starts a fresh chain: count what it can try, and drop
         // any note left from the last one.
         if (attempt == 1) {
-            chainTotal  = SourceCatalog.plannedAttempts(
+            session.chainTotal  = SourceCatalog.plannedAttempts(
                 BlueHiveApplication.appContext, "movie", mediaId, 0, 0, src.name,
             ) { usesBackendExtraction(it) }
-            extractNote = null
+            session.extractNote = null
         }
 
         // Display name IS the backend key once lowercased — see usesBackendExtraction.
@@ -885,14 +859,14 @@ fun MoviesDetailsScreenContent(
         }
         val tookMs = System.currentTimeMillis() - startedAt
 
-        isExtracting     = false
-        isBackendExtract = false
-        extractPending   = false
-        backendStatus    = ""
+        session.isExtracting     = false
+        session.isBackendExtract = false
+        session.extractPending   = false
+        session.backendStatus    = ""
 
         // The user left. Do not raise an error and do not start a player over
         // whatever they are looking at now.
-        if (extractCancelled) {
+        if (session.extractCancelled) {
             Log.d("scraper-vidapi", "extraction finished after BACK — discarding result")
             return
         }
@@ -915,12 +889,12 @@ fun MoviesDetailsScreenContent(
                 Log.e("scraper-vidfast",
                       "failover ${attempt}/${SourceCatalog.maxAttempts}: " +
                       "${src.name} failed ($reason) -> trying ${next.name}")
-                isExtracting     = true
-                isBackendExtract = true
-                extractPending   = true
-                extractStage     = 1
-                backendStatus    = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}\u2026"
-                extractNote      = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}"
+                session.isExtracting     = true
+                session.isBackendExtract = true
+                session.extractPending   = true
+                session.extractStage     = 1
+                session.backendStatus    = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}\u2026"
+                session.extractNote      = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}"
                 extractAndPlayMovie(
                     StreamSource(next.label, next.name, next.url),
                     attempt + 1,
@@ -930,7 +904,7 @@ fun MoviesDetailsScreenContent(
                 return
             }
 
-            extractionError =
+            session.extractionError =
                 extractionErrorMessage(code, reason, src.name, "movie", tried + src.name)
             return
         }
@@ -963,7 +937,7 @@ fun MoviesDetailsScreenContent(
     fun startBuiltInPlayer(src: StreamSource) {
         stopTrailer()
         try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
-        extractJob = coroutineScope.launch { extractAndPlayMovie(src) }
+        session.extractJob = coroutineScope.launch { extractAndPlayMovie(src) }
     }
 
     // ── FAILOVER, PLAYBACK HALF ─────────────────────────────────────────────
@@ -1004,8 +978,8 @@ fun MoviesDetailsScreenContent(
         // by its button label.
         val failedLabel = SourceCatalog.sources(BlueHiveApplication.appContext, "movie", mediaId, 0, 0)
             .firstOrNull { it.name.equals(failed, ignoreCase = true) }?.label ?: failed
-        extractNote = "$failedLabel stopped playing — trying ${next.label}"
-        extractJob = coroutineScope.launch {
+        session.extractNote = "$failedLabel stopped playing — trying ${next.label}"
+        session.extractJob = coroutineScope.launch {
             extractAndPlayMovie(
                 StreamSource(next.label, next.name, next.url),
                 step,
@@ -1021,19 +995,8 @@ fun MoviesDetailsScreenContent(
     // between failover attempts, and the moments around a request starting and
     // finishing. BACK there used to fall through and leave the details screen
     // entirely.
-    BackHandler(enabled = isExtracting || extractPending) {
-        Log.d("scraper-vidapi", "↩️ back during extraction — cancelling")
-        extractCancelled      = true
-        extractJob?.cancel()
-        extractJob            = null
-        extractPending        = false
-        isExtracting          = false
-        // Reset here because a cancel never reaches the line in
-        // extractAndPlayMovie that clears it -- and the loading screen reads it
-        // to decide whether to show "trying 2 of 4", so a stale true would put a
-        // source count and an old failover note over the next ANIME load.
-        isBackendExtract      = false
-        extractStage          = 0
+    BackHandler(enabled = session.isExtracting || session.extractPending) {
+        session.cancel()
         coroutineScope.launch {
             awaitFrame()
             try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
@@ -1146,17 +1109,17 @@ fun MoviesDetailsScreenContent(
         // provider so its result can mark it tried.
         if (server == null) triedServers.clear()
         lastExtractServer = server
-        if (!isExtracting && !extractPending && !isCheckingServers) {
-            extractPending = true
+        if (!session.isExtracting && !session.extractPending && !isCheckingServers) {
+            session.extractPending = true
             // HELD IN extractJob, like the source chain, so BACK cancels it. It
             // was launched untracked: Back hid the loading screen, the backend
             // answered a moment later, and the film started anyway. Cancelled,
             // the backend await ends it, and ensureActive()/launchIfActive()
             // below stop the player and the on-device fallback from starting
             // after the fact.
-            extractJob = coroutineScope.launch {
+            session.extractJob = coroutineScope.launch {
                 delay(200)
-                isExtracting = true
+                session.isExtracting = true
                 try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
 
                 // BACKEND FIRST for the default play (sub, default server). Falls
@@ -1192,8 +1155,8 @@ fun MoviesDetailsScreenContent(
                     if (next != null) {
                         Log.e("scraper", "🔁 dub came back as sub — failing over to server '$next'")
                         triedServers.add(next)
-                        isExtracting   = false
-                        extractPending = false
+                        session.isExtracting   = false
+                        session.extractPending = false
                         failoverRequest = Triple(url, true, next)
                         return@launch
                     }
@@ -1209,8 +1172,8 @@ fun MoviesDetailsScreenContent(
                     // cached server-side by the extraction, so this is one
                     // round trip and delays nothing.
                     ensureServerList(url, dub)
-                    isExtracting   = false
-                    extractPending = false
+                    session.isExtracting   = false
+                    session.extractPending = false
                     return@launch
                 }
                 Log.w("scraper", "M Extract: backend miss (dub=$dub server=$server) — on-device fallback")
@@ -1232,11 +1195,11 @@ fun MoviesDetailsScreenContent(
     // "Checking…" overlay appears so the "Choose a server" animation finishes.
     val launchEnumerate: (String, Boolean) -> Unit = { url, dub ->
         Log.d("scraper", "M Enumerate (dub=$dub) → $url")
-        if (!isExtracting && !extractPending && !isCheckingServers) {
-            extractPending = true      // immediate guard for the 300ms window
+        if (!session.isExtracting && !session.extractPending && !isCheckingServers) {
+            session.extractPending = true      // immediate guard for the 300ms window
             coroutineScope.launch {
                 delay(200)
-                extractPending = false // hand off guard duty to isCheckingServers
+                session.extractPending = false // hand off guard duty to isCheckingServers
                 isCheckingServers = true
 
                 // BACKEND FIRST, which also removes an ACTIVITY HOP. The on-device
@@ -1353,26 +1316,6 @@ fun MoviesDetailsScreenContent(
 
 
 
-    // KEYED ON extractAttempt AS WELL AS isExtracting. A failover keeps the
-    // overlay up on purpose (no blink between sources), so isExtracting may not
-    // visibly transition between one attempt and the next -- and without a second
-    // key this effect would not restart, leaving the dots frozen at stage 1 for
-    // the whole of the next attempt, which reads as a hang.
-    //
-    // It used to key on the ON-DEVICE retry counter, which the backend path never
-    // incremented, so the dots really did freeze during a backend failover.
-    // extractAndPlayMovie stamps extractAttempt on entry, so every attempt --
-    // first or nth -- changes the key.
-    LaunchedEffect(isExtracting, extractAttempt) {
-        if (isExtracting) {
-            extractStage = 1
-            delay(900);  extractStage = 2
-            delay(2500); extractStage = 3
-            delay(3500); extractStage = 4
-        } else {
-            extractStage = 0
-        }
-    }
 
 
     LaunchedEffect(showNotYetAvailable) {
@@ -1603,25 +1546,7 @@ fun MoviesDetailsScreenContent(
         },
         overlays = {
             // Instant extraction overlay — last in Box so it renders on top of everything
-            if (isExtracting) {
-                // TRAPPED, like the server check below it — see ExtractionFocusTrap.
-                // Untrapped, the focused source button behind the scrim swallows the
-                // first BACK for its own onBack and the extraction keeps running.
-                ExtractionFocusTrap {
-                    ExtractionLoadingOverlay(
-                        status = when (extractStage) {
-                            0, 1 -> "Locating stream source…"
-                            2    -> "Loading stream source…"
-                            3    -> "Preparing video player…"
-                            else -> "Almost there…"
-                        },
-                        stage = extractStage,
-                        // Source chain only: anime extraction is not a chain.
-                        note  = if (isBackendExtract) extractNote else null,
-                        chain = if (isBackendExtract) extractAttempt to chainTotal else null,
-                    )
-                }
-            }
+            PlaybackLoadingOverlay(session)
 
             // "No dub available" toast
             if (showNoDub) {
@@ -1638,12 +1563,7 @@ fun MoviesDetailsScreenContent(
             }
 
             // Extraction failure the user can act on ("try another source").
-            extractionError?.let { msg ->
-                com.example.bluehive.webview.ExtractionErrorOverlay(
-                    message = msg,
-                    onDismiss = { extractionError = null }
-                )
-            }
+            PlaybackErrorOverlay(session)
 
             // ── "Checking servers" overlay (No path, phase 1) ───────────────────
             if (isCheckingServers) {
