@@ -16,10 +16,11 @@ import org.junit.Test
  * extra fails silently on the TV: a missing AUDIO hands a dub viewer the sub on
  * a mid-episode refetch, a missing EXTRACT_SOURCE re-extracts the wrong source.
  *
- * Stage 6 moves all of these launches into shared/playback/PlayerIntents.kt.
- * Its tests build each launch with known inputs and must produce exactly these
- * keys, with exactly these values. Until then this file is the record, and the
- * test below only keeps it internally consistent.
+ * Stage 6 moved the player and extractor launches into
+ * shared/playback/PlayerIntents.kt, and PlayerIntentsTest builds each one with
+ * known inputs against these lists: exactly these keys, with exactly these
+ * values. The details-to-details launches move at Stage 9; until then this
+ * file is their record, and the test below keeps it internally consistent.
  */
 object DetailsLaunchExtrasGolden {
 

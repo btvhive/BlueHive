@@ -52,17 +52,18 @@ import com.example.bluehive.webview.ExtractionLoadingOverlay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.android.awaitFrame
 import androidx.compose.foundation.background
-import com.example.bluehive.webview.hls.HlsExtract
 import com.example.bluehive.webview.hls.HlsPlayerActivity
 import com.example.bluehive.api.extractStreamAwait
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 import com.example.bluehive.SourceScreen
-import com.example.bluehive.details.shared.playback.animeRelayUrl
 import com.example.bluehive.details.shared.playback.extractionErrorMessage
 import com.example.bluehive.details.shared.playback.miruroSourceLabel
 import com.example.bluehive.details.shared.playback.parseExtractReason
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
+import com.example.bluehive.details.shared.playback.PlaybackRequest
+import com.example.bluehive.details.shared.playback.PlayerIntents
+import com.example.bluehive.details.shared.playback.StreamSource
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
@@ -95,13 +96,6 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
     private var sourceScreen: String? = null
     private var searchQuery:  String? = null
 
-
-    @Immutable
-    data class StreamingSource(
-        val coverName: String,
-        val name: String,
-        val url: String,
-    )
 
     companion object {
         private const val TAG = "MoviesDetailsScreenCompose"
@@ -349,15 +343,15 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
  * The source buttons for this film. Backend-owned — see the twin on the TV
  * screen for the full note, and SourceCatalog for the fallback chain.
  */
-private fun getStreamingSources(mediaType: String, mediaId: Int): List<MoviesDetailsScreenCompose.StreamingSource> {
+private fun getStreamingSources(mediaType: String, mediaId: Int): List<StreamSource> {
     if (mediaType.equals("movie", true)) {
         return com.example.bluehive.api.SourceCatalog
             .sources(BlueHiveApplication.appContext, "movie", mediaId)
-            .map { MoviesDetailsScreenCompose.StreamingSource(it.label, it.name, it.url) }
+            .map { StreamSource(it.label, it.name, it.url) }
     }
     return when(mediaType) {
         "movie" -> listOf(
-            MoviesDetailsScreenCompose.StreamingSource(
+            StreamSource(
                 "Royal Jelly",
                 "VidNest",
                 "https://vidnest.fun/movie/$mediaId"
@@ -379,17 +373,17 @@ private fun getStreamingSources(mediaType: String, mediaId: Int): List<MoviesDet
             // tv 1396 S1E1), and its CDNs a2.shows.st / d.shows.st both publish
             // ECH with alpn=h3 — so it is covered by the QUIC/ECH path rather
             // than relying on the relay.
-            MoviesDetailsScreenCompose.StreamingSource(
+            StreamSource(
                 "Nectar Stream",
                 "VidLove",
                 "https://player.vidlove.cc/embed/movie/$mediaId"
             ),
-            MoviesDetailsScreenCompose.StreamingSource(
+            StreamSource(
                 "Queen Stream",
                 "VidFast",
                 "https://vidfast.pro/movie/$mediaId?autoPlay=true",
             ),
-            MoviesDetailsScreenCompose.StreamingSource(
+            StreamSource(
                 "Purple Stream",
                 "MoviesAPI",
                     "https://moviesapi.to/movie/$mediaId"
@@ -713,11 +707,6 @@ fun MoviesDetailsScreenContent(
             // relay works around ISPs that DNS-hijack the CDN, but costs ~1 GB of
             // backend transfer each way per episode, so it is now the fallback
             // rather than the default path.
-            val proxied = animeRelayUrl(
-                m3u8 = m3u8, tmdbId = tmdbId, mediaType = "anime_movie",
-                title = mediaTitle, profileId = favoriteProfileId,
-                sourceName = miruroSourceLabel(null, capNames?.getOrNull(capDef)),
-            )
             Log.d("scraper", "M Extract → direct=$m3u8  (relay fallback ready)")
             // ── Record the watch ────────────────────────────────────────
             // The DuB/SuB path goes straight to MiruroPlayerActivity, and watch
@@ -728,41 +717,19 @@ fun MoviesDetailsScreenContent(
             // successful extract counted a watch even when the stream never
             // played. Season/episode are omitted — these are movies.
             context.startActivity(
-                Intent(context, MiruroPlayerActivity::class.java)
-                    .putExtra("M3U8_URL", m3u8)                  // try the CDN directly
-                    .putExtra("M3U8_FALLBACK_URL", proxied)      // relay if that's blocked
-                    .putExtra("REFERER", referer)
-                    .putExtra("UA", ua)
-                    .putExtra("PROFILE_ID",  favoriteProfileId)
-                    .putExtra("MEDIA_ID",    tmdbId.toString())
-                    .putExtra("MEDIA_TYPE",  mediaType)
-                    .putExtra("MEDIA_TITLE", mediaTitle)
-                    .putExtra("SOURCE_NAME", miruroSourceLabel(null, capNames?.getOrNull(capDef)))
-                    // AUDIO EXISTS ONLY FOR MID-PLAYBACK RE-EXTRACTION, and it is not
-                    // optional. Miruro signs its segment URLs with a token that dies
-                    // after roughly nine minutes — MEASURED 2026-08-27, Mushoku Tensei
-                    // s1e6 froze 121 segments in and every request after that was a 403
-                    // — so recovering means fetching a FRESH manifest mid-episode.
-                    // Asking for one without naming the track hands a dub viewer the
-                    // sub, which is worse than the freeze it replaces: it looks like it
-                    // worked.
-                    //
-                    // Derived from the SAME value as SOURCE_NAME, deliberately. If those
-                    // two ever disagree, history records one track while the player
-                    // refetches the other.
-                    .putExtra("AUDIO", if (pendingDub) "dub" else "sub")
-                    // SERVER pins the provider for any mid-playback re-extraction, and
-                    // HOW it is resolved matters as much as that it is sent. triedName is
-                    // what the failover bookkeeping just computed: the manually chosen
-                    // provider when there was one, and otherwise the DEFAULT resolved to
-                    // its actual name instead of left null.
-                    //
-                    // Sending null would re-extract against whatever Miruro defaults to at
-                    // that moment, which is not necessarily the provider this playback
-                    // started on — the list is reordered as servers come and go, so a
-                    // recovery could silently move the viewer to a different source
-                    // mid-episode.
-                    .putExtra("SERVER", triedName)
+                PlayerIntents.miruroOnDevice(
+                    context    = context,
+                    request    = PlaybackRequest.Movie(tmdbId),
+                    m3u8       = m3u8,
+                    referer    = referer,
+                    userAgent  = ua,
+                    sourceName = miruroSourceLabel(null, capNames?.getOrNull(capDef)),
+                    profileId  = favoriteProfileId,
+                    mediaType  = mediaType,
+                    mediaTitle = mediaTitle,
+                    dub        = pendingDub,
+                    server     = triedName,
+                )
             )
         } else {
             val data   = result.data
@@ -869,7 +836,7 @@ fun MoviesDetailsScreenContent(
      * requests, so a second client attempt just re-asks for the same answer.
      */
     suspend fun extractAndPlayMovie(
-        src: MoviesDetailsScreenCompose.StreamingSource,
+        src: StreamSource,
         /** 1 for the source the viewer pressed; higher for each chain step. */
         attempt: Int = 1,
         /** The sources already tried and failed, oldest first. */
@@ -955,7 +922,7 @@ fun MoviesDetailsScreenContent(
                 backendStatus    = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}\u2026"
                 extractNote      = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}"
                 extractAndPlayMovie(
-                    MoviesDetailsScreenCompose.StreamingSource(next.label, next.name, next.url),
+                    StreamSource(next.label, next.name, next.url),
                     attempt + 1,
                     tried + src.name,
                     startAtMs,
@@ -977,48 +944,23 @@ fun MoviesDetailsScreenContent(
         // 2026-10-19, so a movie that died in the player never failed over.
         chainAttempt = attempt
         playerLauncher.launchIfActive(
-            Intent(context, HlsPlayerActivity::class.java)
-                .putExtra("M3U8_URL", body.m3u8)
-                // DIRECT FIRST, relay only after a confirmed failure. Re-extracting
-                // cannot fix a blocked CDN — the source pins one host per title and
-                // returns the same one — so this is what actually recovers a
-                // filtered line. Already tagged with the title by /api/extract, so
-                // the fallback lands in bluehive.relay_sessions attributed rather
-                // than as an anonymous byte count.
-                //
-                // The player mints the grant itself on the failure path
-                // (HlsPlayerActivity.switchToRelay -> mintRelayGrant); passing the
-                // URL is all this screen has to do. Without this extra, relayUrl is
-                // null in the player and switchToRelay returns false immediately —
-                // which is why movies had no relay at all before.
-                .putExtra("M3U8_FALLBACK_URL", body.proxy_url)
-                // The EMBED PAGE origin, not the manifest host — the CDN validates
-                // it, and sending the manifest's own host 403s every segment while
-                // extraction still looks like it worked.
-                .putExtra("REFERER", body.referer)
-                .putExtra("IS_HLS", body.isHls ?: true)
-                .putExtra("UA", body.user_agent)
-                .putExtra("TMDB_ID", tmdbId)
-                // Blank ON PURPOSE: these sources have no on-device extractor. The
-                // player reads it as "ask the backend instead" and calls
-                // /api/extract?refresh=1 — see HlsPlayerActivity.reextractViaBackend.
-                .putExtra(HlsExtract.EXTRA_EXTRACTOR_CLASS, "")
-                .putExtra("EMBED_URL", src.url)
-                // Which source to re-ask on a mid-play failure; without it the
-                // player would always re-extract VidFast.
-                .putExtra("EXTRACT_SOURCE", sourceKey)
-                .putExtra("PROFILE_ID",  favoriteProfileId)
-                .putExtra("MEDIA_TYPE",  mediaType)
-                .putExtra("MEDIA_TITLE", mediaTitle)
-                .putExtra("SOURCE_NAME", src.name)
-                .putExtra("SUBTITLE_URL", body.subtitle_url)
-                .putExtra(HlsPlayerActivity.EXTRA_START_AT_MS, startAtMs)
+            PlayerIntents.hlsPlayer(
+                context    = context,
+                request    = PlaybackRequest.Movie(tmdbId),
+                body       = body,
+                embedUrl   = src.url,
+                sourceName = src.name,
+                profileId  = favoriteProfileId,
+                mediaType  = mediaType,
+                mediaTitle = mediaTitle,
+                startAtMs  = startAtMs,
+            )
         )
     }
 
     /** See the TV screen's twin: one body shared by the prompt's default button
      *  and the skip-the-prompt path, so the two cannot drift apart. */
-    fun startBuiltInPlayer(src: MoviesDetailsScreenCompose.StreamingSource) {
+    fun startBuiltInPlayer(src: StreamSource) {
         stopTrailer()
         try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
         extractJob = coroutineScope.launch { extractAndPlayMovie(src) }
@@ -1065,7 +1007,7 @@ fun MoviesDetailsScreenContent(
         extractNote = "$failedLabel stopped playing — trying ${next.label}"
         extractJob = coroutineScope.launch {
             extractAndPlayMovie(
-                MoviesDetailsScreenCompose.StreamingSource(next.label, next.name, next.url),
+                StreamSource(next.label, next.name, next.url),
                 step,
                 listOf(failed),
                 atMs,
@@ -1179,39 +1121,17 @@ fun MoviesDetailsScreenContent(
         // open the player after the viewer has left. Stop quietly instead.
         currentCoroutineContext().ensureActive()
         context.startActivity(
-            Intent(context, MiruroPlayerActivity::class.java)
-                .putExtra("M3U8_URL", body.m3u8)
-                // Tagged server-side already, so no animeRelayUrl() here — that
-                // helper exists for the on-device path, where the backend never
-                // sees the playback and the relay row would be anonymous.
-                .putExtra("M3U8_FALLBACK_URL", body.proxy_url)
-                .putExtra("REFERER", body.referer)
-                .putExtra("IS_HLS", body.isHls ?: true)
-                .putExtra("UA", body.user_agent)
-                .putExtra("PROFILE_ID",  favoriteProfileId)
-                .putExtra("MEDIA_ID",    tmdbId.toString())
-                .putExtra("MEDIA_TYPE",  mediaType)
-                .putExtra("MEDIA_TITLE", mediaTitle)
-                // Reflects the track actually extracted — this string is what
-                // watch history and relay_sessions record, so a hardcoded "Sub"
-                // would mislabel every dub playback. `playingDub`, not `dub`: a
-                // last-resort sub is recorded as the sub it is.
-                .putExtra("SOURCE_NAME", miruroSourceLabel(body.servers, server))
-                // See the on-device site above for why AUDIO is carried. `playingDub`
-                // rather than `dub` for the same reason SOURCE_NAME uses it: a
-                // last-resort sub must re-extract as the sub it actually is.
-                //
-                // SERVER is best-effort and only exists on this path — the backend was
-                // told which one to use, so a refetch can ask for the same one instead
-                // of redrawing whichever the site defaults to. Null is fine and simply
-                // means "no preference".
-                .putExtra("AUDIO", if (playingDub) "dub" else "sub")
-                // Manual selection wins; failing that, resolve the default to its
-                // name so a refetch returns to the SAME provider rather than redrawing
-                // whatever the site defaults to now. Null only when the picker never
-                // ran and there is nothing to resolve from — the backend then picks
-                // its own default, exactly as it did for the original extraction.
-                .putExtra("SERVER", server ?: serverOptions.getOrNull(serverDefaultIdx)?.name)
+            PlayerIntents.miruroBackend(
+                context    = context,
+                request    = PlaybackRequest.Movie(tmdbId),
+                body       = body,
+                sourceName = miruroSourceLabel(body.servers, server),
+                profileId  = favoriteProfileId,
+                mediaType  = mediaType,
+                mediaTitle = mediaTitle,
+                playingDub = playingDub,
+                server     = server ?: serverOptions.getOrNull(serverDefaultIdx)?.name,
+            )
         )
         return ExtractOutcome.PLAYED
     }
@@ -1295,18 +1215,15 @@ fun MoviesDetailsScreenContent(
                 }
                 Log.w("scraper", "M Extract: backend miss (dub=$dub server=$server) — on-device fallback")
 
-                val intent = Intent(context, MiruroExtractorActivity::class.java)
-                    .putExtra(MiruroExtractorActivity.EXTRA_URL, url)
-                    .putExtra(MiruroExtractorActivity.EXTRA_DUB, dub)
-                    .putExtra(MiruroExtractorActivity.EXTRA_MODE, MiruroExtractorActivity.MODE_EXTRACT)
-                if (!server.isNullOrBlank()) {
-                    intent.putExtra(MiruroExtractorActivity.EXTRA_SERVER_NAME, server)
-                } else if (serverListCache[serverCacheKey(url, dub)] == null) {
-                    // Default server, list not cached yet → grab the provider list
-                    // in this same pass so "Choose a server" is instant afterward.
-                    intent.putExtra(MiruroExtractorActivity.EXTRA_CAPTURE_SERVERS, true)
-                }
-                extractorLauncher.launchIfActive(intent)
+                extractorLauncher.launchIfActive(
+                    PlayerIntents.extractorExtract(
+                        context       = context,
+                        url           = url,
+                        dub           = dub,
+                        server        = server,
+                        listNotCached = serverListCache[serverCacheKey(url, dub)] == null,
+                    )
+                )
             }
         }
     }
@@ -1351,10 +1268,7 @@ fun MoviesDetailsScreenContent(
                 Log.w("scraper", "M Enumerate: backend miss — on-device fallback")
                 try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
                 enumerateLauncher.launchIfActive(
-                    Intent(context, MiruroExtractorActivity::class.java)
-                        .putExtra(MiruroExtractorActivity.EXTRA_URL, url)
-                        .putExtra(MiruroExtractorActivity.EXTRA_DUB, dub)
-                        .putExtra(MiruroExtractorActivity.EXTRA_MODE, MiruroExtractorActivity.MODE_ENUMERATE)
+                    PlayerIntents.extractorEnumerate(context = context, url = url, dub = dub)
                 )
             }
         }
@@ -1387,7 +1301,7 @@ fun MoviesDetailsScreenContent(
                 tmdbId        = mediaId,
                 seasonNumber  = null,
                 episodeNumber = null,
-            ) { c, n, u -> MoviesDetailsScreenCompose.StreamingSource(c, n, u) }
+            ) { c, n, u -> StreamSource(c, n, u) }
         }
         else {
             // initialValue already holds the cached list, so the buttons are
@@ -1817,7 +1731,7 @@ fun MoviesDetailsScreenContent(
 
 @Composable
 fun MoviesStreamerButton(
-    source: MoviesDetailsScreenCompose.StreamingSource,
+    source: StreamSource,
     fontFamily: FontFamily,
     focusRequester: FocusRequester,
     offsetX: Dp,
