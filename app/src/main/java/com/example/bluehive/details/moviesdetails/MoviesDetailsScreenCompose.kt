@@ -60,6 +60,8 @@ import com.example.bluehive.details.shared.state.DetailsBackHandlers
 import com.example.bluehive.details.shared.state.rememberExtrasState
 import com.example.bluehive.details.shared.state.rememberFavoriteState
 import com.example.bluehive.details.shared.state.rememberTrailerState
+import com.example.bluehive.details.shared.navigation.DetailsScreen
+import com.example.bluehive.details.shared.navigation.DetailsIntents
 
 
 
@@ -122,26 +124,10 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
             "Details -> openMediaDetails: pushed '${media.title}', size=${app.historySize()}"
         )
 
-        val intent = Intent(this, MoviesDetailsScreenCompose::class.java).apply {
-            putExtra("media_type",        media.mediaType ?: "movie")
-            putExtra("media_id",          media.tmdbId)                     // Int (non-null)
-            putExtra("media_title",       media.title ?: "")
-            putExtra("poster_url",        media.posterUrl ?: "")
-            putExtra("backdrop_url",      media.backdropUrl ?: "")
-            putExtra("youtube_trailer_url", media.trailerUrl ?: "")
-            putExtra("overview",          media.overview ?: "")
-            putExtra("vote_average",      media.voteAverage ?: 0.0)         // Double, NOT Double?
-            putExtra("contentRating",     media.contentRating ?: "N/A")
-            putExtra("original_language", media.originalLanguage ?: "N/A")
-            putExtra("release_date",      media.releaseDate ?: "N/A")
-            putExtra("budget",            media.budget ?: 0L)               // Long, NOT Long?
-            putExtra("revenue",           media.revenue ?: 0L)              // Long
-            putExtra("logo_url",          media.logoUrl ?: "")
-            putExtra("genres",            media.genres?.joinToString(", ") ?: "N/A")
-            putExtra("PROFILE_ID",        profileId)
-            sourceScreen?.let { putExtra("SOURCE_SCREEN", it) }
-            searchQuery?.let  { putExtra("SEARCH_QUERY",  it) }
-        }
+        val intent = DetailsIntents.open(
+            this, MoviesDetailsScreenCompose::class.java, DetailsScreen.Movie,
+            media, profileId, sourceScreen, searchQuery,
+        )
 
         startActivity(intent)
 
@@ -208,27 +194,10 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
 
                 Log.d("DetailsHistory", "Back: navigating to previous '${previous.title}'")
 
-                val intent = Intent(this@MoviesDetailsScreenCompose, MoviesDetailsScreenCompose::class.java).apply {
-                    putExtra("media_type",        previous.mediaType ?: "movie")
-                    putExtra("media_id",          previous.tmdbId)
-                    putExtra("media_title",       previous.title ?: "")
-                    putExtra("poster_url",        previous.posterUrl ?: "")
-                    putExtra("backdrop_url",      previous.backdropUrl ?: "")
-                    putExtra("youtube_trailer_url", previous.trailerUrl ?: "")
-                    putExtra("overview",          previous.overview ?: "")
-                    putExtra("vote_average",      previous.voteAverage ?: 0.0)
-                    putExtra("contentRating",     previous.contentRating ?: "N/A")
-                    putExtra("original_language", previous.originalLanguage ?: "N/A")
-                    putExtra("release_date",      previous.releaseDate ?: "N/A")
-                    putExtra("budget",            previous.budget ?: 0L)
-                    putExtra("revenue",           previous.revenue ?: 0L)
-                    putExtra("logo_url",          previous.logoUrl ?: "")
-                    putExtra("genres",            previous.genres?.joinToString(", ") ?: "N/A")
-                    putExtra("start_in_extras", true)
-                    putExtra("PROFILE_ID",         profileId)
-                    sourceScreen?.let { putExtra("SOURCE_SCREEN", it) }
-                    searchQuery?.let  { putExtra("SEARCH_QUERY",  it) }
-                }
+                val intent = DetailsIntents.back(
+                    this@MoviesDetailsScreenCompose, MoviesDetailsScreenCompose::class.java, DetailsScreen.Movie,
+                    previous, profileId, sourceScreen, searchQuery,
+                )
                 startActivity(intent)
                 finish()
             }

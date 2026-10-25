@@ -54,6 +54,8 @@ import com.example.bluehive.details.shared.state.DetailsBackHandlers
 import com.example.bluehive.details.shared.state.rememberExtrasState
 import com.example.bluehive.details.shared.state.rememberFavoriteState
 import com.example.bluehive.details.shared.state.rememberTrailerState
+import com.example.bluehive.details.shared.navigation.DetailsScreen
+import com.example.bluehive.details.shared.navigation.DetailsIntents
 
 
 
@@ -121,28 +123,10 @@ class TVShowsDetailsScreenCompose: ComponentActivity() {
             "Details -> openMediaDetails: pushed '${media.title}', size=${app.historySize()}"
         )
 
-        val intent = Intent(this, TVShowsDetailsScreenCompose::class.java).apply {
-            putExtra("media_type", media.mediaType)
-            putExtra("media_id",          media.tmdbId)                     // Int (non-null)
-            putExtra("media_title", media.title)
-            putExtra("poster_url",        media.posterUrl ?: "")
-            putExtra("backdrop_url",      media.backdropUrl ?: "")
-            putExtra("youtube_trailer_url", media.trailerUrl ?: "")
-            putExtra("overview",          media.overview ?: "")
-            putExtra("vote_average",      media.voteAverage ?: 0.0)         // Double, NOT Double?
-            putExtra("contentRating",     media.contentRating ?: "N/A")
-            putExtra("original_language", media.originalLanguage ?: "N/A")
-            putExtra("release_date",      media.releaseDate ?: "N/A")
-            putExtra("logo_url",          media.logoUrl ?: "")
-            putExtra("number_of_seasons", media.numberOfSeasons ?: 0)
-            putExtra("status",            media.status ?: "N/A")
-
-            val genresString = media.genres?.joinToString(", ")
-            putExtra("genres", genresString ?: "N/A")
-            putExtra("PROFILE_ID", profileId)
-            sourceScreen?.let { putExtra("SOURCE_SCREEN", it) }
-            searchQuery?.let  { putExtra("SEARCH_QUERY",  it) }
-        }
+        val intent = DetailsIntents.open(
+            this, TVShowsDetailsScreenCompose::class.java, DetailsScreen.Tv,
+            media, profileId, sourceScreen, searchQuery,
+        )
 
         startActivity(intent)
 
@@ -208,29 +192,10 @@ class TVShowsDetailsScreenCompose: ComponentActivity() {
 
                 Log.d("DetailsHistory", "Back: navigating to previous '${previous.title}'")
 
-                val intent = Intent(this@TVShowsDetailsScreenCompose, TVShowsDetailsScreenCompose::class.java).apply {
-                    putExtra("media_type", previous.mediaType)
-                    putExtra("media_id",          previous.tmdbId)
-                    putExtra("media_title", previous.title)
-                    putExtra("poster_url",        previous.posterUrl ?: "")
-                    putExtra("backdrop_url",      previous.backdropUrl ?: "")
-                    putExtra("youtube_trailer_url", previous.trailerUrl ?: "")
-                    putExtra("overview",          previous.overview ?: "")
-                    putExtra("vote_average",      previous.voteAverage ?: 0.0)
-                    putExtra("contentRating",     previous.contentRating ?: "N/A")
-                    putExtra("original_language", previous.originalLanguage ?: "N/A")
-                    putExtra("release_date",      previous.releaseDate ?: "N/A")
-                    putExtra("budget",            previous.budget ?: 0L)
-                    putExtra("revenue",           previous.revenue ?: 0L)
-                    putExtra("logo_url",          previous.logoUrl ?: "")
-                    putExtra("genres",            previous.genres?.joinToString(", ") ?: "N/A")
-                    putExtra("number_of_seasons", previous.numberOfSeasons ?: 0)
-                    putExtra("status",            previous.status ?: "N/A")
-                    putExtra("start_in_extras", true)
-                    putExtra("PROFILE_ID",         profileId)
-                    sourceScreen?.let { putExtra("SOURCE_SCREEN", it) }
-                    searchQuery?.let  { putExtra("SEARCH_QUERY",  it) }
-                }
+                val intent = DetailsIntents.back(
+                    this@TVShowsDetailsScreenCompose, TVShowsDetailsScreenCompose::class.java, DetailsScreen.Tv,
+                    previous, profileId, sourceScreen, searchQuery,
+                )
                 startActivity(intent)
                 finish()
             }
