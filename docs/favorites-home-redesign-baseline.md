@@ -111,6 +111,7 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 | F1 | v406 | 4,977 units, 141 registers (ceiling now 5,030 / 145) | 5,030 units, 118 registers | v406: 12,728 classes, 0 failures (checked at 18:01 UTC, after the build: both boxes were playing video at build time) |
 | F2 | v408 | 3,837 units, 95 registers (ceiling now 3,880 / 97) | 5,030 units, 118 registers | v408: 12,733 classes, 0 failures (checked at 18:33 UTC, after the build: the box was in use at build time) |
 | F3 | v409 | 1,131 units, 45 registers: under the budget, off the ratchet | 5,030 units, 118 registers | v409: 12,737 classes, 0 failures (18:49 UTC), then installed on the onn box for Round A (18:50 UTC) |
+| H1 | v410 | 1,131 units, 45 registers | 4,153 units, 99 registers (ceiling now 4,190 / 101) | not yet: the box is in Round A |
 
 ### F3 (v409)
 
@@ -168,3 +169,15 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
   - JVM unit tests: 207 pass. 13 are new: `FavoriteEntryTest` (5) and `FavoritesLaunchTest` (8).
   - `checkMethodSizes`: passes. Proven to fail with the budget lowered to 1,100 units (it flagged two `favorites/` methods) and with the ceiling below 4,977 (lowered for one run, not committed).
   - `checkDetailsBoundaries`: passes. Proven to fail with throwaway files. It flagged `DetailsIntents` and `home` used from `favorites/`, and `FavoriteEntry` used from outside. It let `DetailsExtra` and `openFavoritesScreen` through.
+
+### H1 (v410)
+
+- **HomeScreen (was HomeScreenComposeContent): 5,030 → 4,153 units, 118 → 99 registers.** What left it: the two extra `ShelfStack` calls (one call now, keyed by tab) and the read of the carousel tick. The constants were at file level already; they moved to `HomeStyle`, with the tab buttons' configs, which were built on every composition.
+- **Idle cost:** the screen no longer re-runs every 6 s; only the two carousels do (they must). Measured in Round C with your OK; the idle baseline is above.
+- **The new code**, all under the budget: the tab buttons 645–773 units, the screen's largest lambda 1,034 / 32.
+- **Gates:**
+  - JVM unit tests: 228 pass. 4 are new: `HomeShelvesTest` (the per-tab table against the three old calls, and the pause rule).
+  - `checkMethodSizes` now covers `home/`. `HomeScreen` keeps a ratchet until H3.
+  - `checkDetailsBoundaries`: outside `home/`, only `HomeScreenCompose.kt` may use it, and only `HomeScreen`. Proven to fail with a throwaway file (it flagged `HomeScreen` and `HomeShelfTab`, and let `homeScreenSectionRules` through).
+- Seen in the report of methods outside the budget: `ProfileManageScreen` at 5,009 units (reported only; not part of this plan).
+

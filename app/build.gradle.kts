@@ -506,7 +506,9 @@ val checkMethodSizes by tasks.registering {
         // 3,837 / 95 at F2 (v408); since F3 (v409) it is under the budget and
         // off this list.
         val shrinking = mapOf(
-            "HomeScreenComposeKt.HomeScreenComposeContent" to (5_080 to 121),
+            // HomeScreenComposeContent until H1 moved it into home/ as HomeScreen;
+            // 4,153 / 99 at H1 (v410).
+            "HomeScreenKt.HomeScreen" to (4_190 to 101),
         )
 
         val apkFile = apk.get().asFile
@@ -562,7 +564,8 @@ val checkMethodSizes by tasks.registering {
                 simple.startsWith("MoviesDetailsScreenCompose")
         }
         fun inBudget(origin: String): Boolean =
-            inDetails(origin) || origin.startsWith("com.example.bluehive.favorites.")
+            inDetails(origin) || origin.startsWith("com.example.bluehive.favorites.") ||
+                origin.startsWith("com.example.bluehive.home.")
 
         data class Method(val key: String, val origin: String, val units: Int, val registers: Int)
         val methods = ArrayList<Method>()
@@ -675,6 +678,9 @@ tasks.matching { it.name == "assembleRelease" }.configureEach {
 //     and openFavoritesScreen;
 //   - favorites/ uses no details code but the two Activities and the launch
 //     types DetailsExtra and putDetailsExtras, and nothing in home/.
+// and home/ from Stage H1: outside it, only HomeScreenCompose.kt (its
+// Activity) uses it, and only HomeScreen. Like all code outside details/ and
+// favorites/, home/ reaches those only through their entry points.
 // Whole-line comments are skipped. Anything else that names a forbidden
 // package fails, including a trailing comment -- reword the comment.
 val checkDetailsBoundaries by tasks.registering {
@@ -699,6 +705,8 @@ val checkDetailsBoundaries by tasks.registering {
         val favoritesRef = Regex("""com\.example\.bluehive\.favorites((?:\.[A-Za-z_][A-Za-z0-9_]*)*)(\.\*)?""")
         val sharedRef = Regex("""com\.example\.bluehive\.details\.shared((?:\.[A-Za-z_][A-Za-z0-9_]*)*)(\.\*)?""")
         val homeRef = Regex("""com\.example\.bluehive\.home\b""")
+        val homeFullRef = Regex("""com\.example\.bluehive\.home\b((?:\.[A-Za-z_][A-Za-z0-9_]*)*)(\.\*)?""")
+        val homeEntry = "com.example.bluehive.home.HomeScreen"
         fun through(m: MatchResult, allowed: Set<String>) =
             m.groupValues[2].isEmpty() && allowed.any { m.value == it || m.value.startsWith("$it.") }
         val problems = mutableListOf<String>()
@@ -709,6 +717,7 @@ val checkDetailsBoundaries by tasks.registering {
                 rel.startsWith("details/tvshowdetails/") -> "tvshowdetails"
                 rel.startsWith("details/") -> "shared"
                 rel.startsWith("favorites/") -> "favorites"
+                rel.startsWith("home/") -> "home"
                 else -> "outside"
             }
             file.readLines().forEachIndexed { index, raw ->
@@ -734,6 +743,13 @@ val checkDetailsBoundaries by tasks.registering {
                 } else {
                     favoritesRef.findAll(raw).filterNot { through(it, favoritesEntryPoints) }.forEach { m ->
                         problems += "$rel:${index + 1}: $area code must not use ${m.value}"
+                    }
+                }
+                if (area != "home" && area != "favorites") {
+                    homeFullRef.findAll(raw).filterNot {
+                        rel == "HomeScreenCompose.kt" && it.groupValues[2].isEmpty() && it.value == homeEntry
+                    }.forEach { m ->
+                        problems += "$rel:${index + 1}: $area code must not use ${m.value} (only HomeScreenCompose, and only HomeScreen)"
                     }
                 }
             }

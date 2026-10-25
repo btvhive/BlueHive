@@ -6,6 +6,8 @@
 - F2 is done (v408, verified on the onn box): the three state holders and the seven effects as child composables.
 - F3 is done (v409, verified): the seven section composables. `FavoritesScreen` is down to 1,131 units / 45 registers, under the budget and off the ratchet.
 - Round A is open: v409 is on the onn box since 18:50 UTC, for the Favorites checklist (§11). Nothing is published (ground rule 7).
+- H1 is done (v410, started at your word while Round A runs; not installed): the home screen is in `home/`, the carousel tick no longer re-runs it, and the three shelf calls are one. `HomeScreen` is down to 4,153 units / 99 registers. The on-device check of v410 is still to run.
+- Next is H2.
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
 
@@ -256,7 +258,7 @@ Speed is measured before and after (needs your OK to drive the boxes):
 - **The boundary gate** gains rules:
   - Outside code reaches Favorites only through `FavoritesScreenActivity` and `openFavoritesScreen` (live since F1).
   - `favorites/` uses no details code but the two details Activities and `DetailsExtra` / `putDetailsExtras`, and nothing in `home/` (live since F1).
-  - `home/` gets its rule with H1: only `HomeScreenCompose` uses it. Like all code outside `details/`, it already reaches details only through the two Activities.
+  - Outside `home/`, only `HomeScreenCompose.kt` uses it, and only `HomeScreen` (live since H1). Like all code outside `details/` and `favorites/`, `home/` reaches those only through their entry points.
 - **`verifyReleaseOnDevice`** stays as it is.
 
 **JVM tests.** The Stage 0 record pins what can be read today; the rest arrives as the logic is lifted out (as in the details redesign):
@@ -283,8 +285,8 @@ Speed is measured before and after (needs your OK to drive the boxes):
 |---|---|---|
 | 1 | Favorites' type tabs move focus with `Handler.postDelayed(50 ms)`, which is not cancelled if the page closes inside that window | kept; candidate fix after the split |
 | 2 | Favorites resets every piece of state when it leaves the screen; that state is discarded anyway, so the code does nothing | kept: since F2 it is the child composable `FavoritesResetOnDispose`, still effect 1 of 7; it goes only with your OK |
-| 3 | The home function re-runs every 6 s | fixed in H1: a performance fix, nothing on screen changes |
-| 4 | The TV Shows and Anime shelves log a line on every recomposition | kept; #3 removes most of those lines |
+| 3 | The home function re-runs every 6 s | fixed in H1 (CarouselClock): a performance fix, nothing on screen changes |
+| 4 | The TV Shows and Anime shelves log a line on every recomposition | kept (HomeShelfTab.renderLog); since H1 the screen no longer recomposes on every tick, so most of those lines are gone |
 | 5 | Favorites and Home build their own details-launch extras, with `""` and `"N/A"` defaults (Home adds budget and revenue), unlike `DetailsIntents` | kept per screen, pinned by tests |
 | 6 | Found in F1. In Favorites' press-and-prefetch, a failed details request fails its `async`, which cancels the pressing coroutine. The `try`/`catch` logs that and clears the navigating flag, but the request's exception still travels up to the screen's coroutine scope. What that does on a box (a crash, or a scope that stops launching) is untested | kept: `prefetchDetailsLaunch` starts the requests in the same scope as before; candidate fix after the split |
 | 7 | Found in F2. Undo's focus restore asks the card requesters that existed before the undo. The restored cards make the list longer, so the grid gets new requesters, and the old ones are attached to nothing: focus is probably not put back on a card. Untested | kept: the screen still hands each click and effect the requesters of its own composition; candidate fix after the split |
