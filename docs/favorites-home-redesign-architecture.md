@@ -3,7 +3,7 @@
 **Status:** approved 2026-10-25.
 - Stage 0 is done: the two launch records, the two ratchets, and the size and speed baselines in `docs/favorites-home-redesign-baseline.md`.
 - F1 is done (v406, verified on the onn box): Favorites is in `favorites/`.
-- F2 is done (v408): the three state holders and the seven effects as child composables. `FavoritesScreen` is down to 3,837 units / 95 registers. The on-device check of v408 is still to run.
+- F2 is done (v408, verified on the onn box): the three state holders and the seven effects as child composables. `FavoritesScreen` is down to 3,837 units / 95 registers.
 - Next is F3.
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
