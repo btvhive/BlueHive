@@ -487,16 +487,22 @@ val checkMethodSizes by tasks.registering {
         val maxUnits = 2_500
         val maxRegisters = 100
         // Being split by the redesign (units to registers). At the last stage:
-        // TV 3,726 / 117 (v391, Stage 7d). The TV ceiling also keeps that
+        // TV 3,801 / 115 (v392, Stage 8a). The TV ceiling also keeps that
         // function under ART's 10,000-unit huge-method limit. Above it ART never
         // compiles the method, so it runs in the interpreter (dex2oat
         // --dump-stats, docs/details-redesign-baseline.md).
+        //
+        // It measures larger after Stage 8a, which moved code OUT of its file: the
+        // -keep rule for TVShowsDetailsScreenComposeKt had kept rememberResumeCount
+        // from being inlined while it lived there, and in SeasonAvailability.kt R8
+        // inlines it into its one caller (mapping.txt). Stages 8b-8e move the
+        // play area out, and the ceiling tightens again then.
         //
         // The movie function left this list at Stage 7b: at 2,309 / 85 (v389) it
         // is under the budget, which now holds it (2,010 / 89 at v391). So is the TV
         // play-area slot, which had a ceiling of its own from Stage 5 (2,406 / 92).
         val shrinking = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (3_760 to 120),
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (3_840 to 118),
         )
         // App methods at least this big carry the same R8 risk: reported, not enforced.
         val warnUnits = 5_000
