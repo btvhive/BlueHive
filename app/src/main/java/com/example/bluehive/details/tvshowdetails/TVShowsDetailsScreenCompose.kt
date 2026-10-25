@@ -124,6 +124,10 @@ import com.example.bluehive.details.shared.playback.extractionErrorMessage
 import com.example.bluehive.details.shared.playback.miruroSourceLabel
 import com.example.bluehive.details.shared.playback.parseExtractReason
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
+import com.example.bluehive.details.shared.playback.PlaybackErrorOverlay
+import com.example.bluehive.details.shared.playback.PlaybackLoadingOverlay
+import com.example.bluehive.details.shared.playback.StreamSource
+import com.example.bluehive.details.shared.playback.rememberPlaybackSession
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
@@ -175,13 +179,6 @@ class TVShowsDetailsScreenCompose: ComponentActivity() {
     private var sourceScreen: String? = null
     private var searchQuery:  String? = null
 
-
-    @Immutable
-    data class StreamingSource(
-        val coverName: String,
-        val name: String,
-        val url: String
-    )
 
     companion object {
         private const val TAG = "TVShowsDetailsScreenCompose"
@@ -444,15 +441,15 @@ private fun getStreamingSources(
     mediaId: Int,
     seasonNumber: Int,
     episodeNumber: Int
-): List<TVShowsDetailsScreenCompose.StreamingSource> {
+): List<StreamSource> {
     if (!mediaType.equals("movie", true)) {
         return com.example.bluehive.api.SourceCatalog
             .sources(BlueHiveApplication.appContext, "tv", mediaId, seasonNumber, episodeNumber)
-            .map { TVShowsDetailsScreenCompose.StreamingSource(it.label, it.name, it.url) }
+            .map { StreamSource(it.label, it.name, it.url) }
     }
     return when (mediaType) {
         "tv" -> listOf(
-            TVShowsDetailsScreenCompose.StreamingSource(
+            StreamSource(
                 "Royal Jelly",
                 "VidNest",
                 "https://vidnest.fun/tv/$mediaId/$seasonNumber/$episodeNumber"
@@ -474,17 +471,17 @@ private fun getStreamingSources(
             // tv 1396 S1E1), and its CDNs a2.shows.st / d.shows.st both publish
             // ECH with alpn=h3 — so it is covered by the QUIC/ECH path rather
             // than relying on the relay.
-            TVShowsDetailsScreenCompose.StreamingSource(
+            StreamSource(
                 "Nectar Stream",
                 "VidLove",
                 "https://player.vidlove.cc/embed/tv/$mediaId/$seasonNumber/$episodeNumber"
             ),
-            TVShowsDetailsScreenCompose.StreamingSource(
+            StreamSource(
                 "Queen Stream",
                 "VidFast",
                  "https://vidfast.pro/tv/$mediaId/$seasonNumber/$episodeNumber?autoPlay=true"
             ),
-            TVShowsDetailsScreenCompose.StreamingSource(
+            StreamSource(
                 "Purple Stream",
                 "MoviesAPI",
                 "https://moviesapi.to/tv/$mediaId/$seasonNumber/$episodeNumber"
@@ -1160,55 +1157,11 @@ fun TVShowsDetailsScreenContent(
     //  The Miruro source URL already carries ?ep=N, so the extractor clicks the
     //  right episode itself — we just feed it the URL like the movie screen does.
     // ════════════════════════════════════════════════════════════════════════
-    var isExtracting   by remember { mutableStateOf(false) }
-
-    // ── BACK during an extraction ───────────────────────────────────────
-    //
-    // Two pieces, and BOTH are needed. The job handle lets BACK stop the
-    // client's polling loop. The flag is what actually prevents the launch:
-    // the extraction is wrapped in runCatching, which CATCHES the
-    // CancellationException, so a cancelled coroutine still falls through to
-    // `body == null` and would raise the failure modal. Cancelling alone
-    // fixes the wasted requests and none of the user-visible damage.
-    //
-    // Without this, pressing BACK hid the overlay but the coroutine ran on —
-    // up to ExtractAwait.DEADLINE_MS (120s) — and then launched the player or
-    // threw a full-screen error over whatever the user had moved on to.
-    var extractJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    var extractCancelled by remember { mutableStateOf(false) }
-    var extractStage   by remember { mutableIntStateOf(0) }
-    var extractPending by remember { mutableStateOf(false) }
+    // The page's loading screen, shared by the source chain and the anime
+    // flow: extracting, pending, stage, the job BACK cancels -- see
+    // PlaybackSession.
+    val session = rememberPlaybackSession()
     var showNoDub      by remember { mutableStateOf(false) }
-
-    // ── Source extraction ───────────────────────────────────────────────────────
-    // Every source button goes straight to server-side m3u8 extraction and our
-    // own player. The "open the site directly" alternative was GeckoView, which
-    // was removed in v371 along with the Settings > Playback method switch.
-    var isVidFastExtract by remember { mutableStateOf(false) }
-    // REAL status text from the extractor process (empty = use the anime flow's
-    // stage labels). This is what makes the overlay honest — see the receiver below.
-    var vidFastStatus    by remember { mutableStateOf("") }
-    // Which chain step is extracting now, stamped by extractAndPlay on EVERY
-    // entry. Keys the stage-dot effect, so each new source restarts its dots
-    // (a failover keeps isExtracting up, which alone never restarted them), and
-    // is the "2" in the loading screen's "trying 2 of 4".
-    var extractAttempt   by remember { mutableIntStateOf(0) }
-    // The "4": how many sources this chain can try, fixed on the viewer's press.
-    var chainTotal       by remember { mutableIntStateOf(1) }
-    // Amber line once a source has failed -- "VidNest didn't work, trying
-    // VidFast" -- kept for the rest of the chain. vidFastStatus carried this
-    // once, but the next attempt overwrote it in the same frame, so a failover
-    // was never seen.
-    var extractNote      by remember { mutableStateOf<String?>(null) }
-
-    /** Non-null shows ExtractionErrorOverlay — a failure the user can act on. */
-    var extractionError by remember { mutableStateOf<String?>(null) }
-
-    // The progress BroadcastReceiver is gone with the on-device extractor. It
-    // existed only to observe a separate :vidfastextractor process; extraction is
-    // now a single suspend call in THIS process, so the overlay's stage is set
-    // directly at each step below.
-
 
     var showDefaultPrompt by remember { mutableStateOf(false) }
     var isCheckingServers by remember { mutableStateOf(false) }
@@ -1240,7 +1193,7 @@ fun TVShowsDetailsScreenContent(
     // what triggers both — so the two raced and this one won, dragging focus out
     // of the modal and back onto the details screen behind it.
     RestoreFocusOnPlayerReturn("TVDetailsFocus") {
-        if (extractionError != null) return@RestoreFocusOnPlayerReturn emptyList()
+        if (session.extractionError != null) return@RestoreFocusOnPlayerReturn emptyList()
         // Same race as the error overlay above, one modal further along.
         //
         // "Choose a server" on a cache MISS launches MiruroExtractorActivity to
@@ -1307,7 +1260,7 @@ fun TVShowsDetailsScreenContent(
     }
 
     suspend fun extractAndPlay(
-        src: TVShowsDetailsScreenCompose.StreamingSource,
+        src: StreamSource,
         /** 1 for the source the viewer pressed; higher for each chain step. */
         attempt: Int = 1,
         /** The sources already tried and failed, oldest first. */
@@ -1315,21 +1268,21 @@ fun TVShowsDetailsScreenContent(
         /** Where to start, in ms: 0 for a press, the dead source's spot for a failover. */
         startAtMs: Long = 0L,
     ) {
-        extractCancelled = false
-        isExtracting     = true
-        isVidFastExtract = true
-        extractPending   = true
-        extractStage     = 1
-        extractAttempt   = attempt
-        vidFastStatus    = "Finding your stream…"
+        session.extractCancelled = false
+        session.isExtracting     = true
+        session.isBackendExtract = true
+        session.extractPending   = true
+        session.extractStage     = 1
+        session.extractAttempt   = attempt
+        session.backendStatus    = "Finding your stream…"
         // A fresh press starts a fresh chain: count what it can try, and drop
         // any note left from the last one.
         if (attempt == 1) {
-            chainTotal  = SourceCatalog.plannedAttempts(
+            session.chainTotal  = SourceCatalog.plannedAttempts(
                 BlueHiveApplication.appContext, "tv", tmdbId,
                 pendingSeason, pendingEpisode, src.name,
             ) { usesBackendExtraction(it) }
-            extractNote = null
+            session.extractNote = null
         }
 
         // Display name IS the backend key once lowercased — see
@@ -1358,14 +1311,14 @@ fun TVShowsDetailsScreenContent(
         }
         val tookMs = System.currentTimeMillis() - startedAt
 
-        isExtracting     = false
-        isVidFastExtract = false
-        extractPending   = false
-        vidFastStatus    = ""
+        session.isExtracting     = false
+        session.isBackendExtract = false
+        session.extractPending   = false
+        session.backendStatus    = ""
 
         // The user left. Do not raise an error and do not start a player over
         // whatever they are looking at now.
-        if (extractCancelled) {
+        if (session.extractCancelled) {
             Log.d("scraper-vidfast", "extraction finished after BACK — discarding result")
             return
         }
@@ -1400,14 +1353,14 @@ fun TVShowsDetailsScreenContent(
                 // Put the flags back up BEFORE recursing: they were cleared
                 // above for the success path, and leaving them down would blink
                 // the overlay off and on between attempts.
-                isExtracting     = true
-                isVidFastExtract = true
-                extractPending   = true
-                extractStage     = 1
-                vidFastStatus    = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}\u2026"
-                extractNote      = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}"
+                session.isExtracting     = true
+                session.isBackendExtract = true
+                session.extractPending   = true
+                session.extractStage     = 1
+                session.backendStatus    = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}\u2026"
+                session.extractNote      = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}"
                 extractAndPlay(
-                    TVShowsDetailsScreenCompose.StreamingSource(next.label, next.name, next.url),
+                    StreamSource(next.label, next.name, next.url),
                     attempt + 1,
                     tried + src.name,
                     startAtMs,
@@ -1415,7 +1368,7 @@ fun TVShowsDetailsScreenContent(
                 return
             }
 
-            extractionError =
+            session.extractionError =
                 extractionErrorMessage(code, reason, src.name, "episode", tried + src.name)
             return
         }
@@ -1515,10 +1468,10 @@ fun TVShowsDetailsScreenContent(
         val failedLabel = SourceCatalog.sources(
             BlueHiveApplication.appContext, "tv", tmdbId, pendingSeason, pendingEpisode,
         ).firstOrNull { it.name.equals(failed, ignoreCase = true) }?.label ?: failed
-        extractNote = "$failedLabel stopped playing — trying ${next.label}"
-        extractJob = coroutineScope.launch {
+        session.extractNote = "$failedLabel stopped playing — trying ${next.label}"
+        session.extractJob = coroutineScope.launch {
             extractAndPlay(
-                TVShowsDetailsScreenCompose.StreamingSource(next.label, next.name, next.url),
+                StreamSource(next.label, next.name, next.url),
                 step,
                 listOf(failed),
                 atMs,
@@ -1535,10 +1488,10 @@ fun TVShowsDetailsScreenContent(
      * of the same five lines, the setting would slowly stop being a shortcut and
      * start being a second, subtly different behaviour.
      */
-    fun startBuiltInPlayer(src: TVShowsDetailsScreenCompose.StreamingSource) {
+    fun startBuiltInPlayer(src: StreamSource) {
         stopTrailerAndSelectEpisode(pendingSeason, pendingEpisode, pendingEpisodeName)
         try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
-        extractJob = coroutineScope.launch { extractAndPlay(src) }
+        session.extractJob = coroutineScope.launch { extractAndPlay(src) }
     }
 
 
@@ -1595,16 +1548,16 @@ fun TVShowsDetailsScreenContent(
     // The request itself is left to finish rather than cancelled: it is a few
     // hundred bytes, and the result lands in the server's cache where the next
     // play picks it up instantly.
-    BackHandler(enabled = isExtracting || extractPending) {
+    BackHandler(enabled = session.isExtracting || session.extractPending) {
         Log.d("scraper-vidfast", "↩️ back during extraction — dismissing overlay")
-        extractCancelled      = true
-        extractJob?.cancel()
-        extractJob            = null
-        isVidFastExtract = false
-        vidFastStatus    = ""
-        extractPending   = false
-        isExtracting     = false
-        extractStage     = 0
+        session.extractCancelled      = true
+        session.extractJob?.cancel()
+        session.extractJob            = null
+        session.isBackendExtract = false
+        session.backendStatus    = ""
+        session.extractPending   = false
+        session.isExtracting     = false
+        session.extractStage     = 0
         coroutineScope.launch {
             awaitFrame()
             try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
@@ -1616,8 +1569,8 @@ fun TVShowsDetailsScreenContent(
     val extractorLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        isExtracting   = false
-        extractPending = false
+        session.isExtracting   = false
+        session.extractPending = false
         if (result.resultCode == Activity.RESULT_OK) {
             val data    = result.data
             val m3u8    = data?.getStringExtra(MiruroExtractorActivity.RESULT_M3U8)
@@ -1938,17 +1891,17 @@ fun TVShowsDetailsScreenContent(
         // provider so its result can mark it tried.
         if (server == null) triedServers.clear()
         lastExtractServer = server
-        if (!isExtracting && !extractPending && !isCheckingServers) {
-            extractPending = true
+        if (!session.isExtracting && !session.extractPending && !isCheckingServers) {
+            session.extractPending = true
             // HELD IN extractJob, like the source chain, so BACK cancels it. It
             // was launched untracked: Back hid the loading screen, the backend
             // answered a moment later, and the episode started anyway. Cancelled,
             // the backend await ends it, and ensureActive()/launchIfActive()
             // below stop the player and the on-device fallback from starting
             // after the fact.
-            extractJob = coroutineScope.launch {
+            session.extractJob = coroutineScope.launch {
                 delay(200)
-                isExtracting = true
+                session.isExtracting = true
                 try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
 
                 // BACKEND FIRST for EVERY anime play — sub, dub, and named
@@ -1993,8 +1946,8 @@ fun TVShowsDetailsScreenContent(
                     if (next != null) {
                         Log.e("scraper", "🔁 dub came back as sub — failing over to server '$next'")
                         triedServers.add(next)
-                        isExtracting   = false
-                        extractPending = false
+                        session.isExtracting   = false
+                        session.extractPending = false
                         failoverRequest = Triple(url, true, next)
                         return@launch
                     }
@@ -2018,8 +1971,8 @@ fun TVShowsDetailsScreenContent(
                     // Without it that press paid for a whole browser run to
                     // enumerate a page we had open seconds earlier.
                     ensureServerList(url, dub)
-                    isExtracting   = false
-                    extractPending = false
+                    session.isExtracting   = false
+                    session.extractPending = false
                     return@launch
                 }
                 Log.w("scraper", "M Extract: backend miss (dub=$dub server=$server) — on-device fallback")
@@ -2042,11 +1995,11 @@ fun TVShowsDetailsScreenContent(
 
     val launchEnumerate: (String, Boolean) -> Unit = { url, dub ->
         Log.d("scraper", "M Enumerate (dub=$dub) → $url")
-        if (!isExtracting && !extractPending && !isCheckingServers) {
-            extractPending = true
+        if (!session.isExtracting && !session.extractPending && !isCheckingServers) {
+            session.extractPending = true
             coroutineScope.launch {
                 delay(200)
-                extractPending = false
+                session.extractPending = false
                 isCheckingServers = true
 
                 // BACKEND FIRST, and this one also removes an ACTIVITY HOP. The
@@ -2097,26 +2050,6 @@ fun TVShowsDetailsScreenContent(
         launchExtract(req.first, req.second, req.third)
     }
 
-    // PACED FOR EVERY EXTRACTION NOW, and restarted per chain step, exactly as
-    // the movie screen does. Backend extraction used to be exempt because VidFast
-    // reported its real state over a broadcast -- but that receiver went with the
-    // on-device extractor, so the exemption left the dots on stage 1 and the
-    // words on "Finding your stream…" for the whole 20-90 s wait, which reads as
-    // a hang. The stage words are only the detail line now; "trying 2 of 4"
-    // above them is the real progress.
-    //
-    // KEYED ON extractAttempt as well: a failover keeps isExtracting up, so
-    // without the second key the next source would inherit the last one's dots.
-    LaunchedEffect(isExtracting, extractAttempt) {
-        if (isExtracting) {
-            extractStage = 1
-            delay(900);  extractStage = 2
-            delay(2500); extractStage = 3
-            delay(3500); extractStage = 4
-        } else {
-            extractStage = 0
-        }
-    }
     LaunchedEffect(showNoDub) {
         if (showNoDub) { delay(2500); showNoDub = false }
     }
@@ -3019,7 +2952,7 @@ fun TVShowsDetailsScreenContent(
                             tmdbId        = mediaId,
                             seasonNumber  = selectedSeason,
                             episodeNumber = episodeNumber,
-                        ) { c, n, u -> TVShowsDetailsScreenCompose.StreamingSource(c, n, u) }
+                        ) { c, n, u -> StreamSource(c, n, u) }
                     } else {
                         // READ FIRST, REFRESH SECOND, READ AGAIN. The first read
                         // is synchronous and fills the buttons immediately from
@@ -3144,45 +3077,22 @@ fun TVShowsDetailsScreenContent(
             // ════════════════════════════════════════════════════════════════════
             //  Anime DuB/SuB overlays — last so they render on top of everything
             // ════════════════════════════════════════════════════════════════════
-            if (isExtracting) {
-                // TRAPPED, like the server check below it. Without this the episode
-                // tile behind the scrim keeps focus and eats BACK twice — once to
-                // close the episode overlay, once to jump to the season column —
-                // before a third press reaches the BackHandler that cancels.
-                ExtractionFocusTrap {
-                    val stageWords = when (extractStage) {
-                        0, 1 -> "Locating stream source…"
-                        2    -> "Loading stream source…"
-                        3    -> "Preparing video player…"
-                        else -> "Almost there…"
-                    }
-                    ExtractionLoadingOverlay(
-                        // Source chain: the headline says which source of how many,
-                        // and the stage words are the detail under it. Anything else
-                        // keeps vidFastStatus if set, as before.
-                        status = if (isVidFastExtract) stageWords else vidFastStatus.ifBlank { stageWords },
-                        stage  = extractStage,
-                        note   = if (isVidFastExtract) extractNote else null,
-                        chain  = if (isVidFastExtract) extractAttempt to chainTotal else null,
-                    )
-                }
-            }
+            // The loading screen, trapped -- see PlaybackLoadingOverlay. This
+            // screen's headline keeps the source chain's status (§10).
+            PlaybackLoadingOverlay(session, useBackendStatus = true)
 
             // Actionable failure (currently: an ISP/router filter blocking the source).
             // Without this the screen just returned to the source buttons and the user
             // had no way to tell a blocked domain from a dead one.
-            extractionError?.let { msg ->
-                com.example.bluehive.webview.ExtractionErrorOverlay(
-                    message = msg,
-                    onDismiss = {
-                        extractionError = null
-                        coroutineScope.launch {
-                            awaitFrame()
-                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                        }
+            PlaybackErrorOverlay(
+                session,
+                onDismissed = {
+                    coroutineScope.launch {
+                        awaitFrame()
+                        try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
                     }
-                )
-            }
+                },
+            )
 
             if (showNoDub) {
                 DetailsToast("No dub available for this episode", dongleRegular)
@@ -3310,13 +3220,13 @@ fun TVShowsDetailsScreenContent(
 @Composable
 private fun EpisodeProviderInlineButtons(
     passionFont: FontFamily,
-    sources: List<TVShowsDetailsScreenCompose.StreamingSource>,
+    sources: List<StreamSource>,
     focusRequesters: List<FocusRequester>,
-    onSourceSelected: (TVShowsDetailsScreenCompose.StreamingSource) -> Unit,
+    onSourceSelected: (StreamSource) -> Unit,
     onBack: () -> Unit,   // ✅ NEW
 ) {
     val safeSources = remember {
-        mutableStateListOf<TVShowsDetailsScreenCompose.StreamingSource>()
+        mutableStateListOf<StreamSource>()
     }
 
     LaunchedEffect(sources) {
@@ -3381,7 +3291,7 @@ private fun EpisodeOverlayStreamerButton(
     index: Int,
     total: Int,                       // total buttons in the grid — drives edge-aware D-pad nav
     offsetX: Dp = (-1).dp,
-    source: TVShowsDetailsScreenCompose.StreamingSource,
+    source: StreamSource,
     passionFont: FontFamily,
     focusRequesters: List<FocusRequester>,
     onClick: () -> Unit,

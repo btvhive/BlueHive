@@ -118,6 +118,13 @@ fun rememberPlaybackSession(): PlaybackSession {
  */
 @Composable
 private fun PlaybackStageTimer(session: PlaybackSession) {
+    // PACED FOR EVERY EXTRACTION, the source chain's included. Backend
+    // extraction used to be exempt because VidFast reported its real state over
+    // a broadcast -- but that receiver went with the on-device extractor, so the
+    // exemption left the dots on stage 1 for the whole 20-90 s wait, which reads
+    // as a hang. Under the chain's "trying 2 of 4" the stage words are only the
+    // detail line.
+    //
     // KEYED ON extractAttempt AS WELL AS isExtracting. A failover keeps the
     // overlay up on purpose (no blink between sources), so isExtracting may not
     // visibly transition between one attempt and the next -- and without a second

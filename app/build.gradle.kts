@@ -487,29 +487,29 @@ val checkMethodSizes by tasks.registering {
         val maxUnits = 2_500
         val maxRegisters = 100
         // Being split by the redesign (units to registers). At the last stage:
-        // TV 5,200 / 154, movie 2,569 / 92 (v387, Stage 6d). The TV ceiling also
+        // TV 4,829 / 145, movie 2,525 / 92 (v388, Stage 7a). The TV ceiling also
         // keeps that function under ART's 10,000-unit huge-method limit. Above
         // it ART never compiles the method, so it runs in the interpreter
         // (dex2oat --dump-stats, docs/details-redesign-baseline.md).
         //
-        // R8 inlines rememberPlaybackSession, rememberSourcePlayback and
-        // rememberAnimePlayback into the movie function while the movie screen
-        // is their only caller (mapping.txt shows all three as inlined frames).
-        // The TV screen calls them from Stage 7, and the ceiling tightens again
-        // then.
+        // R8 inlines rememberSourcePlayback and rememberAnimePlayback into the
+        // movie function while the movie screen is their only caller (mapping.txt
+        // shows them as inlined frames); rememberPlaybackSession has had a second
+        // caller since Stage 7a and is its own method again. The TV screen calls
+        // the other two from Stages 7b and 7c, and the ceiling tightens again then.
         val shrinking = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (5_280 to 163),
-            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (2_595 to 95),
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (4_880 to 149),
+            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (2_550 to 95),
         )
         // Pieces split out of the TV function but still in its file -- its
         // lambdas and local functions, named TVShowsDetailsScreenContent$... --
         // until Stage 8 moves the play area into files of its own. Since Stage 5
-        // the play-area slot is one of them: 2,542 units / 110 registers, 61 of
-        // which are the variables it captures, so trimming code cannot bring it
+        // the play-area slot is one of them: 2,546 units / 97 registers (v388), 51
+        // of which are the variables it captures, so trimming code cannot bring it
         // under the budget; only splitting it by what it captures can. Matched
         // by prefix because R8 numbers lambdas afresh whenever the file changes.
         val shrinkingParts = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent$" to (2_570 to 113),
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent$" to (2_575 to 100),
         )
         // App methods at least this big carry the same R8 risk: reported, not enforced.
         val warnUnits = 5_000
