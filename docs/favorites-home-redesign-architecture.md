@@ -3,8 +3,9 @@
 **Status:** approved 2026-10-25.
 - Stage 0 is done: the two launch records, the two ratchets, and the size and speed baselines in `docs/favorites-home-redesign-baseline.md`.
 - F1 is done (v406, verified on the onn box): Favorites is in `favorites/`.
-- F2 is done (v408, verified on the onn box): the three state holders and the seven effects as child composables. `FavoritesScreen` is down to 3,837 units / 95 registers.
-- Next is F3.
+- F2 is done (v408, verified on the onn box): the three state holders and the seven effects as child composables.
+- F3 is done (v409): the seven section composables. `FavoritesScreen` is down to 1,131 units / 45 registers, under the budget and off the ratchet. The on-device check of v409 is still to run.
+- Next is Round A: v409 on the onn box (with your OK) and the Favorites checklist (§11). Nothing is published (ground rule 7).
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
 
@@ -50,6 +51,7 @@ Same as the details redesign:
 4. **Effects keep their order.** A run of effects moves into a restartable child composable called exactly where it was. R8 inlines a one-caller `remember…` function straight back into its caller, so moved effects never go there.
 5. **Performance rules:** P1, state is read where it is used; P3, cards take plain values; P4, constants live at file level, built once.
 6. **Shared checkout.** The other session edits `ShelfStack.kt`, `TvWideLazyRow.kt`, `GoodCopyCountdown.kt` and `MediaItem.kt`. This plan touches none of them, and only its own files are committed.
+7. **Builds stay on the onn box.** A round's build goes on the onn box for you to test; nothing is published to the update server or GitHub until you say so, so other users never get an untested build (your rule, 2026-10-25).
 
 ---
 
@@ -312,7 +314,7 @@ Speed is measured before and after (needs your OK to drive the boxes):
 - it is self-contained;
 - it is away from the other session's shelf files.
 
-Each stage is its own build and commit, and only a round's last build goes on the onn box.
+Each stage is its own build and commit, and only a round's last build goes on the onn box. No build is published until you say so (ground rule 7).
 
 ---
 

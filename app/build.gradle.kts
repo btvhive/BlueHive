@@ -502,10 +502,10 @@ val checkMethodSizes by tasks.registering {
         val warnUnits = 5_000
         // Being split by the Favorites and Home redesign (units to registers).
         // At Stage 0 (v405): FavoritesScreen 5,660 / 209, HomeScreenComposeContent
-        // 5,030 / 118. At F1 (v406): FavoritesScreen 4,977 / 141; at F2 (v408)
-        // 3,837 / 95.
+        // 5,030 / 118. FavoritesScreen shrank to 4,977 / 141 at F1 (v406) and
+        // 3,837 / 95 at F2 (v408); since F3 (v409) it is under the budget and
+        // off this list.
         val shrinking = mapOf(
-            "FavoritesScreenKt.FavoritesScreen" to (3_880 to 97),
             "HomeScreenComposeKt.HomeScreenComposeContent" to (5_080 to 121),
         )
 

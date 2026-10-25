@@ -110,6 +110,27 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 | 0 | v405 code (the APK was up to date: no app code changed) | 5,660 units, 209 registers | 5,030 units, 118 registers | v405: 12,726 classes, 0 failures |
 | F1 | v406 | 4,977 units, 141 registers (ceiling now 5,030 / 145) | 5,030 units, 118 registers | v406: 12,728 classes, 0 failures (checked at 18:01 UTC, after the build: both boxes were playing video at build time) |
 | F2 | v408 | 3,837 units, 95 registers (ceiling now 3,880 / 97) | 5,030 units, 118 registers | v408: 12,733 classes, 0 failures (checked at 18:33 UTC, after the build: the box was in use at build time) |
+| F3 | v409 | 1,131 units, 45 registers: under the budget, off the ratchet | 5,030 units, 118 registers | not yet: the box was playing video at build time |
+
+### F3 (v409)
+
+- **FavoritesScreen: 3,837 → 1,131 units, 95 → 45 registers.** The UI is now seven section composables, and the root keeps the state, the effects and the layout skeleton. `checkMethodSizes` holds it to the 2,500 / 100 budget like everything else in `favorites/`.
+- **The sections:**
+
+| Method | Code units | Registers |
+|---|---|---|
+| `FavoriteCard` | 1,465 | 77 |
+| `RemoveConfirmOverlay` | 1,304 | 61 |
+| `FavoritesTypeTabs` | 887 | 47 |
+| `FavoritesControlBar` | 880 | 50 |
+| `NoMatchesPanel` | 590 | 31 |
+| `NoFavoritesPanel` | 495 | 30 |
+| `FavoritesGrid` | 464 | 33 |
+
+- **Gates:**
+  - JVM unit tests: 224 pass (no new ones: F3 moves UI only).
+  - `checkMethodSizes`: passes. Only `HomeScreenComposeContent` is left on the ratchet.
+  - `checkDetailsBoundaries`: passes.
 
 ### F2 (v408)
 
