@@ -1,6 +1,8 @@
 package com.example.bluehive.details.tvshowdetails
 
 import android.util.Log
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
@@ -12,13 +14,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.geometry.Offset
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.bluehive.api.ApiClient
+import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.models.Episode
 import com.example.bluehive.repository.EpisodesRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.withContext
 
 /**
@@ -29,8 +36,9 @@ import kotlinx.coroutines.withContext
  * Moved here from the screen in Stage 8 of the details redesign: the same
  * variables with the same snapshot state, so every write lands in the same
  * frame as before. The screen's effects that drive them -- the first season
- * load, the first focus, the watched refresh on resume -- stay where they
- * were in the screen, in the same order (architecture C5).
+ * load, the first focus, the watched refresh on resume -- are the composables
+ * at the end of this file since Stage 10. The screen calls each where its
+ * effects were, so they run in the same order (architecture C5).
  */
 @Stable
 class EpisodesState internal constructor(
@@ -164,4 +172,150 @@ fun rememberEpisodesState(
         List(state.episodes.size) { FocusRequester() }
     }
     return state
+}
+
+/**
+ * The first focus when the page opens: the episode a resume asked for, or the
+ * start of the row. [onHeaderReleased] lifts the screen's header focus block.
+ *
+ * Moved here from the screen in Stage 10 of the details redesign; the screen
+ * calls it where the effect was (architecture C5).
+ */
+@Composable
+internal fun FirstEpisodeFocus(
+    episodesState: EpisodesState,
+    focusMap: TvFocusMap,
+    resumeToEpisode: Boolean,
+    lastEpisode: Int,
+    onHeaderReleased: () -> Unit,
+) {
+    var isInitialEpisodeLoad by remember { mutableStateOf(resumeToEpisode) }
+
+    // ✅ Episode row scroll + initial focus. The fallback needs the header
+    //    requesters, so this takes the focus map.
+    //
+    //    Why this is a retry loop instead of delay(150) + requestFocus():
+    //    the target tile lives in a LazyRow, so its FocusRequester is only
+    //    attached once the tile is composed AND placed. On entry from
+    //    Continue Watching the main thread is busy (heavy frames + Coil cache
+    //    thrashing), so a fixed delay elapses before layout finishes and
+    //    requestFocus() no-ops ("FocusRequester is not initialized"). Because
+    //    the header is focus-blocked in this mode, that leaves the whole
+    //    screen with nothing focused = stuck. So: scroll, wait until the tile
+    //    is actually laid out (presence in visibleItemsInfo => node attached),
+    //    request focus, confirm it landed, and only then release the gates.
+    LaunchedEffect(episodesState.episodes) {
+        if (episodesState.episodes.isEmpty()) return@LaunchedEffect
+
+        if (isInitialEpisodeLoad) {
+            val targetIndex = (lastEpisode - 1).coerceIn(0, episodesState.episodes.lastIndex)
+            episodesState.lastFocusedEpisodeIndex = targetIndex
+            episodesState.rowState.scrollToItem(targetIndex)
+
+            episodesState.episodeFocusLanded = false
+            var landed = false
+            var attempts = 0
+            while (attempts < 40 && !landed) {
+                awaitFrame()
+                val laidOut = episodesState.rowState.layoutInfo
+                    .visibleItemsInfo.any { it.index == targetIndex }
+                if (laidOut) {
+                    episodesState.focusRequesters.getOrNull(targetIndex)?.requestFocus()
+                    awaitFrame()
+                    if (episodesState.episodeFocusLanded) landed = true
+                }
+                attempts++
+            }
+
+            // Never strand the user with no focus: if the episode tile truly
+            // never took focus, un-block the header and focus Favorites.
+            if (!landed) {
+                Log.w("TVDetails", "⚠️ Episode focus never landed — falling back to header")
+                onHeaderReleased()
+                awaitFrame()
+                focusMap.favorite.requestFocus()
+            }
+
+            onHeaderReleased()
+            isInitialEpisodeLoad = false
+        } else {
+            episodesState.lastFocusedEpisodeIndex = 0
+            episodesState.rowState.scrollToItem(0)
+        }
+    }
+}
+
+/**
+ * The watched marks: read when the page opens, and re-read on every resume.
+ *
+ * Moved here from the screen in Stage 10 of the details redesign; the screen
+ * calls it where the effects were (architecture C5).
+ */
+@Composable
+internal fun WatchedEpisodesEffects(
+    episodesState: EpisodesState,
+    tmdbId: Int,
+    profileId: Int,
+    coroutineScope: CoroutineScope,
+) {
+    LaunchedEffect(tmdbId, profileId) { episodesState.refreshWatchedEpisodes(profileId) }
+
+    // Re-read on every resume. Nothing is marked optimistically any more — the
+    // marker follows the backend row, and that row is only written once the player
+    // confirms video is actually playing. Coming back from the player is therefore
+    // the moment a genuinely-watched episode should light up.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, tmdbId, profileId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                coroutineScope.launch { episodesState.refreshWatchedEpisodes(profileId) }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+}
+
+/**
+ * The season loads the screen starts itself: the first one when the page
+ * opens (from the prefetch when there is one), and a move to the newest
+ * listed season when the season check leaves the selected one off.
+ *
+ * Moved here from the screen in Stage 10 of the details redesign; the screen
+ * calls it where the effects were (architecture C5).
+ */
+@Composable
+internal fun SeasonLoadEffects(
+    episodesState: EpisodesState,
+    tmdbId: Int,
+    numberOfSeasons: Int,
+    lastSeason: Int,
+    prefetch: BlueHiveApplication.MediaPrefetchData?,
+    listedSeasons: Int?,
+) {
+    // 🔹 On first entry, auto-load Season 1 if we have seasons
+    LaunchedEffect(tmdbId, numberOfSeasons) {
+        if (numberOfSeasons > 0) {
+            episodesState.selectedSeason = lastSeason.coerceIn(1, numberOfSeasons)
+            val prefetchedEpisodes = prefetch?.episodes
+            if (prefetchedEpisodes != null && lastSeason == 1) {
+                episodesState.episodes = prefetchedEpisodes
+                episodesState.isLoadingEpisodes = false
+                Log.d("Prefetch", "✅ Episodes loaded from prefetch cache (${prefetchedEpisodes.size} eps)")
+            } else {
+                episodesState.loadSeasonEpisodes(episodesState.selectedSeason)
+            }
+        }
+    }
+
+    // The season check can leave off the selected season -- the screen was
+    // opened on a season with nothing aired. Move to the newest listed one, so
+    // the grid never shows a season the column does not.
+    LaunchedEffect(listedSeasons) {
+        val listed = listedSeasons ?: return@LaunchedEffect
+        if (episodesState.selectedSeason > listed) {
+            episodesState.selectedSeason = listed
+            episodesState.loadSeasonEpisodes(listed)
+        }
+    }
 }

@@ -2,6 +2,7 @@ package com.example.bluehive.details.tvshowdetails
 
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -10,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.dp
 import com.example.bluehive.details.shared.layout.DetailsToast
 import androidx.compose.ui.text.font.FontFamily
+import kotlinx.coroutines.delay
 
 /**
  * How long a first press on an unaired episode stays armed.
@@ -66,5 +68,26 @@ internal fun BoxScope.UnairedNotice(unairedGate: UnairedGate, episodesState: Epi
             centered = true,
             maxWidth = 720.dp,
         )
+    }
+}
+
+/**
+ * Ends the armed state of a first press after UNAIRED_OVERRIDE_WINDOW_MS.
+ *
+ * Moved here from the screen in Stage 10 of the details redesign. The screen
+ * calls it where the effect was (architecture C5), and arming or disarming
+ * now re-runs only this, not the whole screen.
+ */
+@Composable
+internal fun UnairedPressTimeout(unairedGate: UnairedGate) {
+    // Armed state is a MOMENT, not a mode. Someone who presses once, reads the
+    // notice and walks away should not find the episode silently pressable when
+    // they come back -- the second press has to be a deliberate answer to the
+    // first, which means it has to be soon after it.
+    LaunchedEffect(unairedGate.armedIndex) {
+        if (unairedGate.armedIndex >= 0) {
+            delay(UNAIRED_OVERRIDE_WINDOW_MS)
+            unairedGate.armedIndex = -1
+        }
     }
 }

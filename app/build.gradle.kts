@@ -457,22 +457,22 @@ val verifyReleaseOnDevice by tasks.registering {
 // R8 has miscompiled TVShowsDetailsScreenContent twice (2026-09-21 and
 // v371-v375): one composable of 11,297 dex code units and 287 registers, and
 // what R8 got wrong both times was register allocation across a method that
-// size. The redesign splits it (docs/details-redesign-architecture.md); this
-// keeps it split. After every release build the dex is measured, and a method
-// from the details screens over the budget fails the build.
+// size. The redesign split it (docs/details-redesign-architecture.md); this
+// keeps it split. After every release build the dex is measured, and any
+// method from the details screens over 2,500 code units or 100 registers fails
+// the build. The rest of the app is reported, not enforced.
 //
-// The functions being split may not grow -- a ratchet that only tightens,
-// lowered after each split stage, until Stage 10 empties the list (the movie
-// function left it at Stage 7b). The rest of the app is reported, not enforced.
+// Until Stage 10 the functions being split had ratchet ceilings of their own;
+// the sizes after each stage are in docs/details-redesign-baseline.md. The
+// budget keeps every details method far under ART's 10,000-unit huge-method
+// limit, above which ART never compiles a method and runs it interpreted.
 //
-// The ceilings sit about 1% (code units) and 2.5% (registers) above the size
-// measured at the last stage, because R8 re-decides inlining across the whole
-// app on every build and a function moves a little without its source
-// changing. Stage 1 showed it: moving five helpers out of the kept TV class let
-// R8 inline them, and the two functions grew by 42 and 22 units with no new
-// code. Registers move by a few at a time: at Stage 6b the TV function, its
-// source untouched, went from 155 to 159 when the movie screen's overlays moved
-// into shared code. New code is far bigger than these margins.
+// R8 re-decides inlining across the whole app on every build, so a function
+// can grow a little with its source unchanged (Stage 1: +42 units when five
+// moved helpers were inlined back). Code moved out of a composable comes back
+// in when it lands in a non-restartable function with one caller, such as a
+// remember... function or a plain helper. Put moved effects in a restartable
+// child composable, called where they were, as Stage 10 did.
 //
 // Each method is matched to the class it was WRITTEN in through R8's mapping
 // file. R8 relocates static methods freely (FavoritesScreen ships inside
@@ -486,32 +486,6 @@ val checkMethodSizes by tasks.registering {
     doLast {
         val maxUnits = 2_500
         val maxRegisters = 100
-        // Being split by the redesign (units to registers). At the last stage:
-        // TV 2,860 / 67 (v400, Stage 9d), down from 3,540 / 96 when it took the
-        // Args instead of one parameter per extra: Compose checks and saves every
-        // parameter of a restartable function, and the restart call passes them
-        // all in consecutive registers. The TV ceiling also keeps that
-        // function under ART's 10,000-unit huge-method limit. Above it ART never
-        // compiles the method, so it runs in the interpreter (dex2oat
-        // --dump-stats, docs/details-redesign-baseline.md).
-        //
-        // Code moved OUT of its file can come back in: the -keep rule for
-        // TvShowDetailsScreenKt (TVShowsDetailsScreenComposeKt until Stage 9d,
-        // when the function moved out of the Activity's file and was renamed
-        // TvShowDetailsScreen) stops R8 inlining what lives there, but
-        // rememberResumeCount, rememberListedSeasons and the Stage 8b holders'
-        // remember functions now sit in their own files, and R8 inlines each into
-        // its one caller (mapping.txt) -- which is why Stage 8a measured larger.
-        // Since Stage 8e the play area is out of it; what is left is the screen's
-        // state setup and effects. Its registers are under the budget since 9d;
-        // Stage 10 takes its units under too.
-        //
-        // The movie function left this list at Stage 7b: at 2,309 / 85 (v389) it
-        // is under the budget, which now holds it (1,505 / 56 at v400). So is the TV
-        // play-area slot, which had a ceiling of its own from Stage 5 (2,406 / 92).
-        val shrinking = mapOf(
-            "TvShowDetailsScreenKt.TvShowDetailsScreen" to (2_890 to 69),
-        )
         // App methods at least this big carry the same R8 risk: reported, not enforced.
         val warnUnits = 5_000
 
@@ -611,25 +585,14 @@ val checkMethodSizes by tasks.registering {
         if (details.isEmpty()) throw GradleException("checkMethodSizes: found no details-screen methods - the dex parse is broken")
         val problems = mutableListOf<String>()
         for (m in details) {
-            val ceiling = shrinking[m.key]
-            if (ceiling != null) {
-                if (m.units > ceiling.first || m.registers > ceiling.second) {
-                    problems += "${m.key} grew to ${m.units} units / ${m.registers} registers " +
-                        "(ceiling ${ceiling.first} / ${ceiling.second}). It is being split: put new code in a new composable."
-                }
-            } else if (m.units > maxUnits || m.registers > maxRegisters) {
+            if (m.units > maxUnits || m.registers > maxRegisters) {
                 problems += "${m.key} is ${m.units} units / ${m.registers} registers " +
-                    "(budget $maxUnits / $maxRegisters). Split it."
+                    "(budget $maxUnits / $maxRegisters). Split it -- see the note above checkMethodSizes."
             }
-        }
-        val gone = shrinking.keys - details.map { it.key }.toSet()
-        if (gone.isNotEmpty()) {
-            logger.lifecycle("checkMethodSizes: no longer in the APK, take off the shrinking list: ${gone.joinToString()}")
         }
         logger.lifecycle("checkMethodSizes: largest details-screen methods (budget $maxUnits units / $maxRegisters registers):")
         details.sortedByDescending { it.units }.take(5).forEach { m ->
-            val note = shrinking[m.key]?.let { "  [being split; ceiling ${it.first} / ${it.second}]" } ?: ""
-            logger.lifecycle("  %6d units %4d regs  %s%s".format(m.units, m.registers, m.key, note))
+            logger.lifecycle("  %6d units %4d regs  %s".format(m.units, m.registers, m.key))
         }
         val giants = methods.filter {
             !inDetails(it.origin) && it.origin.startsWith("com.example.bluehive.") && it.units >= warnUnits

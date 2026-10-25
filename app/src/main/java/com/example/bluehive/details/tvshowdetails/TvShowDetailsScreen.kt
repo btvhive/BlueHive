@@ -2,9 +2,6 @@ package com.example.bluehive.details.tvshowdetails
 
 import android.annotation.SuppressLint
 import android.util.Log
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
@@ -80,41 +77,6 @@ fun TvShowDetailsScreen(
     }
 
 
-    // 🔹 Precomputed display strings (recomputed only when inputs change)
-    val seasonsLabel = remember(args.numberOfSeasons) {
-        "Seasons:          " + if (args.numberOfSeasons > 0) args.numberOfSeasons.toString() else "N/A"
-    }
-
-    val statusLabel = remember(args.status) {
-        "Status:            " + if (!args.status.isNullOrBlank() && args.status != "N/A") args.status else "N/A"
-    }
-
-    val languageLabel = remember(args.originalLanguage) {
-        "Language:        " + (
-                if (!args.originalLanguage.isNullOrBlank() && args.originalLanguage != "N/A")
-                    args.originalLanguage
-                else
-                    "N/A"
-                )
-    }
-
-    val releaseDateLabel = remember(args.releaseDate) {
-        if (!args.releaseDate.isNullOrBlank() && args.releaseDate != "N/A") {
-            val dateParts = args.releaseDate.split("-")
-            if (dateParts.size == 3) {
-                // Format as MM/DD/YYYY
-                "Release Date:     ${dateParts[1]}/${dateParts[2]}/${dateParts[0]}"
-            } else {
-                "Release Date:     ${args.releaseDate}"
-            }
-        } else {
-            "Release Date:      N/A"
-        }
-    }
-
-
-
-
     val coroutineScope = rememberCoroutineScope()
 
     // Extras: the switch and its recommendations row -- see ExtrasState. On
@@ -134,7 +96,6 @@ fun TvShowDetailsScreen(
     var blockHeaderInitialFocus by remember(args.startInExtras) {
         mutableStateOf(args.startInExtras || args.resumeToEpisode)
     }
-    var isInitialEpisodeLoad by remember { mutableStateOf(args.resumeToEpisode) }
 
     LaunchedEffect(args.startInExtras, extras.recommendations) {
         if (args.startInExtras && extras.recommendations.isNotEmpty()) {
@@ -184,16 +145,9 @@ fun TvShowDetailsScreen(
         onEpisodeSelected(season, episode, epName)
     }
 
-    // Armed state is a MOMENT, not a mode. Someone who presses once, reads the
-    // notice and walks away should not find the episode silently pressable when
-    // they come back -- the second press has to be a deliberate answer to the
-    // first, which means it has to be soon after it.
-    LaunchedEffect(unairedGate.armedIndex) {
-        if (unairedGate.armedIndex >= 0) {
-            delay(UNAIRED_OVERRIDE_WINDOW_MS)
-            unairedGate.armedIndex = -1
-        }
-    }
+    // A first press on an unaired episode stays armed for
+    // UNAIRED_OVERRIDE_WINDOW_MS -- see UnairedPressTimeout.
+    UnairedPressTimeout(unairedGate)
 
     // Today's date and the season list are both re-read every time this screen
     // comes back into view, so an episode or a season that airs while the app
@@ -208,58 +162,14 @@ fun TvShowDetailsScreen(
     // with nothing aired yet are left off. Null until the first check answers.
     val listedSeasons = rememberListedSeasons(args.mediaId, args.numberOfSeasons, resumeCount, episodesRepository)
 
-    // ✅ Episode row scroll + initial focus (moved here from above so the
-    //    fallback can reach the header requesters).
-    //
-    //    Why this is a retry loop instead of delay(150) + requestFocus():
-    //    the target tile lives in a LazyRow, so its FocusRequester is only
-    //    attached once the tile is composed AND placed. On entry from
-    //    Continue Watching the main thread is busy (heavy frames + Coil cache
-    //    thrashing), so a fixed delay elapses before layout finishes and
-    //    requestFocus() no-ops ("FocusRequester is not initialized"). Because
-    //    the header is focus-blocked in this mode, that leaves the whole
-    //    screen with nothing focused = stuck. So: scroll, wait until the tile
-    //    is actually laid out (presence in visibleItemsInfo => node attached),
-    //    request focus, confirm it landed, and only then release the gates.
-    LaunchedEffect(episodesState.episodes) {
-        if (episodesState.episodes.isEmpty()) return@LaunchedEffect
-
-        if (isInitialEpisodeLoad) {
-            val targetIndex = (args.lastEpisode - 1).coerceIn(0, episodesState.episodes.lastIndex)
-            episodesState.lastFocusedEpisodeIndex = targetIndex
-            episodesState.rowState.scrollToItem(targetIndex)
-
-            episodesState.episodeFocusLanded = false
-            var landed = false
-            var attempts = 0
-            while (attempts < 40 && !landed) {
-                awaitFrame()
-                val laidOut = episodesState.rowState.layoutInfo
-                    .visibleItemsInfo.any { it.index == targetIndex }
-                if (laidOut) {
-                    episodesState.focusRequesters.getOrNull(targetIndex)?.requestFocus()
-                    awaitFrame()
-                    if (episodesState.episodeFocusLanded) landed = true
-                }
-                attempts++
-            }
-
-            // Never strand the user with no focus: if the episode tile truly
-            // never took focus, un-block the header and focus Favorites.
-            if (!landed) {
-                Log.w("TVDetails", "⚠️ Episode focus never landed — falling back to header")
-                blockHeaderInitialFocus = false
-                awaitFrame()
-                focusMap.favorite.requestFocus()
-            }
-
-            blockHeaderInitialFocus = false
-            isInitialEpisodeLoad = false
-        } else {
-            episodesState.lastFocusedEpisodeIndex = 0
-            episodesState.rowState.scrollToItem(0)
-        }
-    }
+    // The first focus when the page opens -- see FirstEpisodeFocus.
+    FirstEpisodeFocus(
+        episodesState    = episodesState,
+        focusMap         = focusMap,
+        resumeToEpisode  = args.resumeToEpisode,
+        lastEpisode      = args.lastEpisode,
+        onHeaderReleased = { blockHeaderInitialFocus = false },
+    )
 
 
     val favoriteProfileId = args.profileId
@@ -274,22 +184,9 @@ fun TvShowDetailsScreen(
         title     = args.mediaTitle,
     )
 
-    LaunchedEffect(args.mediaId, favoriteProfileId) { episodesState.refreshWatchedEpisodes(favoriteProfileId) }
-
-    // Re-read on every resume. Nothing is marked optimistically any more — the
-    // marker follows the backend row, and that row is only written once the player
-    // confirms video is actually playing. Coming back from the player is therefore
-    // the moment a genuinely-watched episode should light up.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, args.mediaId, favoriteProfileId) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                coroutineScope.launch { episodesState.refreshWatchedEpisodes(favoriteProfileId) }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+    // The watched marks, read on open and on every resume -- see
+    // WatchedEpisodesEffects.
+    WatchedEpisodesEffects(episodesState, args.mediaId, favoriteProfileId, coroutineScope)
 
     // ════════════════════════════════════════════════════════════════════════
     //  Anime DuB / SuB extraction flow (ported from MoviesDetailsScreenCompose).
@@ -398,31 +295,16 @@ fun TvShowDetailsScreen(
         if (showNotYetAvailable) { delay(4000); showNotYetAvailable = false }
     }
 
-    // 🔹 On first entry, auto-load Season 1 if we have seasons
-    LaunchedEffect(args.mediaId, args.numberOfSeasons) {
-        if (args.numberOfSeasons > 0) {
-            episodesState.selectedSeason = args.lastSeason.coerceIn(1, args.numberOfSeasons)
-            val prefetchedEpisodes = prefetch?.episodes
-            if (prefetchedEpisodes != null && args.lastSeason == 1) {
-                episodesState.episodes = prefetchedEpisodes
-                episodesState.isLoadingEpisodes = false
-                Log.d("Prefetch", "✅ Episodes loaded from prefetch cache (${prefetchedEpisodes.size} eps)")
-            } else {
-                episodesState.loadSeasonEpisodes(episodesState.selectedSeason)
-            }
-        }
-    }
-
-    // The season check can leave off the selected season -- the screen was
-    // opened on a season with nothing aired. Move to the newest listed one, so
-    // the grid never shows a season the column does not.
-    LaunchedEffect(listedSeasons) {
-        val listed = listedSeasons ?: return@LaunchedEffect
-        if (episodesState.selectedSeason > listed) {
-            episodesState.selectedSeason = listed
-            episodesState.loadSeasonEpisodes(listed)
-        }
-    }
+    // The first season load, and the move to the newest listed season -- see
+    // SeasonLoadEffects.
+    SeasonLoadEffects(
+        episodesState   = episodesState,
+        tmdbId          = args.mediaId,
+        numberOfSeasons = args.numberOfSeasons,
+        lastSeason      = args.lastSeason,
+        prefetch        = prefetch,
+        listedSeasons   = listedSeasons,
+    )
 
     // ✅ Log cache stats when screen loads — deferred + off the main thread.
     // gatherStats() does THREE full directory walks; running it inline on entry
@@ -520,10 +402,10 @@ fun TvShowDetailsScreen(
         },
         labels = {
             TvInfoLabels(
-                seasonsLabel     = seasonsLabel,
-                statusLabel      = statusLabel,
-                releaseDateLabel = releaseDateLabel,
-                languageLabel    = languageLabel,
+                numberOfSeasons  = args.numberOfSeasons,
+                status           = args.status,
+                releaseDate      = args.releaseDate,
+                originalLanguage = args.originalLanguage,
                 dongleRegular    = dongleRegular,
             )
         },
