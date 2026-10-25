@@ -448,7 +448,11 @@ class AnimePlaybackController internal constructor(
         Log.d("scraper", "M Enumerate (dub=$dub) → $url")
         if (!session.isExtracting && !session.extractPending && !isCheckingServers) {
             session.extractPending = true      // immediate guard for the 300ms window
-            scope.launch {
+            // HELD IN extractJob, like an extraction, so BACK can stop it: in the
+            // first 200 ms through the extraction handler (extractPending), after
+            // that through cancelServerCheck. It was launched untracked, and BACK
+            // during "Checking the site…" left the details page.
+            session.extractJob = scope.launch {
                 delay(200)
                 session.extractPending = false // hand off guard duty to isCheckingServers
                 isCheckingServers = true
@@ -496,6 +500,25 @@ class AnimePlaybackController internal constructor(
         val req = failoverRequest ?: return
         failoverRequest = null
         launchExtract(req.first, req.second, req.third)
+    }
+
+    /**
+     * BACK while "Checking the site for available servers…" is up. The check
+     * looks like the loading screen and now acts like it: it stops, and the
+     * cursor returns to the button that opened the flow. No Back handler was
+     * enabled while it ran, so BACK fell through and left the details page.
+     *
+     * The check runs in session.extractJob (see launchEnumerate), so this ends
+     * the backend call, and launchIfActive keeps the on-device fallback from
+     * starting after the fact. Once that fallback's activity is up, BACK is
+     * its own and comes back through onEnumerateResult as a cancel.
+     */
+    fun cancelServerCheck() {
+        Log.d("scraper", "↩️ back during the server check — cancelling")
+        session.extractJob?.cancel()
+        session.extractJob = null
+        isCheckingServers = false
+        restoreFocus()
     }
 
     /** BACK closes whichever picker/prompt is open instead of leaving the screen. */

@@ -106,7 +106,8 @@ fun BoxScope.AnimeServerOverlays(anime: AnimePlaybackController, dongleRegular: 
         //
         // Directional and select keys are swallowed; BACK and Escape deliberately
         // are not -- a trap with no way out on a remote that has no other keys
-        // would be worse.
+        // would be worse. BACK goes on to DetailsBackHandlers, which stops the
+        // check (AnimePlaybackController.cancelServerCheck).
         ExtractionFocusTrap {
             ExtractionLoadingOverlay(
                 status = "Checking the site for available servers…",

@@ -12,12 +12,13 @@ import com.example.bluehive.details.shared.playback.PlaybackSession
  *
  * OnBackPressedDispatcher runs the MOST RECENTLY added enabled callback, and
  * Compose adds them in composition order. So this registers Extras first, then
- * the server prompt, then the extraction: while a film is loading Back cancels
- * it, while the prompt or picker is open Back closes it, and only then does it
- * collapse Extras. Put Extras last and Back would collapse it out from under
- * an open overlay. Each screen calls this once, right after creating its state
- * holders, and unconditionally -- a handler inside a section that only
- * sometimes shows would jump the queue.
+ * the server prompt, then the extraction, then the server check: while a film
+ * is loading Back cancels it, while the prompt or picker is open Back closes
+ * it, while the server list is being checked Back stops the check, and only
+ * then does it collapse Extras. The last three never overlap. Put Extras last
+ * and Back would collapse it out from under an open overlay. Each screen calls
+ * this once, right after creating its state holders, and unconditionally -- a
+ * handler inside a section that only sometimes shows would jump the queue.
  *
  * [onExtractionCancelled] runs after the cancel: the screen returns the cursor
  * to the button that started the extraction.
@@ -55,5 +56,15 @@ fun DetailsBackHandlers(
     BackHandler(enabled = session.isExtracting || session.extractPending) {
         session.cancel()
         onExtractionCancelled()
+    }
+
+    // ── BACK stops the server-list check ─────────────────────────────
+    // "Checking the site for available servers…", after "Choose a server" on
+    // a list that is not cached yet. No handler above is enabled while it
+    // runs, so BACK used to fall through and leave the details page. Its
+    // first 200 ms are the extraction handler's (extractPending), which
+    // cancels the same job -- see AnimePlaybackController.cancelServerCheck.
+    BackHandler(enabled = anime.isCheckingServers) {
+        anime.cancelServerCheck()
     }
 }

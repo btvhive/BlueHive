@@ -351,12 +351,13 @@ Pieces that position themselves are written as **`BoxScope` extension functions*
 Who answers Back, first to last:
 
 1. the focused element's own key handler (episode tile, overlay buttons, focus traps), and any overlay's own handler while that overlay is showing;
-2. the extraction-cancel handler;
-3. the prompt/picker handler;
-4. the Extras-collapse handler;
-5. the Activity's history back.
+2. the server-check handler (added after the redesign: Back during "Checking the site for available servers…" stops the check instead of leaving the page);
+3. the extraction-cancel handler;
+4. the prompt/picker handler;
+5. the Extras-collapse handler;
+6. the Activity's history back.
 
-Compose gives the last-registered handler priority. **`DetailsBackHandlers` registers 4, 3 and 2 in that order, and each root calls it right after creating its state holders**, before anything else is composed. It is called unconditionally, outside any `if`. A handler inside a section that's only sometimes shown would jump the queue.
+Compose gives the last-registered handler priority. **`DetailsBackHandlers` registers 5, 4, 3 and 2 in that order, and each root calls it right after creating its state holders**, before anything else is composed. It is called unconditionally, outside any `if`. A handler inside a section that's only sometimes shown would jump the queue. 2, 3 and 4 are never enabled together.
 
 ### C3: Timings
 
