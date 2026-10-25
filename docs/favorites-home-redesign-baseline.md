@@ -48,15 +48,60 @@ Read off `navigateToDetails` and `HomeScreenCompose.openDetailsScreen` by script
 
 ## Speed
 
-**Not measured yet: it needs your OK to drive the boxes.** When it has it, the plan is the details redesign's method (`tools/details-perf/`), on each box, compared only with itself:
+Measured 2026-10-25 between 17:20 and 17:55, with the user's OK and nobody watching. The scripts are `tools/details-perf/measure_frames.sh` and `tools/favorites-home-perf/` (see its README). **Compare each box only with itself:** gfxinfo counts differently on Android 7 and Android 14.
 
-| Measurement | How | Keys sent |
+| | onn box | Fire Stick (AFTMM) |
 |---|---|---|
-| Idle home screen | gfxinfo and the slowest frames over 30 s with no input; the 6 s carousel tick should show | none |
-| Home shelf D-pad | 10 presses, 0.6 s apart, on the first shelf (`measure_frames.sh`) | Right, then Left |
-| Favorites grid D-pad | 10 presses along a row, then 5 down (`measure_frames.sh`) | Right, Down |
+| Android | 14 | 7.1.2 |
+| BlueHive | v405 | v376 (installed for the details baseline) |
+| Profile | marlan | christoff (Favorites: marlan, see below) |
 
-Favorites is opened through the sidebar, one screenshot per step. In Favorites only arrows are sent: OK in remove mode deletes a favourite.
+The Fire Stick's v376 has the same Favorites and home-screen code as v405; only the details package imports differ. Its shelf code predates the other session's uncommitted shelf changes, which the onn box's v405 has. It was not upgraded: v405 is untested on Android 7, and going back would mean wiping the app's data.
+
+### Idle home screen: 30 s, no input
+
+| | onn box (3 runs) | Fire Stick (2 runs) |
+|---|---|---|
+| Frames | 600, 598, 684 | 715, 714 |
+| Janky | 9.3%, 9.4%, 11.8% | 23.5%, 20.2% |
+| Median / 90th / 99th percentile | 34–38 / 53 / 89–97 ms | 12–13 / 20–22 / 46–48 ms |
+| Slow UI-thread frames | 45, 38, 45 | 75, 61 |
+| Rhythm | a burst of about 58 frames every 3 s, two per 6 s carousel cycle | about 63 frames every 3 s |
+| UI time of each burst's first frame | 31–59 ms, median 47 | 13–44 ms, medians 31 and 25 |
+| Heaviest UI frame of each burst | 47–65 ms, median 55 | 28–49 ms |
+
+The home screen is drawing about two seconds of every three while it sits idle. A burst's first frame is the carousel change, and it includes the home function re-running for the tick; H1 takes that re-run out.
+
+### Home shelf D-pad: 10 presses from the first card of What's Popular
+
+| | onn Right | onn Left | Fire Stick Right | Fire Stick Left |
+|---|---|---|---|---|
+| Frames | 318 | 290 | 921 | 809 |
+| Janky | 19.2% | 16.6% | 34.4% | 29.5% |
+| Median / 90th / 95th / 99th percentile | 38 / 53 / 69 / 81 ms | 36 / 57 / 65 / 97 ms | 13 / 26 / 32 / 44 ms | 10 / 21 / 26 / 42 ms |
+| Slow UI-thread frames | 43 | 30 | 111 | 69 |
+
+The carousels keep animating during the presses, as they do for a viewer.
+
+### Favorites grid D-pad: profile marlan, 8 favourites
+
+With 8 favourites (7 in the first row), the presses were 6 Rights then 6 Lefts along the first row, and Down + Up three times between the two rows. Only arrows were sent.
+
+| | onn, row | onn, rows | Fire Stick, row | Fire Stick, rows |
+|---|---|---|---|---|
+| Frames | 24 | 12 | 24 | 12 |
+| Janky | 50% | 50% | 50% | 41.7% |
+| Median / 90th / 99th percentile | 40 / 61 / 73 ms | 38 / 53 / 57 ms | 17 / 24 / 29 ms | 13 / 21 / 23 ms |
+| Slow UI-thread frames | 12 | 6 | 12 | 5 |
+| UI time per press (first frame) | | 19–40 ms | | 7–18 ms |
+
+Every press draws two frames, and one of them is a slow UI-thread frame on both boxes.
+
+### How the boxes were driven
+
+- **onn box:** BlueHive was restarted to the home screen. One Down landed on the first card. Left on the first card opened the sidebar, and Favorites was four Downs below Profiles.
+- **Fire Stick:** woken, BlueHive started as christoff. christoff has no favourites, so the profile was switched to marlan for the Favorites measurement, then back to christoff, which leaves the picker order as it was. The box was then returned to Amazon's home screen and put back to sleep.
+- **Key timing:** `adb shell input` takes about 1.4 s per key on Android 7, so the Fire Stick's presses landed about 2 s apart instead of 0.6 s.
 
 ## After each stage
 

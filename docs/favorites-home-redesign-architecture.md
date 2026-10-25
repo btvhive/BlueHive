@@ -1,6 +1,6 @@
 # Favorites and Home redesign: architecture plan
 
-**Status:** approved 2026-10-25. Stage 0 is done (the two launch records, the two ratchets, the baseline sizes in `docs/favorites-home-redesign-baseline.md`); the speed baseline waits for your OK to drive the boxes.
+**Status:** approved 2026-10-25. Stage 0 is done: the two launch records, the two ratchets, and the size and speed baselines in `docs/favorites-home-redesign-baseline.md`. Next is F1.
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
 
