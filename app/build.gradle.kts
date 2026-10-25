@@ -487,19 +487,19 @@ val checkMethodSizes by tasks.registering {
         val maxUnits = 2_500
         val maxRegisters = 100
         // Being split by the redesign (units to registers). At the last stage:
-        // TV 5,205 / 154, movie 3,412 / 116 (v386, Stage 6c). The TV ceiling also
+        // TV 5,200 / 154, movie 2,569 / 92 (v387, Stage 6d). The TV ceiling also
         // keeps that function under ART's 10,000-unit huge-method limit. Above
         // it ART never compiles the method, so it runs in the interpreter
         // (dex2oat --dump-stats, docs/details-redesign-baseline.md).
         //
-        // The movie function measures a little larger after Stage 6c, which moved
-        // code OUT of it: R8 inlines rememberPlaybackSession and
-        // rememberSourcePlayback back in while the movie screen is their only
-        // caller (mapping.txt shows both as inlined frames). The TV screen calls
-        // them from Stage 7, and the ceiling tightens again then.
+        // R8 inlines rememberPlaybackSession, rememberSourcePlayback and
+        // rememberAnimePlayback into the movie function while the movie screen
+        // is their only caller (mapping.txt shows all three as inlined frames).
+        // The TV screen calls them from Stage 7, and the ceiling tightens again
+        // then.
         val shrinking = mapOf(
             "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (5_280 to 163),
-            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (3_450 to 119),
+            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (2_595 to 95),
         )
         // Pieces split out of the TV function but still in its file -- its
         // lambdas and local functions, named TVShowsDetailsScreenContent$... --

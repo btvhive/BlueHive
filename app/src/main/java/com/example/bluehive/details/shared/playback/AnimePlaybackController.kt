@@ -1,0 +1,556 @@
+package com.example.bluehive.details.shared.playback
+
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.util.Log
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.ActivityResult
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
+import com.example.bluehive.BlueHiveApplication
+import com.example.bluehive.api.ApiClient
+import com.example.bluehive.api.ExtractOutcome
+import com.example.bluehive.api.extractStreamAwait
+import com.example.bluehive.auth.SessionManager
+import com.example.bluehive.utilities.ServerOption
+import com.example.bluehive.utilities.launchIfActive
+import com.example.bluehive.utilities.runCatchingCancellable
+import com.example.bluehive.webview.miruro.MiruroExtractorActivity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+
+/**
+ * The anime flow of a details page (Miruro): the "default server?" prompt and
+ * the server picker, the extraction -- BACKEND first, the on-device extractor
+ * as the fallback -- and the automatic failover through the server list.
+ *
+ * Moved here from the movie screen in Stage 6 of the details redesign, with the
+ * shared flags in [PlaybackSession] (one loading screen, one BACK-to-cancel,
+ * never two extractions at once). The code is the movie screen's, word for
+ * word; what differs for an episode comes from the request (type, season and
+ * episode, "anime_tv"), so the TV screen can switch over in Stage 7.
+ */
+@Stable
+class AnimePlaybackController internal constructor(
+    private val session: PlaybackSession,
+    private val scope: CoroutineScope,
+    private val context: Context,
+    private val profileId: Int,
+    private val mediaType: String,
+    private val mediaTitle: String,
+    /** What is played, read where it is used: the TV screen's episode differs from press to press. */
+    private val request: () -> PlaybackRequest,
+    /**
+     * At the start of every extraction. The movie screen stops the trailer here;
+     * the TV screen stops it when English or Japanese is pressed (§10, #6).
+     */
+    private val onLaunch: () -> Unit,
+    /** Returns the cursor to whichever stream button opened the flow. */
+    private val restoreFocus: () -> Unit,
+) {
+    internal lateinit var extractorLauncher: ActivityResultLauncher<Intent>
+    internal lateinit var enumerateLauncher: ActivityResultLauncher<Intent>
+
+    // ── Anime server-selection flow ─────────────────────────────────────────
+    var showDefaultPrompt by mutableStateOf(false) // instant "default server?" Yes/No
+    var isCheckingServers by mutableStateOf(false) // phase 1: enumerating servers
+        private set
+    var showServerPicker  by mutableStateOf(false) // phase 1 result: the picker
+    var showServerError   by mutableStateOf(false) // transient failure toast
+        internal set
+    var showNoDub         by mutableStateOf(false) // transient "No dub available" toast
+        internal set
+
+    var pendingUrl        by mutableStateOf<String?>(null)
+    var pendingDub        by mutableStateOf(false)
+    var serverOptions     by mutableStateOf<List<ServerOption>>(emptyList())
+    var serverDefaultIdx  by mutableIntStateOf(0)
+
+    /** The server lists and the failover trail through them. */
+    val servers = AnimeServerList()
+
+    // The provider of the in-flight extract (null = Miruro's default).
+    private var lastExtractServer by mutableStateOf<String?>(null)
+
+    // Set by the result handler to re-extract with the next server; an effect in
+    // AnimePlaybackEffects performs the actual re-launch. This state hop breaks
+    // the launchExtract ⇄ extractorLauncher reference cycle. (url, dub, server)
+    internal var failoverRequest by mutableStateOf<Triple<String, Boolean, String?>?>(null)
+
+    private fun pickNextServer(url: String, dub: Boolean): String? = servers.pickNext(url, dub, serverOptions)
+
+    private suspend fun ensureServerList(url: String, dub: Boolean) = servers.ensure(url, dub, request())
+
+    /**
+     * Receives the m3u8 back from the isolated :extractor process, then launches
+     * the player here in the main process — keeps back-navigation identical.
+     * Phase 2 result: receives the m3u8 (default OR chosen server) and plays it.
+     */
+    internal fun onExtractorResult(result: ActivityResult) {
+        session.isExtracting   = false
+        session.extractPending = false
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data    = result.data
+            val m3u8    = data?.getStringExtra(MiruroExtractorActivity.RESULT_M3U8)
+            val referer = data?.getStringExtra(MiruroExtractorActivity.RESULT_REFERER)
+            val ua      = data?.getStringExtra(MiruroExtractorActivity.RESULT_UA)
+            val dubFallback = data?.getBooleanExtra(MiruroExtractorActivity.RESULT_DUB_FALLBACK, false) == true
+            val capUrl  = pendingUrl
+
+            // ── Cache any server list captured in this same pass FIRST, so failover
+            //    below can consult it (a default extract carries the provider list). ─
+            val capNames = data?.getStringArrayListExtra(MiruroExtractorActivity.RESULT_SERVER_NAMES)
+            val capTags  = data?.getStringArrayListExtra(MiruroExtractorActivity.RESULT_SERVER_TAGS)
+            val capDef   = data?.getIntExtra(MiruroExtractorActivity.RESULT_SERVER_DEFAULT_INDEX, 0) ?: 0
+            if (!capNames.isNullOrEmpty() && capUrl != null) {
+                val opts = capNames.mapIndexed { i, name ->
+                    val tagStr = capTags?.getOrNull(i) ?: ""
+                    val tagList = if (tagStr.isBlank()) emptyList()
+                        else tagStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    ServerOption(name = name, tags = tagList)
+                }
+                servers.cache[servers.key(capUrl, pendingDub)] =
+                    opts to capDef.coerceIn(0, opts.size - 1)
+                Log.d("scraper", "🗂 cached ${opts.size} servers from default extract")
+            }
+            // Mark the provider we just tried (named failover server, else Miruro's default).
+            val triedName = lastExtractServer
+                ?: capNames?.let { it.getOrNull(capDef.coerceIn(0, it.size - 1)) }
+            triedName?.let { servers.tried.add(it) }
+
+            if (m3u8.isNullOrBlank()) {
+                // Nothing captured — server likely down. Fail over before erroring.
+                val next = if (capUrl != null) pickNextServer(capUrl, pendingDub) else null
+                if (next != null && capUrl != null) {
+                    Log.d("scraper", "🔁 no stream — auto-failover to server '$next'")
+                    servers.tried.add(next)
+                    failoverRequest = Triple(capUrl, pendingDub, next)
+                } else {
+                    Log.e("scraper", "M Extract: OK result but no m3u8")
+                    showServerError = true
+                }
+                return
+            }
+
+            // Dub requested but we got the sub last-resort → try the next server.
+            if (pendingDub && dubFallback) {
+                val next = if (capUrl != null) pickNextServer(capUrl, true) else null
+                if (next != null && capUrl != null) {
+                    Log.d("scraper", "🔁 dub server down — auto-failover to server '$next'")
+                    servers.tried.add(next)
+                    failoverRequest = Triple(capUrl, true, next)
+                    return
+                }
+                Log.w("scraper", "🔁 dub unavailable on every server — playing sub as last resort")
+            }
+
+            // ── Play the captured stream ─────────────────────────────────────
+            // DIRECT FIRST, relay only on failure — see MiruroPlayerActivity. The
+            // relay works around ISPs that DNS-hijack the CDN, but costs ~1 GB of
+            // backend transfer each way per episode, so it is now the fallback
+            // rather than the default path.
+            Log.d("scraper", "M Extract → direct=$m3u8  (relay fallback ready)")
+            // ── Record the watch ────────────────────────────────────────
+            // The DuB/SuB path goes straight to MiruroPlayerActivity, and watch
+            // history used to be logged only by the old GeckoView viewer -- so
+            // anime watched this way was invisible to the
+            // backend. It IS logged, but by the player itself once video is
+            // actually rolling (onIsPlayingChanged), NOT here: firing on a
+            // successful extract counted a watch even when the stream never
+            // played.
+            context.startActivity(
+                PlayerIntents.miruroOnDevice(
+                    context    = context,
+                    request    = request(),
+                    m3u8       = m3u8,
+                    referer    = referer,
+                    userAgent  = ua,
+                    sourceName = miruroSourceLabel(null, capNames?.getOrNull(capDef)),
+                    profileId  = profileId,
+                    mediaType  = mediaType,
+                    mediaTitle = mediaTitle,
+                    dub        = pendingDub,
+                    server     = triedName,
+                )
+            )
+        } else {
+            val data   = result.data
+            val noDub  = data?.getBooleanExtra(MiruroExtractorActivity.RESULT_NO_DUB, false) == true
+            val failed = data?.getBooleanExtra(MiruroExtractorActivity.RESULT_FAILED, false) == true
+            when {
+                noDub  -> { Log.w("scraper", "M Extract: no dub available"); showNoDub = true }
+                failed -> {
+                    // Extraction error — server likely down. Fail over to the next one.
+                    val u = pendingUrl
+                    val next = if (u != null) pickNextServer(u, pendingDub) else null
+                    if (next != null && u != null) {
+                        Log.d("scraper", "🔁 extract failed — auto-failover to server '$next'")
+                        servers.tried.add(next)
+                        failoverRequest = Triple(u, pendingDub, next)
+                    } else {
+                        Log.w("scraper", "M Extract: failed"); showServerError = true
+                    }
+                }
+                else   -> { Log.w("scraper", "M Extract: user cancelled") /* stay silent */ }
+            }
+        }
+    }
+
+    /** Phase 1 result: receives the server list, then shows the picker. */
+    internal fun onEnumerateResult(result: ActivityResult) {
+        isCheckingServers = false
+        if (result.resultCode == Activity.RESULT_OK) {
+            val data   = result.data
+            val names  = data?.getStringArrayListExtra(MiruroExtractorActivity.RESULT_SERVER_NAMES)
+            val tags   = data?.getStringArrayListExtra(MiruroExtractorActivity.RESULT_SERVER_TAGS)
+            val defIdx = data?.getIntExtra(MiruroExtractorActivity.RESULT_SERVER_DEFAULT_INDEX, 0) ?: 0
+            if (names != null && names.isNotEmpty()) {
+                val options = names.mapIndexed { i, name ->
+                    val tagStr = tags?.getOrNull(i) ?: ""
+                    val tagList = if (tagStr.isBlank()) emptyList()
+                    else tagStr.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                    ServerOption(name = name, tags = tagList)
+                }
+                serverOptions    = options
+                serverDefaultIdx = defIdx.coerceIn(0, options.size - 1)
+                showServerPicker = true
+                // Cache so re-opening the picker for this same episode+audio is
+                // instant and a later default play won't re-read the list either.
+                pendingUrl?.let { u ->
+                    servers.cache[servers.key(u, pendingDub)] =
+                        options to defIdx.coerceIn(0, options.size - 1)
+                }
+            } else {
+                Log.w("scraper", "M Enumerate: OK but empty server list")
+                showServerError = true
+            }
+        } else {
+            val data   = result.data
+            val noDub  = data?.getBooleanExtra(MiruroExtractorActivity.RESULT_NO_DUB, false) == true
+            val failed = data?.getBooleanExtra(MiruroExtractorActivity.RESULT_FAILED, false) == true
+            when {
+                noDub  -> { Log.w("scraper", "M Enumerate: no dub available"); showNoDub = true }
+                failed -> { Log.w("scraper", "M Enumerate: failed");           showServerError = true }
+                else   -> { Log.w("scraper", "M Enumerate: user cancelled") /* stay silent */ }
+            }
+        }
+    }
+
+    /**
+     * Anime via the BACKEND extractor. For a film, /api/anime/resolve maps it
+     * straight to its AniList id with a null episode, and the miruro movie
+     * template omits ?ep= entirely.
+     *
+     * @param acceptAnyTrack play the wrong track anyway — set only once every
+     *        dub server has been tried.
+     */
+    internal suspend fun extractViaBackend(dub: Boolean = false,
+                                           server: String? = null,
+                                           acceptAnyTrack: Boolean = false): ExtractOutcome {
+        val req = request()
+        // Cancellable, like its caller: a page closed mid-request must stop the
+        // work, not return MISS and send the caller on to its fallback.
+        val body = runCatchingCancellable {
+            ApiClient.bluehiveApi.extractStreamAwait(
+                type    = req.apiType,
+                tmdbId  = req.tmdbId,
+                season  = req.apiSeason,
+                episode = req.apiEpisode,
+                source  = "miruro",
+                mtype   = req.animeType,
+                title   = mediaTitle,
+                profile = profileId,
+                device  = SessionManager.get().deviceFingerprint,
+                // Sent always — "sub" is part of the server's cache key, not a
+                // no-op, so omitting it would extract the same stream under a
+                // second key.
+                audio   = if (dub) "dub" else "sub",
+                server  = server,
+            )
+        }.getOrNull()?.takeIf { it.isSuccessful }?.body()
+
+        if (body == null || body.m3u8.isBlank()) return ExtractOutcome.MISS
+
+        // Dub asked for, sub delivered. A null `audio` is an older backend:
+        // unknowable, so treat it as before.
+        val wrongTrack = dub && body.audio?.equals("dub", ignoreCase = true) == false
+        if (wrongTrack && !acceptAnyTrack) {
+            Log.e("scraper", "🎧 asked for dub, backend returned '${body.audio}'" +
+                    " (server=${server ?: "default"}) — not playing it yet")
+            return ExtractOutcome.WRONG_TRACK
+        }
+        val playingDub = dub && !wrongTrack
+
+        Log.d("scraper", "M Extract (backend ${req.logPrefix}audio=${if (dub) "dub" else "sub"}" +
+                "${server?.let { " server=$it" } ?: ""}) → ${body.m3u8.take(60)} cached=${body.cached}")
+        // Not a launcher, so a closed page cannot crash here -- but it would still
+        // open the player after the viewer has left. Stop quietly instead.
+        currentCoroutineContext().ensureActive()
+        context.startActivity(
+            PlayerIntents.miruroBackend(
+                context    = context,
+                request    = req,
+                body       = body,
+                sourceName = miruroSourceLabel(body.servers, server),
+                profileId  = profileId,
+                mediaType  = mediaType,
+                mediaTitle = mediaTitle,
+                playingDub = playingDub,
+                server     = server ?: serverOptions.getOrNull(serverDefaultIdx)?.name,
+            )
+        )
+        return ExtractOutcome.PLAYED
+    }
+
+    /**
+     * Launch a real extraction (default server when server == null).
+     * extractPending is set immediately to block double-fire during the animation
+     * window. The loading overlay itself is delayed so the button press
+     * animation fully completes before the scrim appears.
+     */
+    fun launchExtract(url: String, dub: Boolean, server: String?) {
+        Log.d("scraper", "M Extract (dub=$dub, server=${server ?: "default"}) → $url")
+        // Inside the launcher rather than at its call sites: this is reached
+        // from the DuB/SuB prompt, the SERVER PICKER and the failover retry,
+        // and a future caller should not have to remember. Idempotent.
+        onLaunch()
+        // Fresh play (default attempt) → reset the failover trail. Track the in-flight
+        // provider so its result can mark it tried.
+        if (server == null) servers.tried.clear()
+        lastExtractServer = server
+        if (!session.isExtracting && !session.extractPending && !isCheckingServers) {
+            session.extractPending = true
+            // HELD IN extractJob, like the source chain, so BACK cancels it. It
+            // was launched untracked: Back hid the loading screen, the backend
+            // answered a moment later, and the film started anyway. Cancelled,
+            // the backend await ends it, and ensureActive()/launchIfActive()
+            // below stop the player and the on-device fallback from starting
+            // after the fact.
+            session.extractJob = scope.launch {
+                delay(200)
+                session.isExtracting = true
+                try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
+
+                // BACKEND FIRST for EVERY anime play — sub, dub and named
+                // servers alike. The backend drives the Language and Provider
+                // dropdowns itself, so there is no case left that it cannot serve.
+                // Still falls THROUGH on failure: the on-device extractor below is
+                // untouched, so a backend outage costs seconds, not the film.
+                //
+                // Burn the provider here, not in extractorLauncher — that handler
+                // only sees ON-DEVICE results, so the tried set never grew and the
+                // dub failover below would return the same server forever.
+                server?.let { servers.tried.add(it) }
+
+                // Cancellable: leaving the page while the backend works must end
+                // this coroutine, not count as a miss and launch the on-device
+                // fallback through the closed page's launcher (PageCoroutines.kt).
+                var outcome = runCatchingCancellable {
+                    extractViaBackend(dub = dub, server = server)
+                }.getOrDefault(ExtractOutcome.MISS)
+
+                if (outcome == ExtractOutcome.WRONG_TRACK) {
+                    ensureServerList(url, true)
+                    // The DUB list specifically, not pickNextServer — that helper
+                    // falls back to `serverOptions`, which may still hold the sub
+                    // list from the last picker.
+                    val next = servers.cache[servers.key(url, true)]?.first
+                        ?.firstOrNull { it.name !in servers.tried }?.name
+                    if (next != null) {
+                        Log.e("scraper", "🔁 dub came back as sub — failing over to server '$next'")
+                        servers.tried.add(next)
+                        session.isExtracting   = false
+                        session.extractPending = false
+                        failoverRequest = Triple(url, true, next)
+                        return@launch
+                    }
+                    Log.e("scraper", "🔁 dub unavailable on every server — playing sub as last resort")
+                    outcome = runCatchingCancellable {
+                        extractViaBackend(dub = dub, server = server, acceptAnyTrack = true)
+                    }.getOrDefault(ExtractOutcome.MISS)
+                }
+
+                if (outcome == ExtractOutcome.PLAYED) {
+                    // Warm the picker for the track that just played. Playback
+                    // has already started and the list is cached server-side by
+                    // the extraction, so this is one round trip and delays nothing.
+                    ensureServerList(url, dub)
+                    session.isExtracting   = false
+                    session.extractPending = false
+                    return@launch
+                }
+                Log.w("scraper", "M Extract: backend miss (dub=$dub server=$server) — on-device fallback")
+
+                extractorLauncher.launchIfActive(
+                    PlayerIntents.extractorExtract(
+                        context       = context,
+                        url           = url,
+                        dub           = dub,
+                        server        = server,
+                        listNotCached = servers.cache[servers.key(url, dub)] == null,
+                    )
+                )
+            }
+        }
+    }
+
+    /**
+     * Launch the server-list check (phase 1). The same short delay before the
+     * "Checking…" overlay appears so the "Choose a server" animation finishes.
+     */
+    fun launchEnumerate(url: String, dub: Boolean) {
+        Log.d("scraper", "M Enumerate (dub=$dub) → $url")
+        if (!session.isExtracting && !session.extractPending && !isCheckingServers) {
+            session.extractPending = true      // immediate guard for the 300ms window
+            scope.launch {
+                delay(200)
+                session.extractPending = false // hand off guard duty to isCheckingServers
+                isCheckingServers = true
+
+                // BACKEND FIRST, which also removes an ACTIVITY HOP. The on-device
+                // path launched MiruroExtractorActivity, pausing and resuming this
+                // screen — and that resume is what RestoreFocusOnPlayerReturn
+                // races, the cause of the picker losing focus. An in-process call
+                // never leaves the screen, so the race cannot arise here.
+                val req = request()
+                val list = runCatchingCancellable {
+                    ApiClient.bluehiveApi.extractServers(
+                        type    = req.apiType,
+                        tmdbId  = req.tmdbId,
+                        season  = req.apiSeason,
+                        episode = req.apiEpisode,
+                        audio   = if (dub) "dub" else "sub",
+                        device  = SessionManager.get().deviceFingerprint,
+                    )
+                }.getOrNull()?.takeIf { it.isSuccessful }?.body()
+
+                val opts = list?.servers.orEmpty().map { ServerOption(it.name, emptyList()) }
+                if (opts.isNotEmpty()) {
+                    val defIdx = list!!.servers.indexOfFirst { it.is_default }.coerceAtLeast(0)
+                    Log.d("scraper", "M Enumerate (backend) → ${opts.size} servers, default=$defIdx")
+                    servers.cache[servers.key(url, dub)] = opts to defIdx
+                    serverOptions     = opts
+                    serverDefaultIdx  = defIdx
+                    isCheckingServers = false
+                    showServerPicker  = true
+                    return@launch
+                }
+
+                Log.w("scraper", "M Enumerate: backend miss — on-device fallback")
+                try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
+                enumerateLauncher.launchIfActive(
+                    PlayerIntents.extractorEnumerate(context = context, url = url, dub = dub)
+                )
+            }
+        }
+    }
+
+    /** Auto server-failover: the result handler stashed the next attempt; run it. */
+    internal fun runFailoverRequest() {
+        val req = failoverRequest ?: return
+        failoverRequest = null
+        launchExtract(req.first, req.second, req.third)
+    }
+
+    /** BACK closes whichever picker/prompt is open instead of leaving the screen. */
+    fun onPromptBack() {
+        when {
+            showServerPicker -> { showServerPicker = false; showDefaultPrompt = true }
+            showDefaultPrompt -> {
+                showDefaultPrompt = false
+                // Return the cursor to whichever stream button opened the prompt.
+                restoreFocus()
+            }
+        }
+    }
+}
+
+/**
+ * The page's anime flow. [request], [onLaunch] and [restoreFocus] may change
+ * from one composition to the next; the controller always uses the latest.
+ */
+@Composable
+fun rememberAnimePlayback(
+    session: PlaybackSession,
+    scope: CoroutineScope,
+    profileId: Int,
+    mediaType: String,
+    mediaTitle: String,
+    request: () -> PlaybackRequest,
+    onLaunch: () -> Unit,
+    restoreFocus: () -> Unit,
+): AnimePlaybackController {
+    val context = LocalContext.current
+    val currentRequest by rememberUpdatedState(request)
+    val currentOnLaunch by rememberUpdatedState(onLaunch)
+    val currentRestoreFocus by rememberUpdatedState(restoreFocus)
+    val controller = remember(session, scope, context, profileId, mediaType, mediaTitle) {
+        AnimePlaybackController(
+            session = session, scope = scope, context = context,
+            profileId = profileId, mediaType = mediaType, mediaTitle = mediaTitle,
+            request = { currentRequest() }, onLaunch = { currentOnLaunch() },
+            restoreFocus = { currentRestoreFocus() },
+        )
+    }
+    controller.extractorLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        controller.onExtractorResult(result)
+    }
+    controller.enumerateLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        controller.onEnumerateResult(result)
+    }
+    AnimePlaybackEffects(controller)
+    return controller
+}
+
+/**
+ * The anime flow's effects. A composable of their own so that the state they
+ * are keyed on is read here, not in the screen function: a failover or a toast
+ * re-runs this, not the whole screen (architecture P1).
+ */
+@Composable
+private fun AnimePlaybackEffects(controller: AnimePlaybackController) {
+    // Auto server-failover: the result handler stashes the next attempt here; run it.
+    LaunchedEffect(controller.failoverRequest) {
+        controller.runFailoverRequest()
+    }
+
+    LaunchedEffect(controller.showNoDub) {
+        if (controller.showNoDub) {
+            delay(2500)
+            controller.showNoDub = false
+        }
+    }
+
+    // 30s on the picker → close it and send the user back to the Yes/No prompt.
+    // NO AUTO-DISMISS. This used to close itself after 30s and drop the viewer
+    // back on the default-server prompt. Reading six provider names, deciding,
+    // and walking a D-pad there is easily slower than that -- and the dialog
+    // vanishing mid-decision looks like the app crashed, then silently undoes
+    // the choice they were making. A picker closes when it is picked or backed
+    // out of; DetailsBackHandlers already covers the second.
+
+    LaunchedEffect(controller.showServerError) {
+        if (controller.showServerError) {
+            delay(2500)
+            controller.showServerError = false
+        }
+    }
+}

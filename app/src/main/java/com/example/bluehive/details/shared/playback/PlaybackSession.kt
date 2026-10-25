@@ -106,7 +106,18 @@ class PlaybackSession internal constructor() {
 @Composable
 fun rememberPlaybackSession(): PlaybackSession {
     val session = remember { PlaybackSession() }
+    PlaybackStageTimer(session)
+    return session
+}
 
+/**
+ * The loading screen's stage timer. A composable of its own so that the flags
+ * it is keyed on are read here, not in the screen function: an extraction
+ * starting, ending or moving to the next source re-runs this and the loading
+ * overlay, not the whole screen (architecture P1).
+ */
+@Composable
+private fun PlaybackStageTimer(session: PlaybackSession) {
     // KEYED ON extractAttempt AS WELL AS isExtracting. A failover keeps the
     // overlay up on purpose (no blink between sources), so isExtracting may not
     // visibly transition between one attempt and the next -- and without a second
@@ -127,5 +138,4 @@ fun rememberPlaybackSession(): PlaybackSession {
             session.extractStage = 0
         }
     }
-    return session
 }

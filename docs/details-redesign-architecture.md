@@ -507,8 +507,8 @@ Each of these can be unified later as its own small change. That's your call, it
 | **3** | One `DetailsHeaderButtons` (including "Loading trailer…"), with the timing set per screen | low–medium (focus) |
 | **4** | `TrailerState`, `FavoriteState`, `ExtrasState`, `DetailsRecommendations`. `DetailsBackHandlers` takes over the Extras handler. The prompt and extraction handlers move in at Stages 6 and 7, registered after it. | medium |
 | **5** | `DetailsScaffold`: both screens plug into the frame, and the play area and the overlays become slots | medium |
-| **6** | Playback core, **movie screen first**: StreamSource, PlaybackRequest, PlaybackSession, both controllers, PlayerIntents, overlays | highest |
-| **7** | The TV screen switches to the same playback core | high |
+| **6** | Playback core, **movie screen first**: StreamSource, PlaybackRequest, PlaybackSession, both controllers, PlayerIntents, the loading and error overlays. Done in four commits, 6a–6d (v384–v387). | highest |
+| **7** | The TV screen switches to the same playback core. The default-server prompt, picker and "Checking servers" overlays join PlaybackOverlays here, where the two screens' copies can be compared. | high |
 | **8** | TV seasons and episodes: availability, season column, episode state, row, card, unaired gate, source overlay, play area, focus map | high (focus) |
 | **9** | Activities: Args, `DetailsBackNavigation`, `DetailsIntents`. Optional 9b: the 6 outside callers use it too. | low–medium |
 | **10** | Lock it in: remove the two `-keep` rules, enforce the size and boundary gates, take the final measurements, update the notes | low |

@@ -38,3 +38,16 @@ val PlaybackRequest.apiSeason: Int? get() = (this as? PlaybackRequest.Episode)?.
 
 /** The backend's episode: none for a film, the same as leaving it out. */
 val PlaybackRequest.apiEpisode: Int? get() = (this as? PlaybackRequest.Episode)?.episode
+
+/** The type an anime extraction is accounted under: "anime_movie" or "anime_tv". */
+val PlaybackRequest.animeType: String
+    get() = when (this) {
+        is PlaybackRequest.Movie -> "anime_movie"
+        is PlaybackRequest.Episode -> "anime_tv"
+    }
+
+/**
+ * Each screen's own log wording, kept: "movie extraction failed" on the movie
+ * screen, "extraction failed" on the TV screen, and so on. Logs only.
+ */
+internal val PlaybackRequest.logPrefix: String get() = if (this is PlaybackRequest.Movie) "movie " else ""

@@ -267,9 +267,7 @@ class SourcePlaybackController internal constructor(
     }
 }
 
-// Each screen's own log wording, kept: "movie extraction failed" / "extraction
-// failed", and so on. Logs only -- nothing reads them.
-private val PlaybackRequest.logPrefix: String get() = if (this is PlaybackRequest.Movie) "movie " else ""
+// Each screen's own log wording, kept (see logPrefix). Logs only -- nothing reads them.
 private val PlaybackRequest.cancelLogTag: String get() = if (this is PlaybackRequest.Movie) "scraper-vidapi" else "scraper-vidfast"
 private fun PlaybackRequest.playingLabel(src: StreamSource): String = when (this) {
     is PlaybackRequest.Movie -> "movie ${src.name}"
@@ -310,7 +308,17 @@ fun rememberSourcePlayback(
     ) { result ->
         controller.onPlayerResult(result)
     }
+    SourcePlaybackEffects(controller)
+    return controller
+}
 
+/**
+ * The source chain's effect. A composable of its own so that the state it is
+ * keyed on is read here, not in the screen function: a source dying in the
+ * player re-runs this, not the whole screen (architecture P1).
+ */
+@Composable
+private fun SourcePlaybackEffects(controller: SourcePlaybackController) {
     // ── FAILOVER, PLAYBACK HALF ─────────────────────────────────────────────
     // The extraction half lives inside extractAndPlay; this is the case it
     // cannot see -- a source whose url looked fine and then died in the player,
@@ -328,5 +336,4 @@ fun rememberSourcePlayback(
     LaunchedEffect(controller.playbackFailedSource) {
         controller.continueAfterPlaybackFailure()
     }
-    return controller
 }
