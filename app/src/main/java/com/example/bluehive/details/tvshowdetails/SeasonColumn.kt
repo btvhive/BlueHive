@@ -10,6 +10,30 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.focus.focusRequester
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
+import kotlinx.coroutines.android.awaitFrame
+
+// Reliable focus for a season button. A season button lives in a LazyColumn,
+// so its FocusRequester only attaches once the row is composed AND placed.
+// Presence in visibleItemsInfo == laid out == requester attached. We scroll
+// it in, wait for that, then requestFocus — with retries so a busy main
+// thread (entering from Continue Watching) can't make Back silently no-op.
+internal suspend fun TvFocusMap.focusSeasonReliably(targetIndex: Int) {
+    if (targetIndex < 0 || targetIndex >= seasons.size) return
+    seasonList.scrollToItem(targetIndex)
+    var attempts = 0
+    while (attempts < 40) {
+        awaitFrame()
+        val laidOut = seasonList.layoutInfo
+            .visibleItemsInfo.any { it.index == targetIndex }
+        if (laidOut) {
+            seasons.getOrNull(targetIndex)?.requestFocus()
+            return
+        }
+        attempts++
+    }
+    // Last-ditch: try anyway so focus is never stranded on the episode tile.
+    seasons.getOrNull(targetIndex)?.requestFocus()
+}
 
 @Composable
 fun SeasonButton(

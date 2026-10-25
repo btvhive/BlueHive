@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
@@ -45,7 +44,6 @@ import androidx.compose.ui.input.key.key
 import android.os.SystemClock
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -74,11 +72,9 @@ import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.SourceCatalog
 import com.example.bluehive.sidebarComponents.FavoritesScreenActivity
 import com.example.bluehive.sidebarComponents.HistoryScreenActivity
@@ -421,13 +417,6 @@ private fun getStreamingSources(
 
 
 
-/**
- * How long a first press on an unaired episode stays armed.
- *
- * Long enough to read the notice and answer it; short enough that the answer is
- * clearly to THAT question. 6s is about two unhurried reads of the band.
- */
-private const val UNAIRED_OVERRIDE_WINDOW_MS = 6_000L
 
 /**
  * How the header buttons press on this screen: quicker than the movie screen's
@@ -542,91 +531,18 @@ fun TVShowsDetailsScreenContent(
     }
 
 
-    var selectedSeason by remember { mutableIntStateOf(1) }  // default to Season 1
-    var episodes by remember { mutableStateOf<List<Episode>>(emptyList()) }
-    var isLoadingEpisodes by remember { mutableStateOf(false) }
-    // 🔹 Focus requesters for episode tiles (rebuilds safely when episodes change)
-    val episodeFocusRequesters = remember(episodes) {
-        List(episodes.size) { FocusRequester() }
+    // The season on show, its episodes, the row's scroll and focus, the open
+    // source overlay and the watched marks -- see EpisodesState. The focus
+    // requesters the sections share -- see TvFocusMap.
+    val episodesState = rememberEpisodesState(coroutineScope, episodesRepository, tmdbId)
+    val focusMap = rememberTvFocusMap(numberOfSeasons) {
+        getStreamingSources(mediaType, mediaId, 1, 1).size.coerceAtLeast(2)
     }
 
-    val seasonFocusRequesters = remember(numberOfSeasons) {
-        if (numberOfSeasons > 0) {
-            List(numberOfSeasons) { FocusRequester() }
-        } else {
-            emptyList()
-        }
-    }
+    // Which unaired episode has been pressed once -- see UnairedGate.
+    val unairedGate = rememberUnairedGate()
 
-
-
-    var lastFocusedEpisodeIndex by remember { mutableIntStateOf(0) }  // ✅ Remember the last focused episode so RIGHT from seasons always restores correctly
-    val episodesRowState = rememberLazyListState() // ✅ Give LazyRow a state so we can scroll before restoring focus
-    // Hold-to-repeat throttle timestamp for the episode row (see EPISODE_NAV_REPEAT_MS).
-    // Plain 1-slot array (NOT observable state) so ticking it never triggers recomposition.
-    val episodeNavGate = remember { longArrayOf(0L) }
-
-    // Hoisted season-column scroll state (the LazyColumn below now uses this
-    // instead of its own local rememberLazyListState) so the episode row's Back
-    // handler can scroll a season button into view before focusing it.
-    val seasonsListState = rememberLazyListState()
-
-    // Reliable focus for a season button. A season button lives in a LazyColumn,
-    // so its FocusRequester only attaches once the row is composed AND placed.
-    // Presence in visibleItemsInfo == laid out == requester attached. We scroll
-    // it in, wait for that, then requestFocus — with retries so a busy main
-    // thread (entering from Continue Watching) can't make Back silently no-op.
-    suspend fun focusSeasonReliably(targetIndex: Int) {
-        if (targetIndex < 0 || targetIndex >= seasonFocusRequesters.size) return
-        seasonsListState.scrollToItem(targetIndex)
-        var attempts = 0
-        while (attempts < 40) {
-            awaitFrame()
-            val laidOut = seasonsListState.layoutInfo
-                .visibleItemsInfo.any { it.index == targetIndex }
-            if (laidOut) {
-                seasonFocusRequesters.getOrNull(targetIndex)?.requestFocus()
-                return
-            }
-            attempts++
-        }
-        // Last-ditch: try anyway so focus is never stranded on the episode tile.
-        seasonFocusRequesters.getOrNull(targetIndex)?.requestFocus()
-    }
-
-
-
-
-    var selectedEpisodeOverlayIndex by remember { mutableIntStateOf(-1) }
-
-    // ── THE WAY PAST THE UNAIRED GATE ─────────────────────────────────
-    //
-    // Which unaired episode has been pressed once, and so will go through on the
-    // next press. -1 for none.
-    //
-    // WHY AN OVERRIDE EXISTS AT ALL. isEpisodeUnaired is a PREDICTION made on
-    // this device from TMDB's air_date -- it is not a fact reported by the
-    // sources that would actually serve the episode. The two can disagree:
-    // provisional simulcast dates, a schedule that moved, a source that has the
-    // file early. Without a way past, one wrong date removes an episode with no
-    // appeal, and that is the only thing in this app that cannot be retried.
-    //
-    // A SECOND PRESS, not a longer one: it needs no new gesture to learn, it
-    // cannot happen by accident, and the first press has already said why.
-    var unairedArmedIndex by remember { mutableIntStateOf(-1) }
-
-    // ✅ Focus requesters for overlay buttons.
-    // Pool sized to the largest provider set we might show — the tv source list
-    // (the anime overlay shows fewer). Deriving the size from getStreamingSources()
-    // means adding a source there also grows this pool, so the inline grid can
-    // never index past it. coerceAtLeast(2) keeps the anime DuB/SuB pair safe.
-    val providerFocusRequesters = remember {
-        List(getStreamingSources(mediaType, mediaId, 1, 1).size.coerceAtLeast(2)) { FocusRequester() }
-    }
-
-    // ✅ Position of the selected episode still in root coordinates
     val density = LocalDensity.current
-    var overlayAnchor by remember { mutableStateOf<Offset?>(null) }
 
 
     // The backdrop trailer: playing, started, extracting, its player -- see
@@ -657,20 +573,14 @@ fun TVShowsDetailsScreenContent(
         onEpisodeSelected(season, episode, epName)
     }
 
-    // Focus requesters
-    // Focus requesters
-    val favoriteFocusRequester = remember { FocusRequester() }
-    val extrasFocusRequester = remember { FocusRequester() }
-    val trailerFocusRequester = remember { FocusRequester() }
-
     // Armed state is a MOMENT, not a mode. Someone who presses once, reads the
     // notice and walks away should not find the episode silently pressable when
     // they come back -- the second press has to be a deliberate answer to the
     // first, which means it has to be soon after it.
-    LaunchedEffect(unairedArmedIndex) {
-        if (unairedArmedIndex >= 0) {
+    LaunchedEffect(unairedGate.armedIndex) {
+        if (unairedGate.armedIndex >= 0) {
             delay(UNAIRED_OVERRIDE_WINDOW_MS)
-            unairedArmedIndex = -1
+            unairedGate.armedIndex = -1
         }
     }
 
@@ -687,11 +597,6 @@ fun TVShowsDetailsScreenContent(
     // with nothing aired yet are left off. Null until the first check answers.
     val listedSeasons = rememberListedSeasons(tmdbId, numberOfSeasons, resumeCount, episodesRepository)
 
-    // Set true by the focused episode tile's onFocusChanged (see Edit 3).
-    // Lets the initial-focus effect below confirm focus actually landed
-    // instead of assuming a fire-and-forget requestFocus() succeeded.
-    var episodeFocusLanded by remember { mutableStateOf(false) }
-
     // ✅ Episode row scroll + initial focus (moved here from above so the
     //    fallback can reach the header requesters).
     //
@@ -705,25 +610,25 @@ fun TVShowsDetailsScreenContent(
     //    screen with nothing focused = stuck. So: scroll, wait until the tile
     //    is actually laid out (presence in visibleItemsInfo => node attached),
     //    request focus, confirm it landed, and only then release the gates.
-    LaunchedEffect(episodes) {
-        if (episodes.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(episodesState.episodes) {
+        if (episodesState.episodes.isEmpty()) return@LaunchedEffect
 
         if (isInitialEpisodeLoad) {
-            val targetIndex = (lastEpisode - 1).coerceIn(0, episodes.lastIndex)
-            lastFocusedEpisodeIndex = targetIndex
-            episodesRowState.scrollToItem(targetIndex)
+            val targetIndex = (lastEpisode - 1).coerceIn(0, episodesState.episodes.lastIndex)
+            episodesState.lastFocusedEpisodeIndex = targetIndex
+            episodesState.rowState.scrollToItem(targetIndex)
 
-            episodeFocusLanded = false
+            episodesState.episodeFocusLanded = false
             var landed = false
             var attempts = 0
             while (attempts < 40 && !landed) {
                 awaitFrame()
-                val laidOut = episodesRowState.layoutInfo
+                val laidOut = episodesState.rowState.layoutInfo
                     .visibleItemsInfo.any { it.index == targetIndex }
                 if (laidOut) {
-                    episodeFocusRequesters.getOrNull(targetIndex)?.requestFocus()
+                    episodesState.focusRequesters.getOrNull(targetIndex)?.requestFocus()
                     awaitFrame()
-                    if (episodeFocusLanded) landed = true
+                    if (episodesState.episodeFocusLanded) landed = true
                 }
                 attempts++
             }
@@ -734,14 +639,14 @@ fun TVShowsDetailsScreenContent(
                 Log.w("TVDetails", "⚠️ Episode focus never landed — falling back to header")
                 blockHeaderInitialFocus = false
                 awaitFrame()
-                favoriteFocusRequester.requestFocus()
+                focusMap.favorite.requestFocus()
             }
 
             blockHeaderInitialFocus = false
             isInitialEpisodeLoad = false
         } else {
-            lastFocusedEpisodeIndex = 0
-            episodesRowState.scrollToItem(0)
+            episodesState.lastFocusedEpisodeIndex = 0
+            episodesState.rowState.scrollToItem(0)
         }
     }
 
@@ -759,25 +664,7 @@ fun TVShowsDetailsScreenContent(
         title     = mediaTitle,
     )
 
-    // ── Watched-episode markers ──────────────────────────────────────────────
-    // (season, episode) pairs this profile has started, for THIS show. Drives the
-    // corner fold on each episode card. Fetched once per show; failures leave the
-    // set empty so the grid simply shows no markers (never blocks the screen).
-    var watchedEpisodes by remember(tmdbId) { mutableStateOf<Set<Pair<Int, Int>>>(emptySet()) }
-
-    suspend fun refreshWatchedEpisodes() {
-        if (favoriteProfileId == -1) return
-        try {
-            val marks = withContext(Dispatchers.IO) {
-                ApiClient.bluehiveApi.getWatchedEpisodes(favoriteProfileId, tmdbId)
-            }
-            watchedEpisodes = marks.map { it.season_number to it.episode_number }.toSet()
-        } catch (e: Exception) {
-            Log.w("TVShowsDetails", "watched-episodes fetch failed (non-fatal): ${e.message}")
-        }
-    }
-
-    LaunchedEffect(tmdbId, favoriteProfileId) { refreshWatchedEpisodes() }
+    LaunchedEffect(tmdbId, favoriteProfileId) { episodesState.refreshWatchedEpisodes(favoriteProfileId) }
 
     // Re-read on every resume. Nothing is marked optimistically any more — the
     // marker follows the backend row, and that row is only written once the player
@@ -787,7 +674,7 @@ fun TVShowsDetailsScreenContent(
     DisposableEffect(lifecycleOwner, tmdbId, favoriteProfileId) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                coroutineScope.launch { refreshWatchedEpisodes() }
+                coroutineScope.launch { episodesState.refreshWatchedEpisodes(favoriteProfileId) }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -811,7 +698,6 @@ fun TVShowsDetailsScreenContent(
     var pendingSeason      by remember { mutableIntStateOf(1) }
     var pendingEpisode     by remember { mutableIntStateOf(1) }
     var pendingEpisodeName by remember { mutableStateOf<String?>(null) }
-    var lastStreamFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
 
     // The anime flow: the DuB/SuB prompt and the server picker, the extraction
     // (backend first, the on-device extractor as the fallback) and the
@@ -830,7 +716,7 @@ fun TVShowsDetailsScreenContent(
         restoreFocus = {
             coroutineScope.launch {
                 awaitFrame()
-                try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
+                try { focusMap.lastStream?.requestFocus() } catch (_: Exception) {}
             }
         },
     )
@@ -863,10 +749,10 @@ fun TVShowsDetailsScreenContent(
         if (anime.showServerPicker || anime.isCheckingServers || anime.showDefaultPrompt) {
             return@RestoreFocusOnPlayerReturn emptyList()
         }
-        lastStreamFocusRequester?.let { streamButton ->
+        focusMap.lastStream?.let { streamButton ->
             listOfNotNull(
                 streamButton,
-                episodeFocusRequesters.getOrNull(lastFocusedEpisodeIndex),
+                episodesState.focusRequesters.getOrNull(episodesState.lastFocusedEpisodeIndex),
             )
         } ?: emptyList()
     }
@@ -896,7 +782,7 @@ fun TVShowsDetailsScreenContent(
         onExtractionCancelled = {
             coroutineScope.launch {
                 awaitFrame()
-                try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
+                try { focusMap.lastStream?.requestFocus() } catch (_: Exception) {}
             }
         },
     )
@@ -905,73 +791,17 @@ fun TVShowsDetailsScreenContent(
         if (showNotYetAvailable) { delay(4000); showNotYetAvailable = false }
     }
 
-    // ── Season loads are SERIALISED, and stale answers are discarded ─────────
-    //
-    // This used to fire a bare coroutineScope.launch per call with no job held
-    // and no staleness check, while nothing debounced the season buttons or
-    // disabled them during a load. Two presses in quick succession therefore left
-    // two requests in flight, and the FIRST to return cleared the spinner and
-    // painted its episodes — under the newly highlighted season heading.
-    //
-    // That is worse than a cosmetic mismatch. Opening an episode from that grid
-    // calls onEpisodeSelected(selectedSeason, episodeNumber, ...) and sets
-    // pendingSeason = selectedSeason, so extractAndPlay and the player extras get
-    // the season the user is LOOKING at paired with an episode number from a
-    // different season — the wrong episode plays, and that pair is what lands in
-    // watch history and drives the watched-corner markers.
-    //
-    // Guarded by a sequence number rather than by comparing seasonNumber, because
-    // that comparison depends on selectedSeason being assigned before the call
-    // (it is today, at the button) and would silently rot if a future caller
-    // ordered it differently. The sequence answers the only question that
-    // matters: is this still the newest request?
-    var seasonLoadSeq by remember { mutableIntStateOf(0) }
-    var seasonLoadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-
-    // 🔹 Helper to load episodes for a given season
-    fun loadSeasonEpisodes(seasonNumber: Int) {
-        seasonLoadJob?.cancel()
-        val mySeq = ++seasonLoadSeq
-        seasonLoadJob = coroutineScope.launch {
-            isLoadingEpisodes = true
-            try {
-                val response = episodesRepository.getSeasonEpisodes(
-                    tmdbId = tmdbId,
-                    seasonNumber = seasonNumber
-                )
-                if (mySeq != seasonLoadSeq) {
-                    Log.d("TVEpisodes", "S$seasonNumber arrived late — discarding")
-                    return@launch
-                }
-                episodes = response.episodes
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                // Superseded by a newer season press. Not a failure, and it must
-                // not reach the catch below or it would blank the grid the newer
-                // request is about to fill.
-                throw e
-            } catch (e: Exception) {
-                Log.e("TVEpisodes", "Error loading episodes for S$seasonNumber", e)
-                if (mySeq == seasonLoadSeq) episodes = emptyList()
-            } finally {
-                // Only the newest request owns the spinner. Clearing it from a
-                // superseded one is what let the previous season's episodes read
-                // as final while the real request was still out.
-                if (mySeq == seasonLoadSeq) isLoadingEpisodes = false
-            }
-        }
-    }
-
     // 🔹 On first entry, auto-load Season 1 if we have seasons
     LaunchedEffect(tmdbId, numberOfSeasons) {
         if (numberOfSeasons > 0) {
-            selectedSeason = lastSeason.coerceIn(1, numberOfSeasons)
+            episodesState.selectedSeason = lastSeason.coerceIn(1, numberOfSeasons)
             val prefetchedEpisodes = prefetch?.episodes
             if (prefetchedEpisodes != null && lastSeason == 1) {
-                episodes = prefetchedEpisodes
-                isLoadingEpisodes = false
+                episodesState.episodes = prefetchedEpisodes
+                episodesState.isLoadingEpisodes = false
                 Log.d("Prefetch", "✅ Episodes loaded from prefetch cache (${prefetchedEpisodes.size} eps)")
             } else {
-                loadSeasonEpisodes(selectedSeason)
+                episodesState.loadSeasonEpisodes(episodesState.selectedSeason)
             }
         }
     }
@@ -981,9 +811,9 @@ fun TVShowsDetailsScreenContent(
     // the grid never shows a season the column does not.
     LaunchedEffect(listedSeasons) {
         val listed = listedSeasons ?: return@LaunchedEffect
-        if (selectedSeason > listed) {
-            selectedSeason = listed
-            loadSeasonEpisodes(listed)
+        if (episodesState.selectedSeason > listed) {
+            episodesState.selectedSeason = listed
+            episodesState.loadSeasonEpisodes(listed)
         }
     }
 
@@ -1039,9 +869,9 @@ fun TVShowsDetailsScreenContent(
         header = DetailsHeaderSpec(
             pressTiming            = TvHeaderPressTiming,
             enableFocus            = !blockHeaderInitialFocus,
-            favoriteFocusRequester = favoriteFocusRequester,
-            extrasFocusRequester   = extrasFocusRequester,
-            trailerFocusRequester  = trailerFocusRequester,
+            favoriteFocusRequester = focusMap.favorite,
+            extrasFocusRequester   = focusMap.extras,
+            trailerFocusRequester  = focusMap.trailer,
         ),
         releaseTrailerOnLeave = true,
         onOpenRecommendation = { media ->
@@ -1078,7 +908,7 @@ fun TVShowsDetailsScreenContent(
         },
         onUpFromRecommendations = {
             BlueHiveApplication.playHoverSound()
-            extrasFocusRequester.requestFocus()
+            focusMap.extras.requestFocus()
             Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonglow should be the extra button's focus glow")
         },
         labels = {
@@ -1118,7 +948,7 @@ fun TVShowsDetailsScreenContent(
                     val listed = listedSeasons ?: 0
                     if (numberOfSeasons > 0 && listed > 0) {
                         val seasons = remember(listed) { (1..listed).toList() }
-                        val listState = seasonsListState
+                        val listState = focusMap.seasonList
 
                         Box(
                             modifier = Modifier
@@ -1138,9 +968,9 @@ fun TVShowsDetailsScreenContent(
                                 itemsIndexed(seasons) { seasonIndex, seasonNumber ->
                                     SeasonButton(
                                         label = "Season $seasonNumber",
-                                        isSelected = (seasonNumber == selectedSeason),
+                                        isSelected = (seasonNumber == episodesState.selectedSeason),
                                         fontFamily = passionFont,
-                                        focusRequester = seasonFocusRequesters[seasonIndex],
+                                        focusRequester = focusMap.seasons[seasonIndex],
                                                 modifier = Modifier.onKeyEvent { event ->
                                             if (event.type == KeyEventType.KeyDown) {
                                                 when (event.key) {
@@ -1160,18 +990,18 @@ fun TVShowsDetailsScreenContent(
                                                         false
                                                     }
                                                     Key.DirectionRight -> {
-                                                        if (episodes.isNotEmpty() && episodeFocusRequesters.isNotEmpty()) {
+                                                        if (episodesState.episodes.isNotEmpty() && episodesState.focusRequesters.isNotEmpty()) {
                                                             BlueHiveApplication.playHoverSound()
 
-                                                            val targetIndex = lastFocusedEpisodeIndex
-                                                                .coerceIn(0, episodeFocusRequesters.lastIndex)
+                                                            val targetIndex = episodesState.lastFocusedEpisodeIndex
+                                                                .coerceIn(0, episodesState.focusRequesters.lastIndex)
 
                                                             coroutineScope.launch {
-                                                                episodesRowState.scrollToItem(targetIndex)
-                                                                episodeFocusRequesters
+                                                                episodesState.rowState.scrollToItem(targetIndex)
+                                                                episodesState.focusRequesters
                                                                     .getOrNull(targetIndex)
                                                                     ?.requestFocus()
-                                                                    ?: episodeFocusRequesters.first().requestFocus()
+                                                                    ?: episodesState.focusRequesters.first().requestFocus()
                                                             }
 
                                                             true
@@ -1186,9 +1016,9 @@ fun TVShowsDetailsScreenContent(
                                             }
                                         },
                                         onClick = {
-                                            if (selectedSeason != seasonNumber) {
-                                                selectedSeason = seasonNumber
-                                                loadSeasonEpisodes(seasonNumber)
+                                            if (episodesState.selectedSeason != seasonNumber) {
+                                                episodesState.selectedSeason = seasonNumber
+                                                episodesState.loadSeasonEpisodes(seasonNumber)
                                             }
                                         },
                                     )
@@ -1254,7 +1084,7 @@ fun TVShowsDetailsScreenContent(
                 //.background(Color.Red)
             ) {
                 when {
-                    isLoadingEpisodes -> {
+                    episodesState.isLoadingEpisodes -> {
                         // Simple loading state (optional)
                         Text(
                             text = "Loading episodes...",
@@ -1266,10 +1096,10 @@ fun TVShowsDetailsScreenContent(
                         )
                     }
 
-                    episodes.isEmpty() -> {
+                    episodesState.episodes.isEmpty() -> {
                         // Optional empty state
                         Text(
-                            text = "No episodes found for Season $selectedSeason",
+                            text = "No episodes found for Season ${episodesState.selectedSeason}",
                             color = Color(0xFFAAAAAA),
                             fontFamily = dongleRegular,
                             fontSize = 23.sp,
@@ -1279,7 +1109,7 @@ fun TVShowsDetailsScreenContent(
                     }
 
                     else -> {
-                        val totalEpisodes = episodes.size
+                        val totalEpisodes = episodesState.episodes.size
 
                         // ✅ "Exposure" style darkening using a color matrix (no alpha usage)
                         val darkenFilter = remember {
@@ -1303,8 +1133,8 @@ fun TVShowsDetailsScreenContent(
 
 
                         LazyRow(
-                            state = episodesRowState,
-                            userScrollEnabled = selectedEpisodeOverlayIndex == -1,
+                            state = episodesState.rowState,
+                            userScrollEnabled = episodesState.selectedEpisodeOverlayIndex == -1,
                             modifier = Modifier.fillMaxSize(),
                             horizontalArrangement = Arrangement.spacedBy(14.dp),
                             contentPadding = PaddingValues(
@@ -1316,18 +1146,18 @@ fun TVShowsDetailsScreenContent(
                         ) {
 
                             itemsIndexed(
-                                items = episodes,
+                                items = episodesState.episodes,
                                 key = { _, ep -> ep.tmdbEpisodeId }
                             ) { index, episode ->
 
                                 var isEpisodeFocused by remember { mutableStateOf(false) }
 
-                                val isEpisodeSelectOverlay = selectedEpisodeOverlayIndex == index
+                                val isEpisodeSelectOverlay = episodesState.selectedEpisodeOverlayIndex == index
 
                                 // Watched marker for THIS episode. watchedEpisodes changes only on
                                 // load and when the user starts a stream, so reading it per item
                                 // costs nothing during D-pad navigation.
-                                val isWatched = (selectedSeason to episode.episodeNumber) in watchedEpisodes
+                                val isWatched = (episodesState.selectedSeason to episode.episodeNumber) in episodesState.watchedEpisodes
 
                                 // Still FOCUSABLE when unaired -- people want to read what is
                                 // coming -- but not pressable. See the scrim below and the
@@ -1346,9 +1176,9 @@ fun TVShowsDetailsScreenContent(
 
 
                                 // 👇 true only when the whole item is within the viewport
-                                val isFullyVisible by remember(episodesRowState, index) {
+                                val isFullyVisible by remember(episodesState.rowState, index) {
                                     derivedStateOf {
-                                        val layoutInfo = episodesRowState.layoutInfo
+                                        val layoutInfo = episodesState.rowState.layoutInfo
                                         val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
                                             ?: return@derivedStateOf false
 
@@ -1368,18 +1198,18 @@ fun TVShowsDetailsScreenContent(
                                     modifier = Modifier
                                         // keep item layout sized to the still image (prevents spacing weirdness)
                                         .width(174.27.dp)
-                                        .focusRequester(episodeFocusRequesters[index])
+                                        .focusRequester(episodesState.focusRequesters[index])
                                         .onFocusChanged { state ->
                                             // hasFocus stays true when any child (like provider buttons) is focused
                                             isEpisodeFocused = state.hasFocus
                                             if (state.hasFocus) {
-                                                lastFocusedEpisodeIndex = index
-                                                episodeFocusLanded = true  // confirms initial focus actually landed
+                                                episodesState.lastFocusedEpisodeIndex = index
+                                                episodesState.episodeFocusLanded = true  // confirms initial focus actually landed
                                                 // Arming belongs to ONE episode. Landing on a
                                                 // different one drops it, so a press here can
                                                 // never be the second half of a pair begun on a
                                                 // neighbour three cards away.
-                                                if (unairedArmedIndex != index) unairedArmedIndex = -1
+                                                if (unairedGate.armedIndex != index) unairedGate.armedIndex = -1
                                             }
                                         }
 
@@ -1388,13 +1218,13 @@ fun TVShowsDetailsScreenContent(
                                                 when (event.key) {
                                                     Key.Back -> {
                                                         when {
-                                                            selectedEpisodeOverlayIndex == index -> {
-                                                                selectedEpisodeOverlayIndex = -1
+                                                            episodesState.selectedEpisodeOverlayIndex == index -> {
+                                                                episodesState.selectedEpisodeOverlayIndex = -1
                                                                 true
                                                             }
-                                                            (listedSeasons ?: numberOfSeasons) > 1 && seasonFocusRequesters.isNotEmpty() -> {
-                                                                val seasonIdx = (selectedSeason - 1)
-                                                                    .coerceIn(0, seasonFocusRequesters.lastIndex)
+                                                            (listedSeasons ?: numberOfSeasons) > 1 && focusMap.seasons.isNotEmpty() -> {
+                                                                val seasonIdx = (episodesState.selectedSeason - 1)
+                                                                    .coerceIn(0, focusMap.seasons.lastIndex)
                                                                 BlueHiveApplication.playHoverSound()
                                                                 // Don't assume the season button is attached. On the
                                                                 // Continue Watching path the episode tile is focused
@@ -1403,7 +1233,7 @@ fun TVShowsDetailsScreenContent(
                                                                 // requestFocus() no-ops and Back appears dead. Scroll
                                                                 // the season in, wait for layout, then focus.
                                                                 coroutineScope.launch {
-                                                                    focusSeasonReliably(seasonIdx)
+                                                                    focusMap.focusSeasonReliably(seasonIdx)
                                                                 }
                                                                 true
                                                             }
@@ -1413,7 +1243,7 @@ fun TVShowsDetailsScreenContent(
 
 
                                                     Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
-                                                        if (isUnaired && unairedArmedIndex != index) {
+                                                        if (isUnaired && unairedGate.armedIndex != index) {
                                                             // REFUSED, NOT IGNORED. Silence here is
                                                             // indistinguishable from a dropped press,
                                                             // and the answer to that is to press again
@@ -1421,20 +1251,20 @@ fun TVShowsDetailsScreenContent(
                                                             // -- and the notice says what a second
                                                             // press will do.
                                                             BlueHiveApplication.playErrorSound()
-                                                            unairedArmedIndex = index
+                                                            unairedGate.armedIndex = index
                                                         } else {
                                                             BlueHiveApplication.playClickSound()
-                                                            unairedArmedIndex = -1
-                                                            selectedEpisodeOverlayIndex = index
+                                                            unairedGate.armedIndex = -1
+                                                            episodesState.selectedEpisodeOverlayIndex = index
                                                         }
                                                         true
                                                     }
 
 
                                                     Key.DirectionDown -> {
-                                                        if (selectedEpisodeOverlayIndex == index) {
+                                                        if (episodesState.selectedEpisodeOverlayIndex == index) {
                                                             // move focus into the provider grid
-                                                            providerFocusRequesters.firstOrNull()?.requestFocus()
+                                                            focusMap.providers.firstOrNull()?.requestFocus()
                                                             true
                                                         } else {
                                                             // Nothing below a tile now that the corner button is
@@ -1444,9 +1274,9 @@ fun TVShowsDetailsScreenContent(
                                                         }
                                                     }
                                                     Key.DirectionLeft, Key.DirectionRight -> {
-                                                        if (selectedEpisodeOverlayIndex == index) {
+                                                        if (episodesState.selectedEpisodeOverlayIndex == index) {
                                                             true
-                                                        } else if (event.key == Key.DirectionRight && index == episodes.lastIndex) {
+                                                        } else if (event.key == Key.DirectionRight && index == episodesState.episodes.lastIndex) {
                                                             // Dead-end: RIGHT on the last episode has nowhere to go —
                                                             // consume it silently (no scroll sound, no no-op traversal).
                                                             true
@@ -1455,10 +1285,10 @@ fun TVShowsDetailsScreenContent(
                                                             // repeats that land sooner than the interval so holding L/R
                                                             // scrolls at a controlled pace, like the Continue Watching list.
                                                             val now = SystemClock.uptimeMillis()
-                                                            if (now - episodeNavGate[0] < EPISODE_NAV_REPEAT_MS) {
+                                                            if (now - episodesState.navGate[0] < EPISODE_NAV_REPEAT_MS) {
                                                                 true   // too soon — consume, no move (and no sound)
                                                             } else {
-                                                                episodeNavGate[0] = now
+                                                                episodesState.navGate[0] = now
                                                                 BlueHiveApplication.playTitleCardNavigation()
                                                                 false  // allow the move
                                                             }
@@ -1509,7 +1339,7 @@ fun TVShowsDetailsScreenContent(
                                             .onGloballyPositioned { coords ->
                                                 // Only care about the box for the *selected* episode’s overlay
                                                 if (isEpisodeSelectOverlay) {
-                                                    overlayAnchor = coords.positionInRoot()
+                                                    episodesState.overlayAnchor = coords.positionInRoot()
                                                 }
                                             }
                                     ) {
@@ -1767,13 +1597,13 @@ fun TVShowsDetailsScreenContent(
 
             if (
                 !extras.isOn &&
-                selectedEpisodeOverlayIndex != -1 &&
-                overlayAnchor != null &&
-                selectedEpisodeOverlayIndex in episodes.indices
+                episodesState.selectedEpisodeOverlayIndex != -1 &&
+                episodesState.overlayAnchor != null &&
+                episodesState.selectedEpisodeOverlayIndex in episodesState.episodes.indices
             ) {
-                val anchor = overlayAnchor!!
+                val anchor = episodesState.overlayAnchor!!
 
-                val selectedEpisode = episodes[selectedEpisodeOverlayIndex]
+                val selectedEpisode = episodesState.episodes[episodesState.selectedEpisodeOverlayIndex]
 
                 // fall back to index+1 if episodeNumber is null
                 val episodeNumber = selectedEpisode.episodeNumber
@@ -1782,13 +1612,13 @@ fun TVShowsDetailsScreenContent(
                 // Japanese animation → 2 buttons (Miruro + VidFast); else the standard set.
                 val episodeSources by produceState(
                     initialValue = emptyList(),
-                    mediaType, mediaId, selectedSeason, episodeNumber, genres, originalLanguage
+                    mediaType, mediaId, episodesState.selectedSeason, episodeNumber, genres, originalLanguage
                 ) {
                     if (isJapaneseAnimation(genres, originalLanguage)) {
                         value = buildJapaneseAnimationSources(
                             mediaType     = mediaType,
                             tmdbId        = mediaId,
-                            seasonNumber  = selectedSeason,
+                            seasonNumber  = episodesState.selectedSeason,
                             episodeNumber = episodeNumber,
                         ) { c, n, u -> StreamSource(c, n, u) }
                     } else {
@@ -1802,7 +1632,7 @@ fun TVShowsDetailsScreenContent(
                         value = getStreamingSources(
                             mediaType = mediaType,
                             mediaId = mediaId,
-                            seasonNumber = selectedSeason,
+                            seasonNumber = episodesState.selectedSeason,
                             episodeNumber = episodeNumber
                         )
                         com.example.bluehive.api.SourceCatalog
@@ -1810,7 +1640,7 @@ fun TVShowsDetailsScreenContent(
                         value = getStreamingSources(
                             mediaType = mediaType,
                             mediaId = mediaId,
-                            seasonNumber = selectedSeason,
+                            seasonNumber = episodesState.selectedSeason,
                             episodeNumber = episodeNumber
                         )
                     }
@@ -1836,54 +1666,54 @@ fun TVShowsDetailsScreenContent(
                             // Empty means produceState has not finished; once it
                             // has, the list always holds at least VidFast.
                             resolving       = episodeSources.isEmpty(),
-                            focusRequesters = providerFocusRequesters,
+                            focusRequesters = focusMap.providers,
                             onDub = { url ->
                                 val epName = selectedEpisode.title
-                                stopTrailerAndSelectEpisode(selectedSeason, episodeNumber, epName)
+                                stopTrailerAndSelectEpisode(episodesState.selectedSeason, episodeNumber, epName)
                                 // NOT marked watched here. Picking DuB only opens the
                                 // server prompt — extraction can still fail, find no
                                 // servers, or be cancelled. The mark happens where the
                                 // stream actually plays (see the extractor result
                                 // handler, alongside logWatchHistory).
-                                lastStreamFocusRequester = providerFocusRequesters.getOrNull(0)
+                                focusMap.lastStream = focusMap.providers.getOrNull(0)
                                 anime.pendingUrl         = url
                                 anime.pendingDub         = true
-                                pendingSeason      = selectedSeason
+                                pendingSeason      = episodesState.selectedSeason
                                 pendingEpisode     = episodeNumber
                                 pendingEpisodeName = epName
                                 anime.showDefaultPrompt  = true
                             },
                             onSub = { url ->
                                 val epName = selectedEpisode.title
-                                stopTrailerAndSelectEpisode(selectedSeason, episodeNumber, epName)
+                                stopTrailerAndSelectEpisode(episodesState.selectedSeason, episodeNumber, epName)
                                 // NOT marked watched here — same reason as onDub above.
-                                lastStreamFocusRequester = providerFocusRequesters.getOrNull(1)
+                                focusMap.lastStream = focusMap.providers.getOrNull(1)
                                 anime.pendingUrl         = url
                                 anime.pendingDub         = false
-                                pendingSeason      = selectedSeason
+                                pendingSeason      = episodesState.selectedSeason
                                 pendingEpisode     = episodeNumber
                                 pendingEpisodeName = epName
                                 anime.showDefaultPrompt  = true
                             },
                             onUnavailable = { showNotYetAvailable = true },
                             onBack = {
-                                selectedEpisodeOverlayIndex = -1
-                                val targetIndex = lastFocusedEpisodeIndex
-                                    .coerceIn(0, episodeFocusRequesters.lastIndex)
-                                episodeFocusRequesters[targetIndex].requestFocus()
+                                episodesState.selectedEpisodeOverlayIndex = -1
+                                val targetIndex = episodesState.lastFocusedEpisodeIndex
+                                    .coerceIn(0, episodesState.focusRequesters.lastIndex)
+                                episodesState.focusRequesters[targetIndex].requestFocus()
                             }
                         )
                     } else {
                         EpisodeProviderInlineButtons(
                             passionFont = passionFont,
                             sources = episodeSources,
-                            focusRequesters = providerFocusRequesters,
+                            focusRequesters = focusMap.providers,
                             onSourceSelected = { source ->
                                 val epName = selectedEpisode.title
 
                                 // Remember which button launched this so focus comes
                                 // back here when the player exits (THE RULE).
-                                lastStreamFocusRequester = providerFocusRequesters.getOrNull(
+                                focusMap.lastStream = focusMap.providers.getOrNull(
                                     episodeSources.indexOfFirst { it.name == source.name }
                                 )
 
@@ -1893,18 +1723,18 @@ fun TVShowsDetailsScreenContent(
                                 // same chain as a dead one. The episode overlay STAYS
                                 // open behind the player, which keeps this button
                                 // attached so focus can return to it on the way back.
-                                pendingSeason      = selectedSeason
+                                pendingSeason      = episodesState.selectedSeason
                                 pendingEpisode     = episodeNumber
                                 pendingEpisodeName = epName
                                 sourcePlayback.start(source)
                             },
                             onBack = {
-                                selectedEpisodeOverlayIndex = -1
+                                episodesState.selectedEpisodeOverlayIndex = -1
 
-                                val targetIndex = lastFocusedEpisodeIndex
-                                    .coerceIn(0, episodeFocusRequesters.lastIndex)
+                                val targetIndex = episodesState.lastFocusedEpisodeIndex
+                                    .coerceIn(0, episodesState.focusRequesters.lastIndex)
 
-                                episodeFocusRequesters[targetIndex].requestFocus()
+                                episodesState.focusRequesters[targetIndex].requestFocus()
                             },
                         )
                     }
@@ -1927,7 +1757,7 @@ fun TVShowsDetailsScreenContent(
                 onDismissed = {
                     coroutineScope.launch {
                         awaitFrame()
-                        try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
+                        try { focusMap.lastStream?.requestFocus() } catch (_: Exception) {}
                     }
                 },
             )
@@ -1944,9 +1774,9 @@ fun TVShowsDetailsScreenContent(
             // Says what the first press did and what a second will do. Carries the
             // date so the viewer can judge for themselves whether we have it wrong --
             // which is the entire point of offering the override.
-            if (unairedArmedIndex >= 0) {
+            if (unairedGate.armedIndex >= 0) {
                 val armedDate = formatEpisodeAirDate(
-                    episodes.getOrNull(unairedArmedIndex)?.airDate
+                    episodesState.episodes.getOrNull(unairedGate.armedIndex)?.airDate
                 )
                 DetailsToast(
                     if (armedDate.isNotEmpty())
