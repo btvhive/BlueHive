@@ -1,6 +1,9 @@
 # Favorites and Home redesign: architecture plan
 
-**Status:** approved 2026-10-25. Stage 0 is done: the two launch records, the two ratchets, and the size and speed baselines in `docs/favorites-home-redesign-baseline.md`. Next is F1.
+**Status:** approved 2026-10-25.
+- Stage 0 is done: the two launch records, the two ratchets, and the size and speed baselines in `docs/favorites-home-redesign-baseline.md`.
+- F1 is done (v406): Favorites is in `favorites/`, and `FavoritesScreen` is down to 4,977 units / 141 registers. The on-device check of v406 is still to run.
+- Next is F2.
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
 
@@ -87,7 +90,7 @@ app/src/main/java/com/example/bluehive/
 - **`FavoritesScreenActivity` moves into `favorites/`**, class name unchanged. The manifest, `DetailsBackNavigation` and the home sidebar's import are updated (compile-checked).
 - **`HomeScreenCompose`, the Activity, stays where it is** (`com.example.bluehive.HomeScreenCompose`). It is the app's hub: the manifest, the profile picker and notes across the app name it. Only the screen moves into `home/`.
 - **Helpers other screens use stay where they are:** `HistoryDropdown` (the History screen), `MediaCard`, `TitleCardPress`, `ModularButton`, `ShelfStack`, the trailer, trending and Continue Watching sections, `CloseApplicationHandler`, `RetryOverlay` and `ProfileEntryOverlay`.
-- **`favorites/` and `home/` never import each other or any details package.** The boundary gate enforces it (§8).
+- **`favorites/` and `home/` never use each other's internals or any details internals.** Each screen is reached only through its entry points: Favorites through `FavoritesScreenActivity` and `openFavoritesScreen` (the home sidebar opens it this way), details through its two Activities. To build its launch, Favorites also uses `DetailsExtra` and `putDetailsExtras` (§4). The boundary gate enforces it (§8).
 
 ---
 
@@ -248,8 +251,9 @@ Speed is measured before and after (needs your OK to drive the boxes):
   - Then one budget holds for `details/`, `favorites/` and `home/`.
   - The report on the rest of the app drops to 2,500 units, to show the next candidates.
 - **The boundary gate** gains rules:
-  - `favorites/` and `home/` never import each other or any details package.
-  - Outside code reaches Favorites only through `FavoritesScreenActivity` and `openFavoritesScreen`.
+  - Outside code reaches Favorites only through `FavoritesScreenActivity` and `openFavoritesScreen` (live since F1).
+  - `favorites/` uses no details code but the two details Activities and `DetailsExtra` / `putDetailsExtras`, and nothing in `home/` (live since F1).
+  - `home/` gets its rule with H1: only `HomeScreenCompose` uses it. Like all code outside `details/`, it already reaches details only through the two Activities.
 - **`verifyReleaseOnDevice`** stays as it is.
 
 **JVM tests.** The Stage 0 record pins what can be read today; the rest arrives as the logic is lifted out (as in the details redesign):
@@ -279,6 +283,7 @@ Speed is measured before and after (needs your OK to drive the boxes):
 | 3 | The home function re-runs every 6 s | fixed in H1: a performance fix, nothing on screen changes |
 | 4 | The TV Shows and Anime shelves log a line on every recomposition | kept; #3 removes most of those lines |
 | 5 | Favorites and Home build their own details-launch extras, with `""` and `"N/A"` defaults (Home adds budget and revenue), unlike `DetailsIntents` | kept per screen, pinned by tests |
+| 6 | Found in F1. In Favorites' press-and-prefetch, a failed details request fails its `async`, which cancels the pressing coroutine. The `try`/`catch` logs that and clears the navigating flag, but the request's exception still travels up to the screen's coroutine scope. What that does on a box (a crash, or a scope that stops launching) is untested | kept: `prefetchDetailsLaunch` starts the requests in the same scope as before; candidate fix after the split |
 
 ---
 

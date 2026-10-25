@@ -272,7 +272,7 @@
             android:theme="@style/Theme.BlueHive" />
 
         <activity
-            android:name=".sidebarComponents.FavoritesScreenActivity"
+            android:name=".favorites.FavoritesScreenActivity"
             android:exported="false"
             android:noHistory="true"
             android:screenOrientation="landscape"

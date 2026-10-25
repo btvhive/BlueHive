@@ -5,9 +5,9 @@ import android.content.Intent
 import android.util.Log
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.SourceScreen
+import com.example.bluehive.favorites.FavoritesScreenActivity
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.searchBarComponent.SearchBarActivity
-import com.example.bluehive.sidebarComponents.FavoritesScreenActivity
 import com.example.bluehive.sidebarComponents.HistoryScreenActivity
 
 /**

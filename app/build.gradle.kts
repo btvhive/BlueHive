@@ -475,7 +475,8 @@ val verifyReleaseOnDevice by tasks.registering {
 // HomeScreenComposeContent: they may not grow, and each ceiling drops after
 // every stage until the function is under the budget and leaves the list. The
 // ceilings sit about 1% (code units) and 2.5% (registers) above the size
-// measured at the last stage, for the reason below.
+// measured at the last stage, for the reason below. Since Stage F1 the budget
+// also holds for everything else written in favorites/.
 //
 // R8 re-decides inlining across the whole app on every build, so a function
 // can grow a little with its source unchanged (Stage 1: +42 units when five
@@ -501,9 +502,9 @@ val checkMethodSizes by tasks.registering {
         val warnUnits = 5_000
         // Being split by the Favorites and Home redesign (units to registers).
         // At Stage 0 (v405): FavoritesScreen 5,660 / 209, HomeScreenComposeContent
-        // 5,030 / 118.
+        // 5,030 / 118. At F1 (v406): FavoritesScreen 4,977 / 141.
         val shrinking = mapOf(
-            "SidebarFavoritesKt.FavoritesScreen" to (5_720 to 214),
+            "FavoritesScreenKt.FavoritesScreen" to (5_030 to 145),
             "HomeScreenComposeKt.HomeScreenComposeContent" to (5_080 to 121),
         )
 
@@ -559,6 +560,8 @@ val checkMethodSizes by tasks.registering {
                 simple.startsWith("TVShowsDetailsScreenCompose") ||
                 simple.startsWith("MoviesDetailsScreenCompose")
         }
+        fun inBudget(origin: String): Boolean =
+            inDetails(origin) || origin.startsWith("com.example.bluehive.favorites.")
 
         data class Method(val key: String, val origin: String, val units: Int, val registers: Int)
         val methods = ArrayList<Method>()
@@ -589,7 +592,7 @@ val checkMethodSizes by tasks.registering {
                         t.startsWith("insns size ") && registers >= 0 -> {
                             val units = t.substringAfter(':').trim().substringBefore(' ').toIntOrNull() ?: 0
                             val origin = owner["$cls.$name"] ?: cls
-                            if (units >= 1_000 || inDetails(origin)) {
+                            if (units >= 1_000 || inBudget(origin)) {
                                 methods += Method("${origin.substringAfterLast('.')}.$name", origin, units, registers)
                             }
                         }
@@ -599,10 +602,10 @@ val checkMethodSizes by tasks.registering {
             p.waitFor()
         }
 
-        val details = methods.filter { inDetails(it.origin) }
-        if (details.isEmpty()) throw GradleException("checkMethodSizes: found no details-screen methods - the dex parse is broken")
+        if (methods.none { inDetails(it.origin) }) throw GradleException("checkMethodSizes: found no details-screen methods - the dex parse is broken")
+        val budgeted = methods.filter { inBudget(it.origin) && it.key !in shrinking }
         val problems = mutableListOf<String>()
-        for (m in details) {
+        for (m in budgeted) {
             if (m.units > maxUnits || m.registers > maxRegisters) {
                 problems += "${m.key} is ${m.units} units / ${m.registers} registers " +
                     "(budget $maxUnits / $maxRegisters). Split it -- see the note above checkMethodSizes."
@@ -620,8 +623,8 @@ val checkMethodSizes by tasks.registering {
         if (gone.isNotEmpty()) {
             logger.lifecycle("checkMethodSizes: no longer in the APK, take off the shrinking list: ${gone.joinToString()}")
         }
-        logger.lifecycle("checkMethodSizes: largest details-screen methods (budget $maxUnits units / $maxRegisters registers):")
-        details.sortedByDescending { it.units }.take(5).forEach { m ->
+        logger.lifecycle("checkMethodSizes: largest methods in details/ and favorites/ (budget $maxUnits units / $maxRegisters registers):")
+        budgeted.sortedByDescending { it.units }.take(5).forEach { m ->
             logger.lifecycle("  %6d units %4d regs  %s".format(m.units, m.registers, m.key))
         }
         if (split.isNotEmpty()) {
@@ -632,7 +635,7 @@ val checkMethodSizes by tasks.registering {
             }
         }
         val giants = methods.filter {
-            !inDetails(it.origin) && it.key !in shrinking &&
+            !inBudget(it.origin) && it.key !in shrinking &&
                 it.origin.startsWith("com.example.bluehive.") && it.units >= warnUnits
         }
         if (giants.isNotEmpty()) {
@@ -654,7 +657,7 @@ tasks.matching { it.name == "assembleRelease" }.configureEach {
     finalizedBy(checkMethodSizes, verifyReleaseOnDevice)
 }
 
-// ── Details screens: who may use whom ────────────────────────────────────────
+// ── Details and Favorites screens: who may use whom ──────────────────────────
 //
 // The details redesign (docs/details-redesign-architecture.md §5) splits the
 // two screens into details/moviesdetails, details/tvshowdetails and
@@ -665,6 +668,12 @@ tasks.matching { it.name == "assembleRelease" }.configureEach {
 //   - moviesdetails never uses tvshowdetails, and the other way round;
 //   - details/shared uses neither screen;
 //   - code outside details/ reaches a screen only through its Activity.
+// The Favorites and Home redesign (docs/favorites-home-redesign-architecture.md
+// §8) walls in favorites/ the same way, from Stage F1:
+//   - code outside favorites/ reaches it only through FavoritesScreenActivity
+//     and openFavoritesScreen;
+//   - favorites/ uses no details code but the two Activities and the launch
+//     types DetailsExtra and putDetailsExtras, and nothing in home/.
 // Whole-line comments are skipped. Anything else that names a forbidden
 // package fails, including a trailing comment -- reword the comment.
 val checkDetailsBoundaries by tasks.registering {
@@ -678,6 +687,19 @@ val checkDetailsBoundaries by tasks.registering {
             "com.example.bluehive.details.tvshowdetails.TVShowsDetailsScreenCompose",
         )
         val screenRef = Regex("""com\.example\.bluehive\.details\.(moviesdetails|tvshowdetails)((?:\.[A-Za-z_][A-Za-z0-9_]*)*)(\.\*)?""")
+        val favoritesEntryPoints = setOf(
+            "com.example.bluehive.favorites.FavoritesScreenActivity",
+            "com.example.bluehive.favorites.openFavoritesScreen",
+        )
+        val favoritesLaunchTypes = setOf(
+            "com.example.bluehive.details.shared.navigation.DetailsExtra",
+            "com.example.bluehive.details.shared.navigation.putDetailsExtras",
+        )
+        val favoritesRef = Regex("""com\.example\.bluehive\.favorites((?:\.[A-Za-z_][A-Za-z0-9_]*)*)(\.\*)?""")
+        val sharedRef = Regex("""com\.example\.bluehive\.details\.shared((?:\.[A-Za-z_][A-Za-z0-9_]*)*)(\.\*)?""")
+        val homeRef = Regex("""com\.example\.bluehive\.home\b""")
+        fun through(m: MatchResult, allowed: Set<String>) =
+            m.groupValues[2].isEmpty() && allowed.any { m.value == it || m.value.startsWith("$it.") }
         val problems = mutableListOf<String>()
         appDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { file ->
             val rel = file.relativeTo(appDir).invariantSeparatorsPath
@@ -685,6 +707,7 @@ val checkDetailsBoundaries by tasks.registering {
                 rel.startsWith("details/moviesdetails/") -> "moviesdetails"
                 rel.startsWith("details/tvshowdetails/") -> "tvshowdetails"
                 rel.startsWith("details/") -> "shared"
+                rel.startsWith("favorites/") -> "favorites"
                 else -> "outside"
             }
             file.readLines().forEachIndexed { index, raw ->
@@ -700,10 +723,22 @@ val checkDetailsBoundaries by tasks.registering {
                     }
                     if (!allowed) problems += "$rel:${index + 1}: $area code must not use ${m.value}"
                 }
+                if (area == "favorites") {
+                    sharedRef.findAll(raw).filterNot { through(it, favoritesLaunchTypes) }.forEach { m ->
+                        problems += "$rel:${index + 1}: favorites code must not use ${m.value}"
+                    }
+                    homeRef.findAll(raw).forEach { m ->
+                        problems += "$rel:${index + 1}: favorites code must not use ${m.value}"
+                    }
+                } else {
+                    favoritesRef.findAll(raw).filterNot { through(it, favoritesEntryPoints) }.forEach { m ->
+                        problems += "$rel:${index + 1}: $area code must not use ${m.value}"
+                    }
+                }
             }
         }
         if (problems.isNotEmpty()) {
-            throw GradleException("Details boundary check failed:\n" + problems.joinToString("\n") { "  - $it" })
+            throw GradleException("Boundary check failed:\n" + problems.joinToString("\n") { "  - $it" })
         }
     }
 }

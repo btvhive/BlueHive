@@ -14,9 +14,9 @@ import org.junit.Test
  * getMediaDetails answer fetched on the press, `entry` the pressed card's
  * FavoriteEntry. These differ from DetailsIntents on purpose (§9, #5).
  *
- * Stage F1 moves the launch into FavoritesLaunch, which builds these as a typed
- * list; its test checks that list against this record. Until then the test
- * below keeps the record internally consistent.
+ * Since Stage F1 FavoritesLaunch builds these as typed lists, and
+ * FavoritesLaunchTest checks them against this record. The test below keeps
+ * the record itself consistent.
  */
 object FavoritesLaunchExtrasGolden {
 

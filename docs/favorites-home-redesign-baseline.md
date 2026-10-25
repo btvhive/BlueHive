@@ -48,7 +48,7 @@ Read off `navigateToDetails` and `HomeScreenCompose.openDetailsScreen` by script
 
 ## Speed
 
-Measured 2026-10-25 between 17:20 and 17:55, with the user's OK and nobody watching. The scripts are `tools/details-perf/measure_frames.sh` and `tools/favorites-home-perf/` (see its README). **Compare each box only with itself:** gfxinfo counts differently on Android 7 and Android 14.
+Measured 2026-10-25 between 16:58 and 17:22 UTC (12:58–13:22 on the boxes' clocks), with the user's OK and nobody watching. The scripts are `tools/details-perf/measure_frames.sh` and `tools/favorites-home-perf/` (see its README). **Compare each box only with itself:** gfxinfo counts differently on Android 7 and Android 14.
 
 | | onn box | Fire Stick (AFTMM) |
 |---|---|---|
@@ -108,3 +108,23 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 | Stage | Build | FavoritesScreen | HomeScreenComposeContent | Verified on the onn box |
 |---|---|---|---|---|
 | 0 | v405 code (the APK was up to date: no app code changed) | 5,660 units, 209 registers | 5,030 units, 118 registers | v405: 12,726 classes, 0 failures |
+| F1 | v406 | 4,977 units, 141 registers (ceiling now 5,030 / 145) | 5,030 units, 118 registers | not yet: both boxes were playing video at build time (17:50 UTC) |
+
+### F1 (v406)
+
+- **FavoritesScreen: 5,660 → 4,977 units, 209 → 141 registers.** What moved out of its source: the ~30 constants, the two lists, the six buttons' configs (their `Color` and `Dp` values included), and the press-and-prefetch (whose coroutine was already a method of its own).
+- **The rest of `favorites/` is under the budget, and `checkMethodSizes` now enforces that.** The largest:
+
+| Method | Code units | Registers |
+|---|---|---|
+| `prefetchDetailsLaunch` (the press-and-prefetch) | 1,160 | 29 |
+| the grid cell (the `itemsIndexed` content) | 1,127 | 58 |
+| `FavoritesStyleKt.<clinit>` (every constant, built once) | 651 | 60 |
+| `navigateToDetails`' coroutine, now only the launch | 382 | 32 |
+| `toFavoriteEntry` | 203 | 28 |
+
+- **R8 still packs FavoritesScreen with other code.** In v406 it ships in `kotlin.io.ByteStreamsKt`, next to `DetailsBackHandlers`, `DetailsToast`, the extraction messages and `TvWideLazyRow`. F2 and F3 keep shrinking it.
+- **Gates:**
+  - JVM unit tests: 207 pass. 13 are new: `FavoriteEntryTest` (5) and `FavoritesLaunchTest` (8).
+  - `checkMethodSizes`: passes. Proven to fail with the budget lowered to 1,100 units (it flagged two `favorites/` methods) and with the ceiling below 4,977 (lowered for one run, not committed).
+  - `checkDetailsBoundaries`: passes. Proven to fail with throwaway files. It flagged `DetailsIntents` and `home` used from `favorites/`, and `FavoriteEntry` used from outside. It let `DetailsExtra` and `openFavoritesScreen` through.

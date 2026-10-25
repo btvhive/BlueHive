@@ -1,11 +1,5 @@
-package com.example.bluehive.sidebarComponents
+package com.example.bluehive.favorites
 
-import android.content.Context
-import android.content.Intent
-import android.os.Bundle
-import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -66,146 +60,37 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import com.example.bluehive.BlueHiveApplication
-import com.example.bluehive.details.moviesdetails.MoviesDetailsScreenCompose
 import com.example.bluehive.R
-import com.example.bluehive.SourceScreen
-import com.example.bluehive.details.tvshowdetails.TVShowsDetailsScreenCompose
 import com.example.bluehive.api.ApiClient
-import com.example.bluehive.api.MediaDetailResponse
 import com.example.bluehive.models.MediaItem
-import com.example.bluehive.repository.EpisodesRepository
-import com.example.bluehive.repository.RecommendationsRepository
+import com.example.bluehive.sidebarComponents.HistoryDropdown
 import com.example.bluehive.utilities.AppTypography
 import com.example.bluehive.utilities.MediaCard
 import com.example.bluehive.utilities.ModularButton
-import com.example.bluehive.utilities.ModularButtonAnimationConfig
-import com.example.bluehive.utilities.ModularButtonColors
-import com.example.bluehive.utilities.ModularButtonDimensions
-import com.example.bluehive.utilities.ModularButtonGlowConfig
-import com.example.bluehive.utilities.ModularButtonTextConfig
 import com.exjunk.lib.thanos.vanish.VanishContainer
 import com.exjunk.lib.thanos.vanish.VanishEffect.vanishable
 import com.exjunk.lib.thanos.vanish.VanishGLSurfaceView
 import com.exjunk.lib.thanos.vanish.rememberVanishController
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Internal model — merges FavoriteResponse + TMDB details into one object
-// ─────────────────────────────────────────────────────────────────────────────
-
-private data class FavoriteEntry(
-    val favoriteId:      Int,
-    val tmdbId:          Int,
-    val mediaType:       String,
-    val addedAt:         String,
-    val title:           String        = "",
-    val posterPath:      String?       = null,
-    val backdropPath:    String?       = null,
-    val releaseDate:     String?       = null,
-    val voteAverage:     Double?       = null,
-    val overview:        String?       = null,
-    val contentRating:   String?       = null,
-    val originalLanguage: String?      = null,
-    val numberOfSeasons: Int?          = null,
-    val runtime:         Int?          = null,
-    val status:          String?       = null,
-    val trailerUrl:      String?       = null,
-    val logoUrl:         String?       = null,
-    val genresList:      List<String>  = emptyList(),
-    val genresString:    String        = "N/A",
-)
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Entry point
-// ─────────────────────────────────────────────────────────────────────────────
-
-fun openFavoritesScreen(context: Context, profileId: Int = -1) {
-    context.startActivity(
-        Intent(context, FavoritesScreenActivity::class.java)
-            .putExtra("PROFILE_ID", profileId)
-    )
-}
-
-class FavoritesScreenActivity : ComponentActivity() {
-
-    private val refreshTrigger = mutableIntStateOf(0)
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
-        WindowCompat.setDecorFitsSystemWindows(window, false)
-        WindowInsetsControllerCompat(window, window.decorView).apply {
-            hide(WindowInsetsCompat.Type.systemBars())
-            systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-        }
-
-        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                BlueHiveApplication.playBackOutSound()
-                finish()
-            }
-        })
-
-        val profileId = intent.getIntExtra("PROFILE_ID", -1)
-        setContent {
-            FavoritesScreen(profileId = profileId, refreshTrigger = refreshTrigger.intValue)
-        }
-    }
-
-    override fun onResume() {
-        super.onResume()
-        refreshTrigger.intValue++
-    }
-
-    override fun onPause() {
-        super.onPause()
-        // glSurfaceView lifecycle handled by VanishContainer internally
-    }
-}
 
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Main composable
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The Favorites screen: the profile's favourites as a grid of title cards, with
+ * Filter, Sort, the type tabs and remove mode. FavoritesScreenActivity shows it.
+ *
+ * Moved here from sidebarComponents/SidebarFavorites.kt in Stage F1 of the
+ * Favorites and Home redesign (docs/favorites-home-redesign-architecture.md),
+ * with its constants in FavoritesStyle, the model in FavoriteEntry and the
+ * details launch in FavoritesLaunch.
+ */
 @Composable
 fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
-
-    // ── Grid layout config ────────────────────────────────────────────────────
-    val cardsPerRow           = 7          // max cards in a single row
-    val cardHorizontalSpacing = 8.dp       // horizontal gap between cards
-    val rowSpacing            = 12.dp      // vertical gap between rows
-    val gridOffsetY           = 118.dp     // top of grid, below the control bar
-    val gridHeight            = 430.dp     // visible scroll window height
-    val navigationCooldownMs  = 80L       // originally 120
-
-    // ── Header config ─────────────────────────────────────────────────────────
-    val headerText     = "Favorite Content"
-    val headerFontSize = 29f
-    val headerOpacity  = 0.95f
-    val headerOffsetX  = 55.dp
-    val headerOffsetY  = 25.dp
-
-    // ── Dropdown config ───────────────────────────────────────────────────────
-    val dropdownOffsetX = 55.dp
-    val dropdownOffsetY = 70.dp
-    val dropdownSpacing = 170.dp
-
-    // ── Filter tab config ─────────────────────────────────────────────────────
-    val filterButtonOffsetX = 618.dp
-    val filterButtonOffsetY = 60.dp
-    val filterButtonWidth   = 90.dp
-    val filterButtonSpacing = filterButtonWidth + 9.dp
 
     // ── Data state ────────────────────────────────────────────────────────────
     val favEntries   = remember { mutableStateListOf<FavoriteEntry>() }
@@ -218,17 +103,6 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
 
 
     // ── Filter / sort state ───────────────────────────────────────────────────
-    val genres = listOf(
-        "All Content",
-        "Action", "Adventure", "Animation", "Comedy", "Crime",
-        "Documentary", "Drama", "Family", "Fantasy", "History",
-        "Horror", "Music", "Mystery", "Romance", "Science Fiction",
-        "TV Movie", "Thriller", "War", "Western",
-        "Action & Adventure", "Kids", "News", "Reality",
-        "Sci-Fi & Fantasy", "Soap", "Talk", "War & Politics",
-    )
-    val sortOptions = listOf("Newest", "Oldest", "A–Z", "Z–A", "By Release Date")
-
     var selectedGenre         by remember { mutableStateOf("All Content") }
     var selectedSort          by remember { mutableStateOf("Newest") }
     var isAnyDropdownExpanded by remember { mutableStateOf(false) }
@@ -293,18 +167,6 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
     }
 
 
-
-    // ── Button colors (shared) ────────────────────────────────────────────────
-    val mainDefault          = Color(0xFF192C6F)
-    val mainFocused          = Color(0xFF4C63AC)
-    val mainToggled          = Color(0xFF101628)
-    val secondDefault        = Color(0xFF151C3A)
-    val secondFocused        = Color(0xFF2E325F)
-    val secondToggled        = Color(0xFF1B1C34)
-    val textUnfocused        = Color(0xFF868686)
-    val textFocused          = Color(0xFFDADADA)
-    val textUnfocusedToggled = Color(0xFF343434)
-    val textToggledFocus     = Color(0xFFDADADA)
 
     // ── MediaCard painters — loaded once, reused for every card ──────────────
     val backgroundPainter = painterResource(id = R.drawable.titlecard_base)
@@ -507,7 +369,7 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                 } else {
                     // Item isn't composed yet (far away) — fall back to item-based scroll
                     // but target one row above so it doesn't slam to the top edge
-                    val rowAbove = (index - cardsPerRow).coerceAtLeast(0)
+                    val rowAbove = (index - CARDS_PER_ROW).coerceAtLeast(0)
                     gridState.animateScrollToItem(rowAbove)
                 }
             }
@@ -520,85 +382,7 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
         isNavigating = true
         coroutineScope.launch {
             try {
-                val detailsDeferred = async {
-                    ApiClient.trailerApi.getMediaDetails(
-                        tmdbId    = entry.tmdbId,
-                        mediaType = entry.mediaType,
-                    )
-                }
-                val episodesDeferred = if (entry.mediaType == "tv") {
-                    async {
-                        try {
-                            EpisodesRepository().getSeasonEpisodes(
-                                tmdbId       = entry.tmdbId,
-                                seasonNumber = 1,
-                            ).episodes
-                        } catch (_: Exception) { null }
-                    }
-                } else null
-                val recsDeferred = async {
-                    try {
-                        RecommendationsRepository().getRecommendations(
-                            entry.tmdbId, entry.mediaType,
-                        )
-                    } catch (_: Exception) { emptyList() }
-                }
-
-                delay(800)
-
-                val details = detailsDeferred.await()
-                val app = context.applicationContext as? BlueHiveApplication
-                app?.storePrefetch(
-                    BlueHiveApplication.MediaPrefetchData(
-                        tmdbId          = entry.tmdbId,
-                        mediaType       = entry.mediaType,
-                        episodes        = episodesDeferred?.await(),
-                        recommendations = recsDeferred.await(),
-                    )
-                )
-
-                val logoUrl      = (details.logos as? String)?.takeIf { it.isNotBlank() } ?: ""
-                val genresString = entry.genresString
-
-                val intent = if (entry.mediaType == "movie") {
-                    Intent(context, MoviesDetailsScreenCompose::class.java).apply {
-                        putExtra("media_type",          details.media_type)
-                        putExtra("media_id",            details.tmdb_id)
-                        putExtra("media_title",         details.title ?: "")
-                        putExtra("poster_url",          details.poster_path ?: "")
-                        putExtra("backdrop_url",        details.backdrop_path ?: "")
-                        putExtra("youtube_trailer_url", details.youtube_trailer_url ?: "")
-                        putExtra("overview",            details.overview ?: "")
-                        putExtra("vote_average",        details.vote_average ?: 0.0)
-                        putExtra("contentRating",       details.content_rating ?: "N/A")
-                        putExtra("original_language",   details.original_language ?: "N/A")
-                        putExtra("release_date",        details.release_date ?: "N/A")
-                        putExtra("logo_url",            logoUrl)
-                        putExtra("genres",              genresString)
-                        putExtra("PROFILE_ID",          profileId)
-                        putExtra("SOURCE_SCREEN",       SourceScreen.FAVORITES)
-                    }
-                } else {
-                    Intent(context, TVShowsDetailsScreenCompose::class.java).apply {
-                        putExtra("media_type",          details.media_type)
-                        putExtra("media_id",            details.tmdb_id)
-                        putExtra("media_title",         details.title ?: "")
-                        putExtra("poster_url",          details.poster_path ?: "")
-                        putExtra("backdrop_url",        details.backdrop_path ?: "")
-                        putExtra("youtube_trailer_url", details.youtube_trailer_url ?: "")
-                        putExtra("overview",            details.overview ?: "")
-                        putExtra("vote_average",        details.vote_average ?: 0.0)
-                        putExtra("contentRating",       details.content_rating ?: "N/A")
-                        putExtra("original_language",   details.original_language ?: "N/A")
-                        putExtra("release_date",        details.release_date ?: "N/A")
-                        putExtra("logo_url",            logoUrl)
-                        putExtra("genres",              genresString)
-                        putExtra("number_of_seasons",   details.number_of_seasons ?: 0)
-                        putExtra("status",              details.status ?: "N/A")
-                        putExtra("PROFILE_ID",          profileId)
-                        putExtra("SOURCE_SCREEN",       SourceScreen.FAVORITES)
-                    }
-                }
+                val intent = prefetchDetailsLaunch(context, entry, profileId)
 
                 isNavigating = false
                 context.startActivity(intent)
@@ -715,10 +499,10 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
 
             // ── Header — switches to remove mode instruction when active ──────
             Text(
-                text       = if (removeMode) "Click on any media you want to remove" else headerText,
-                fontSize   = headerFontSize.sp,
+                text       = if (removeMode) "Click on any media you want to remove" else HEADER_TEXT,
+                fontSize   = HEADER_FONT_SIZE.sp,
                 fontFamily = AppTypography.lalezarRegular,
-                color      = Color.White.copy(alpha = headerOpacity),
+                color      = Color.White.copy(alpha = HEADER_OPACITY),
                 modifier   = Modifier
                     .align(Alignment.TopStart)
                     .offset(x = headerOffsetX, y = headerOffsetY),
@@ -727,7 +511,7 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
             // ── Dropdowns ─────────────────────────────────────────────────────
             HistoryDropdown(
                 label                    = "Filter",
-                options                  = genres,
+                options                  = genreOptions,
                 selectedOption           = selectedGenre,
                 onOptionSelected         = { selectedGenre = it },
                 buttonWidth              = 160.dp,
@@ -757,7 +541,7 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
 
             // ── Remove Media button ───────────────────────────────────────────
             ModularButton(
-                textConfig      = ModularButtonTextConfig(text = "Remove Media", fontSize = 9f),
+                textConfig      = removeMediaText,
                 isToggleable    = true,
                 externalToggled = removeMode,
                 isFocusable     = true,
@@ -801,38 +585,15 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                     .onFocusChanged {
                         if (it.isFocused && hoverArmed) BlueHiveApplication.playHoverSound()
                     },
-                dimensions = ModularButtonDimensions(
-                    mainWidth          = 80.dp,
-                    mainHeight         = 27.dp,
-                    mainYOffset        = 7.3.dp,
-                    secondWidth        = 80.dp,
-                    secondHeight       = 12.dp,
-                    secondYOffset      = 26.dp,
-                    mainCornerRadius   = 7f,
-                    secondCornerRadius = 8f,
-                    shadowHeight       = 12.dp,
-                    glowWidth          = 80.dp + 14.2.dp,
-                    glowHeight         = 41.dp,
-                ),
-                colors = ModularButtonColors(
-                    mainDefault          = Color(0xFF6D2121),
-                    mainToggled          = Color(0xFF280D0D),
-                    mainFocused          = Color(0xFFAD2626),
-                    secondDefault        = Color(0xFF3A1515),
-                    secondToggled        = Color(0xFF341B1B),
-                    secondFocused        = Color(0xFF783535),
-                    textFocused          = Color(0xFFDADADA),
-                    textUnfocused        = Color(0xFF848383),
-                    textUnfocusedToggled = Color(0xFF343434),
-                    textToggledFocus     = Color(0xFFDADADA),
-                ),
-                glowConfig = filterButtonGlowConfig(),
-                animationConfig = filterButtonAnimationConfig(),
+                dimensions = removeMediaDimensions,
+                colors = removeMediaColors,
+                glowConfig = buttonGlow,
+                animationConfig = buttonAnimation,
             )
 
             // ── All Media button ──────────────────────────────────────────────
             ModularButton(
-                textConfig      = ModularButtonTextConfig(text = "All Media", fontSize = 10f),
+                textConfig      = allMediaText,
                 isToggleable    = true,
                 externalToggled = selectedFilter == "all",
                 isFocusable     = selectedFilter != "all",
@@ -860,15 +621,15 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                         }
                         false
                     },
-                dimensions      = filterButtonDimensions(filterButtonWidth),
-                colors          = filterButtonColors(mainDefault, mainFocused, mainToggled, secondDefault, secondFocused, secondToggled, textFocused, textUnfocused, textUnfocusedToggled, textToggledFocus),
-                glowConfig      = filterButtonGlowConfig(),
-                animationConfig = filterButtonAnimationConfig(),
+                dimensions      = filterTabDimensions,
+                colors          = filterTabColors,
+                glowConfig      = buttonGlow,
+                animationConfig = buttonAnimation,
             )
 
             // ── Movies button ─────────────────────────────────────────────────
             ModularButton(
-                textConfig      = ModularButtonTextConfig(text = "Movies", fontSize = 10f),
+                textConfig      = moviesText,
                 isToggleable    = true,
                 externalToggled = selectedFilter == "movies",
                 isFocusable     = selectedFilter != "movies",
@@ -896,15 +657,15 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                         }
                         false
                     },
-                dimensions      = filterButtonDimensions(filterButtonWidth),
-                colors          = filterButtonColors(mainDefault, mainFocused, mainToggled, secondDefault, secondFocused, secondToggled, textFocused, textUnfocused, textUnfocusedToggled, textToggledFocus),
-                glowConfig      = filterButtonGlowConfig(),
-                animationConfig = filterButtonAnimationConfig(),
+                dimensions      = filterTabDimensions,
+                colors          = filterTabColors,
+                glowConfig      = buttonGlow,
+                animationConfig = buttonAnimation,
             )
 
             // ── TV Shows button ───────────────────────────────────────────────
             ModularButton(
-                textConfig      = ModularButtonTextConfig(text = "TV Shows", fontSize = 10f),
+                textConfig      = tvShowsText,
                 isToggleable    = true,
                 externalToggled = selectedFilter == "tv",
                 isFocusable     = selectedFilter != "tv",
@@ -935,10 +696,10 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                         }
                         false
                     },
-                dimensions      = filterButtonDimensions(filterButtonWidth),
-                colors          = filterButtonColors(mainDefault, mainFocused, mainToggled, secondDefault, secondFocused, secondToggled, textFocused, textUnfocused, textUnfocusedToggled, textToggledFocus),
-                glowConfig      = filterButtonGlowConfig(),
-                animationConfig = filterButtonAnimationConfig(),
+                dimensions      = filterTabDimensions,
+                colors          = filterTabColors,
+                glowConfig      = buttonGlow,
+                animationConfig = buttonAnimation,
             )
 
             // ── Media card grid ───────────────────────────────────────────────
@@ -972,7 +733,7 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                             },
                     ) {
                         LazyVerticalGrid(
-                            columns           = GridCells.Fixed(cardsPerRow),
+                            columns           = GridCells.Fixed(CARDS_PER_ROW),
                             state             = gridState,
                             userScrollEnabled = false,
                             modifier          = Modifier
@@ -1122,7 +883,7 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
 
                                             when (event.key) {
                                                 Key.DirectionLeft -> {
-                                                    if (now - lastNavTime < navigationCooldownMs) return@onKeyEvent true
+                                                    if (now - lastNavTime < NAVIGATION_COOLDOWN_MS) return@onKeyEvent true
                                                     lastNavTime = now
                                                     if (focusedGridIndex > 0) {
                                                         focusGridItem(focusedGridIndex - 1)  // removed scroll = false
@@ -1131,7 +892,7 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                                                 }
 
                                                 Key.DirectionRight -> {
-                                                    if (now - lastNavTime < navigationCooldownMs) return@onKeyEvent true
+                                                    if (now - lastNavTime < NAVIGATION_COOLDOWN_MS) return@onKeyEvent true
                                                     lastNavTime = now
                                                     if (focusedGridIndex < filteredEntries.lastIndex) {
                                                         focusGridItem(focusedGridIndex + 1)  // removed scroll = false
@@ -1141,9 +902,9 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
 
 
                                                 Key.DirectionUp -> {
-                                                    if (now - lastNavTime < navigationCooldownMs) return@onKeyEvent true
+                                                    if (now - lastNavTime < NAVIGATION_COOLDOWN_MS) return@onKeyEvent true
                                                     lastNavTime = now
-                                                    val target = focusedGridIndex - cardsPerRow
+                                                    val target = focusedGridIndex - CARDS_PER_ROW
                                                     if (target >= 0) {
                                                         focusGridItem(target)
                                                     } else {
@@ -1155,16 +916,16 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                                                 }
 
                                                 Key.DirectionDown -> {
-                                                    if (now - lastNavTime < navigationCooldownMs) return@onKeyEvent true
+                                                    if (now - lastNavTime < NAVIGATION_COOLDOWN_MS) return@onKeyEvent true
                                                     lastNavTime = now
-                                                    val target = focusedGridIndex + cardsPerRow
+                                                    val target = focusedGridIndex + CARDS_PER_ROW
                                                     if (target <= filteredEntries.lastIndex) {
                                                         focusGridItem(target)
                                                         BlueHiveApplication.playTitleCardNavigation()
                                                     } else {
                                                         // Target overshoots — check if there are items on the last row below current index
                                                         val lastRowStart =
-                                                            (filteredEntries.lastIndex / cardsPerRow) * cardsPerRow
+                                                            (filteredEntries.lastIndex / CARDS_PER_ROW) * CARDS_PER_ROW
                                                         if (focusedGridIndex < lastRowStart) {
                                                             // We're not yet on the last row — land on the last item
                                                             focusGridItem(filteredEntries.lastIndex)
@@ -1351,8 +1112,6 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                     )
 
                     // ── Buttons row ───────────────────────────────────────
-                    val overlayButtonWidth = 200.dp
-
                     androidx.compose.foundation.layout.Row(
                         horizontalArrangement = Arrangement.spacedBy(
                             16.dp, Alignment.CenterHorizontally
@@ -1361,7 +1120,7 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                     ) {
                         // Accept Changes — blue 3D button
                         ModularButton(
-                            textConfig      = ModularButtonTextConfig(text = "Accept Changes", fontSize = 10f),
+                            textConfig      = acceptChangesText,
                             isToggleable    = false,
                             isFocusable     = true,
                             fontFamily      = AppTypography.interBold,
@@ -1415,38 +1174,15 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                                         }
                                     } else false
                                 },
-                            dimensions = ModularButtonDimensions(
-                                mainWidth          = overlayButtonWidth,
-                                mainHeight         = 30.dp,
-                                mainYOffset        = 7.dp,
-                                secondWidth        = overlayButtonWidth,
-                                secondHeight       = 12.dp,
-                                secondYOffset      = 29.dp,
-                                mainCornerRadius   = 8f,
-                                secondCornerRadius = 8f,
-                                shadowHeight       = 12.dp,
-                                glowWidth          = overlayButtonWidth + 14.2.dp,
-                                glowHeight         = 44.dp,
-                            ),
-                            colors = ModularButtonColors(
-                                mainDefault          = Color(0xFF192C6F),
-                                mainFocused          = Color(0xFF2A4BAA),
-                                mainToggled          = Color(0xFF192C6F),
-                                secondDefault        = Color(0xFF151C3A),
-                                secondFocused        = Color(0xFF2E325F),
-                                secondToggled        = Color(0xFF151C3A),
-                                textFocused          = Color(0xFFDADADA),
-                                textUnfocused        = Color(0xFFAAAAAA),
-                                textUnfocusedToggled = Color(0xFFAAAAAA),
-                                textToggledFocus     = Color(0xFFDADADA),
-                            ),
-                            glowConfig      = filterButtonGlowConfig(),
-                            animationConfig = filterButtonAnimationConfig(),
+                            dimensions = overlayButtonDimensions,
+                            colors = acceptChangesColors,
+                            glowConfig      = buttonGlow,
+                            animationConfig = buttonAnimation,
                         )
 
                         // Undo Changes — red 3D button
                         ModularButton(
-                            textConfig      = ModularButtonTextConfig(text = "Undo Changes", fontSize = 10f),
+                            textConfig      = undoChangesText,
                             isToggleable    = false,
                             isFocusable     = true,
                             fontFamily      = AppTypography.interBold,
@@ -1485,33 +1221,10 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
                                         }
                                     } else false
                                 },
-                            dimensions = ModularButtonDimensions(
-                                mainWidth          = overlayButtonWidth,
-                                mainHeight         = 30.dp,
-                                mainYOffset        = 7.dp,
-                                secondWidth        = overlayButtonWidth,
-                                secondHeight       = 12.dp,
-                                secondYOffset      = 29.dp,
-                                mainCornerRadius   = 8f,
-                                secondCornerRadius = 8f,
-                                shadowHeight       = 12.dp,
-                                glowWidth          = overlayButtonWidth + 14.2.dp,
-                                glowHeight         = 44.dp,
-                            ),
-                            colors = ModularButtonColors(
-                                mainDefault          = Color(0xFF6D2121),
-                                mainFocused          = Color(0xFFAA2A2A),
-                                mainToggled          = Color(0xFF6D2121),
-                                secondDefault        = Color(0xFF3A1515),
-                                secondFocused        = Color(0xFF783535),
-                                secondToggled        = Color(0xFF3A1515),
-                                textFocused          = Color(0xFFDADADA),
-                                textUnfocused        = Color(0xFFAAAAAA),
-                                textUnfocusedToggled = Color(0xFFAAAAAA),
-                                textToggledFocus     = Color(0xFFDADADA),
-                            ),
-                            glowConfig      = filterButtonGlowConfig(),
-                            animationConfig = filterButtonAnimationConfig(),
+                            dimensions = overlayButtonDimensions,
+                            colors = undoChangesColors,
+                            glowConfig      = buttonGlow,
+                            animationConfig = buttonAnimation,
                         )
                     }
                 }
@@ -1521,105 +1234,6 @@ fun FavoritesScreen(profileId: Int = -1, refreshTrigger: Int = 0) {
     }   // closes main Box fillMaxSize
 
 }   // closes FavoritesScreen
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Extension — MediaDetailResponse → FavoriteEntry
-// ─────────────────────────────────────────────────────────────────────────────
-
-private fun MediaDetailResponse.toFavoriteEntry(
-    favoriteId: Int,
-    addedAt:    String,
-): FavoriteEntry {
-    val parsedGenres: List<String> = try {
-        val raw = genres as? String ?: ""
-        val arr = org.json.JSONArray(raw)
-        (0 until arr.length()).mapNotNull { arr.getJSONObject(it).optString("name", null) }
-    } catch (_: Exception) { emptyList() }
-
-    val genresStr = parsedGenres.joinToString(", ").ifBlank { "N/A" }
-    val logoStr   = (logos as? String)?.takeIf { it.isNotBlank() } ?: ""
-
-    return FavoriteEntry(
-        favoriteId       = favoriteId,
-        tmdbId           = tmdb_id,
-        mediaType        = media_type,
-        addedAt          = addedAt,
-        title            = title ?: "Unknown",
-        posterPath       = poster_path,
-        backdropPath     = backdrop_path,
-        releaseDate      = release_date,
-        voteAverage      = vote_average,
-        overview         = overview,
-        contentRating    = content_rating,
-        originalLanguage = original_language,
-        numberOfSeasons  = number_of_seasons,
-        runtime          = runtime,
-        status           = status,
-        trailerUrl       = youtube_trailer_url,
-        logoUrl          = logoStr,
-        genresList       = parsedGenres,
-        genresString     = genresStr,
-    )
-}
-
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Shared button config helpers — keeps ModularButton call sites lean
-// ─────────────────────────────────────────────────────────────────────────────
-
-private fun filterButtonDimensions(buttonWidth: androidx.compose.ui.unit.Dp) =
-    ModularButtonDimensions(
-        mainWidth          = buttonWidth,
-        mainHeight         = 27.dp,
-        mainYOffset        = 6.5.dp,
-        secondWidth        = buttonWidth,
-        secondHeight       = 12.dp,
-        secondYOffset      = 26.dp,
-        mainCornerRadius   = 7f,
-        secondCornerRadius = 8f,
-        shadowHeight       = 12.dp,
-        glowWidth          = buttonWidth + 14.2.dp,
-        glowHeight         = 41.dp,
-    )
-
-private fun filterButtonColors(
-    mainDefault: Color, mainFocused: Color, mainToggled: Color,
-    secondDefault: Color, secondFocused: Color, secondToggled: Color,
-    textFocused: Color, textUnfocused: Color,
-    textUnfocusedToggled: Color, textToggledFocus: Color,
-) = ModularButtonColors(
-    mainDefault          = mainDefault,
-    mainToggled          = mainToggled,
-    mainFocused          = mainFocused,
-    secondDefault        = secondDefault,
-    secondToggled        = secondToggled,
-    secondFocused        = secondFocused,
-    textFocused          = textFocused,
-    textUnfocused        = textUnfocused,
-    textUnfocusedToggled = textUnfocusedToggled,
-    textToggledFocus     = textToggledFocus,
-)
-
-private fun filterButtonGlowConfig() =
-    ModularButtonGlowConfig(
-        enabled               = true,
-        defaultRes            = R.drawable.button_focus_wide_glow,
-        offsetX               = (-6.85).dp,
-        offsetY               = 7.dp,
-        cornerRadius          = 100.dp,
-        fadeOutDurationMillis = 200,
-        fadeInDurationMillis  = 400,
-    )
-
-private fun filterButtonAnimationConfig() =
-    ModularButtonAnimationConfig(
-        pressOffset           = 3.5.dp,
-        textOffsetDefault     = 7.9.dp,
-        textOffsetPressed     = 9.9.dp,
-        durationMillis        = 110,
-        bounceBackDelayMillis = 200,
-    )
 
 
 // =========================================================== DO NOT DELETE ===============================================================
@@ -1633,4 +1247,3 @@ fun FavoritesScreenPreview() {
     FavoritesScreen()
 }
 // =========================================================== DO NOT DELETE ===============================================================
-

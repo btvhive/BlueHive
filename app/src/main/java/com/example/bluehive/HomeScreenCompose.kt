@@ -53,13 +53,13 @@ import com.example.bluehive.auth.SessionManager
 import com.example.bluehive.catalog.openMediaCatalogScreen
 import com.example.bluehive.searchBarComponent.openSearchScreen
 import com.example.bluehive.continueWatchingComponents.HomeScreenContinueWatchingCompose
+import com.example.bluehive.favorites.openFavoritesScreen
 import com.example.bluehive.homeScreenSectionRules.CAROUSEL_AUTO_CYCLE_DELAY_MS
 import com.example.bluehive.homeScreenSectionRules.LocalCarouselCycleTick
 import com.example.bluehive.latestTrailersComponents.HomeScreenTrailerSectionCompose
 import com.example.bluehive.latestTrailersComponents.TrailerFrameState
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.sidebarComponents.HomeScreenSidebarCompose
-import com.example.bluehive.sidebarComponents.openFavoritesScreen
 import com.example.bluehive.sidebarComponents.openHistoryScreen
 import com.example.bluehive.sidebarComponents.openProfileScreen
 import com.example.bluehive.singleShelfComponents.ShelfStack
