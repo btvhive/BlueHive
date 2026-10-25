@@ -229,7 +229,11 @@ class SelfUpdateActivity : ComponentActivity() {
      */
     private val canClearSpace = MutableStateFlow(false)
 
-    /** The verified APK, kept so a retry does not re-download 163MB. */
+    /**
+     * The verified APK, kept so a retry before the install session takes it does
+     * not re-download 163MB. Once the session has its copy, install() deletes the
+     * file and beginInstall() downloads again.
+     */
     @Volatile private var downloadedApk: java.io.File? = null
 
     /** Guards against two installs in flight from a double press. */
@@ -725,8 +729,9 @@ class SelfUpdateActivity : ComponentActivity() {
             progress.value = 1f
             status.value = "Ready to install"
             // KEPT so a retry re-installs the file we already verified rather than
-            // pulling 163MB again. On a slow connection a re-download is the
-            // difference between "press it again" and "wait four minutes".
+            // pulling 163MB again -- until the install session has its own copy.
+            // install() deletes it then, because on a nearly full Fire TV Stick
+            // the extra 166 MB decides whether the install fits at all.
             downloadedApk = apk
             beginInstall()
 

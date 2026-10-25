@@ -150,13 +150,14 @@ object UpdateManager {
     /**
      * Delete update APKs left in the cache by an earlier process.
      *
-     * WHY THIS IS NEEDED AT ALL. The success path cannot clean up after itself:
+     * WHY THIS IS NEEDED AT ALL. Nothing after commit() ever runs on success:
      * PackageInstaller replaces the app and the OS kills this process the moment
-     * it lands, so nothing after commit() ever runs. The ~170MB download was
-     * therefore left sitting in cacheDir until the NEXT update happened to sweep
-     * it — which on a device that updates monthly is a month of dead weight on a
-     * 4.7GB partition. That is the same partition an install needs headroom on,
-     * and running out of it is how an update fails with STATUS_FAILURE_STORAGE.
+     * it lands. install() now deletes the download just before commit, but a
+     * process killed mid-download, or a session write that threw, still leaves
+     * the ~170MB file in cacheDir until something sweeps it — on a device that
+     * updates monthly, a month of dead weight on a 4.7GB partition. That is the
+     * same partition an install needs headroom on, and running out of it is how
+     * an update fails with STATUS_FAILURE_STORAGE.
      *
      * DELETES EVERY MATCH, not just versions at or below the installed one.
      * Keeping a newer one would only be worth doing if a later run could reuse
@@ -482,6 +483,13 @@ object UpdateManager {
                     apk.inputStream().use { input -> input.copyTo(out) }
                     session.fsync(out)
                 }
+                // Android has its own copy now, so drop ours BEFORE it checks the
+                // room the install needs. Kept, the download sat in cacheDir through
+                // the install and asked for ~166 MB more free space than Off-Grid
+                // Drive does for the same APK (about 1,125 MB against 959 MB on a
+                // Fire TV Stick). A retry finds the file gone and downloads it
+                // again -- beginInstall() already handles that.
+                apk.delete()
                 val intent = Intent(context, SelfUpdateInstallReceiver::class.java)
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or
                         (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)

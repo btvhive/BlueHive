@@ -19,9 +19,6 @@ dependencyResolutionManagement {
         google()
         mavenCentral()
         maven { url = uri("https://jitpack.io") }
-
-        // ✅ Mozilla's official repo for GeckoView
-        maven { url = uri("https://maven.mozilla.org/maven2/") }
     }
 }
 

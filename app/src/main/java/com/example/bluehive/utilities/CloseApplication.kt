@@ -283,7 +283,7 @@ internal fun performClose(
      * would buy nothing and cost them a cold start.
      *
      * TRUE FOR THE IDLE CLOSE, where the process living on is the actual problem:
-     * four hours of accumulated Coil caches, GeckoView helper processes and bitmap
+     * four hours of accumulated Coil caches, extractor processes and bitmap
      * history on a 2GB box, and nothing about to reuse any of it.
      */
     killProcess: Boolean = false,

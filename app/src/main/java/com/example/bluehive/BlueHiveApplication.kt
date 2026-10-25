@@ -1,5 +1,6 @@
 package com.example.bluehive
 
+import com.example.bluehive.utilities.SoundPrefs
 import android.app.ActivityManager
 import android.app.Application
 import android.content.ComponentCallbacks2
@@ -27,7 +28,6 @@ import com.example.bluehive.api.LockoutBus
 import com.example.bluehive.api.SessionExpiredBus
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.webview.BeeLogo
-import com.example.bluehive.webview.GeckoWebViewManager
 import com.example.bluehive.auth.DeviceEventStream
 import com.example.bluehive.auth.EntitlementLockBus
 import com.example.bluehive.auth.HostEntitlementRelay
@@ -46,7 +46,7 @@ import kotlinx.coroutines.launch
  * BlueHiveApplication - Compose-Optimized
  *
  * Memory Strategy:
- * - Disk Cache: 300MB
+ * - Disk Cache: 200MB
  * - Memory Cache: 25MB hard cap
  * - Single unified ImageLoader instance
  */
@@ -93,7 +93,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
             private set
 
         // Image cache configuration
-        private const val DISK_CACHE_SIZE_MB     = 300L
+        private const val DISK_CACHE_SIZE_MB     = 200L
         // Memory cache is PERCENT-of-heap, not a fixed cap. The old 25 MB hard
         // cap couldn't hold even the visible home screen imagery, so Coil was
         // constantly evicting + re-decoding (thrash = jank). Hardware bitmaps
@@ -125,7 +125,6 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         private var buttonClickSoundId: Int = 0
         private var backOutSoundId: Int = 0
         private var lastButtonClickPlayTime: Long = 0L
-        private var webViewerClickSoundId: Int = 0
         private var profileSwapSoundId: Int = 0
         private var lastProfileSwapPlayTime: Long = 0L
         private var errorSoundId: Int = 0
@@ -149,7 +148,6 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         private const val BUTTON_CLICK_VOLUME         = 0.3f
         private const val PROFILE_SWAP_VOLUME         = 0.45f
         private const val BACK_OUT_VOLUME             = 0.35f
-        private const val WEBVIEWER_CLICK_VOLUME      = 0.35f
         private const val ERROR_VOLUME                = 0.45f
 
         /**
@@ -159,9 +157,29 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
          * the same value twice, which is two chances to typo one channel quieter
          * than the other. The trailing 0, 0, 1f (priority, loop, rate) were
          * identical everywhere too.
+         *
+         * AND THE ONE PLACE THE PROFILE'S SOUND SETTINGS APPLY (Settings >
+         * Sounds, see SoundPrefs). Each sample keeps its own level relative to
+         * the others; the profile's volume scales all of them together, and its
+         * switches silence a whole kind. Gating here covers every call site in
+         * the app without touching one -- and media playback never comes
+         * through here, so it is untouched by design.
          */
-        private fun play(soundId: Int, volume: Float) {
-            soundPool?.play(soundId, volume, volume, 0, 0, 1f)
+        private fun play(soundId: Int, volume: Float, kind: SoundPrefs.Kind) {
+            if (!SoundPrefs.allows(kind)) return
+            val v = volume * SoundPrefs.gain
+            soundPool?.play(soundId, v, v, 0, 0, 1f)
+        }
+
+        /**
+         * The Sounds page's volume bar: one click at [percent], so each step is
+         * heard as it is chosen. Ignores the per-kind switches -- turning clicks
+         * off must not make the volume bar silent -- but not the mute.
+         */
+        fun playVolumePreview(percent: Int) {
+            if (SoundPrefs.current.muted || percent <= 0) return
+            val v = BUTTON_CLICK_VOLUME * percent / 100f
+            soundPool?.play(buttonClickSoundId, v, v, 0, 0, 1f)
         }
 
         private const val BUTTON_CLICK_DEBOUNCE_MS = 120L
@@ -186,18 +204,13 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
                 buttonNavigationSoundId    = soundPool!!.load(context, R.raw.button_navigation, 1)
                 buttonClickSoundId         = soundPool!!.load(context, R.raw.button_click, 1)
                 backOutSoundId             = soundPool!!.load(context, R.raw.backedout, 1)
-                webViewerClickSoundId      = soundPool!!.load(context, R.raw.webviewerclick, 1)
                 profileSwapSoundId         = soundPool!!.load(context, R.raw.profile_swap, 1)
                 errorSoundId               = soundPool!!.load(context, R.raw.error, 1)
             }
         }
 
-        fun playWebViewerClickSound() {
-            play(webViewerClickSoundId, WEBVIEWER_CLICK_VOLUME)
-        }
-
         fun playTitleCardNavigation() {
-            play(titleCardNavigationSoundId, TITLECARD_NAVIGATION_VOLUME)
+            play(titleCardNavigationSoundId, TITLECARD_NAVIGATION_VOLUME, SoundPrefs.Kind.NAV)
         }
 
         /**
@@ -247,18 +260,18 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
 
         fun playHoverSound() {
             if (SystemClock.uptimeMillis() < hoverMuteUntil) return
-            play(buttonNavigationSoundId, BUTTON_NAVIGATION_VOLUME)
+            play(buttonNavigationSoundId, BUTTON_NAVIGATION_VOLUME, SoundPrefs.Kind.NAV)
         }
 
         fun playClickSound() {
             val now = SystemClock.uptimeMillis()
             if (now - lastButtonClickPlayTime < BUTTON_CLICK_DEBOUNCE_MS) return
             lastButtonClickPlayTime = now
-            play(buttonClickSoundId, BUTTON_CLICK_VOLUME)
+            play(buttonClickSoundId, BUTTON_CLICK_VOLUME, SoundPrefs.Kind.CLICK)
         }
 
         fun playBackOutSound() {
-            play(backOutSoundId, BACK_OUT_VOLUME)
+            play(backOutSoundId, BACK_OUT_VOLUME, SoundPrefs.Kind.CLICK)
         }
 
         /**
@@ -274,7 +287,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
             val now = SystemClock.uptimeMillis()
             if (now - lastErrorPlayTime < ERROR_DEBOUNCE_MS) return
             lastErrorPlayTime = now
-            play(errorSoundId, ERROR_VOLUME)
+            play(errorSoundId, ERROR_VOLUME, SoundPrefs.Kind.ERROR)
         }
 
         /**
@@ -293,7 +306,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
             val now = SystemClock.uptimeMillis()
             if (now - lastProfileSwapPlayTime < NAV_SOUND_DEBOUNCE_MS) return
             lastProfileSwapPlayTime = now
-            play(profileSwapSoundId, PROFILE_SWAP_VOLUME)
+            play(profileSwapSoundId, PROFILE_SWAP_VOLUME, SoundPrefs.Kind.NAV)
         }
 
         /**
@@ -318,7 +331,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
             if (now < hoverMuteUntil) return
             if (now - lastNavClickPlayTime < NAV_SOUND_DEBOUNCE_MS) return
             lastNavClickPlayTime = now
-            play(buttonNavigationSoundId, BUTTON_NAVIGATION_VOLUME)
+            play(buttonNavigationSoundId, BUTTON_NAVIGATION_VOLUME, SoundPrefs.Kind.NAV)
         }
 
         fun releaseSoundPool() {
@@ -713,8 +726,9 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         }
 
         // ── Multi-process guard ──────────────────────────────────────────────
-        // GeckoView spawns helper processes (:tab*, :gpu, :crashhelper) that
-        // share our Application class. Each one re-runs onCreate(), and without
+        // The :extractor and :phoenix processes share our Application class
+        // (and GeckoView's helper processes did, until it was removed in v371).
+        // Each one re-runs onCreate(), and without
         // this guard each one would call DeviceEventStream.start() and open
         // its own SSE — leading to N concurrent streams per device and the
         // "stuck is_device_active" bug, since each stream's finally block
@@ -762,11 +776,10 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
 
         SessionManager.init(this)
 
-        // Playback settings are keyed by profile, so this MUST come after
-        // SessionManager.init — before it there is no profile id to read and the
-        // first details screen of a cold start would show the default instead of
-        // the viewer's saved choice.
-        com.example.bluehive.utilities.PlaybackPrefs.load(this)
+        // Interface sounds per profile: the last profile's, until one is
+        // entered. Before anything can play a sound -- see SoundPrefs.
+        SoundPrefs.init(this)
+
         // HostTokenProvider.init() removed 2026-08-16. It bound a service
         // connection to Off-Grid Drive at startup so tokens could be fetched over
         // AIDL. TokenProvider replaces it and needs no initialisation — it reads
@@ -803,7 +816,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
                 // ── GLOBAL INPUT HOOK ──────────────────────────────────────────
                 //
                 // Wrapping the window callback catches EVERY key and touch event on
-                // EVERY activity — Compose screens, the players, GeckoView — from
+                // EVERY activity — Compose screens and the players — from
                 // one place. The obvious alternative is overriding
                 // onUserInteraction() per activity, which would mean editing two
                 // dozen files and, far worse, silently missing the next activity
@@ -1131,7 +1144,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
                 "totalMem=${totalRamBytes / (1024 * 1024)} MB, " +
                 "isLowRamDevice=${activityManager.isLowRamDevice}")
 
-        // Walks the whole 300 MB disk-cache directory — never on the main
+        // Walks the whole 200 MB disk-cache directory — never on the main
         // thread during startup (it was a cold-start hitch all by itself).
         Thread { logCacheStats() }.start()
         initSoundPool(this)
@@ -1141,18 +1154,12 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         // overlay reuses it instead of decoding under memory pressure — which was
         // crashing on 2 GB hardware (BitmapFactory returning null → NPE).
         Thread { BeeLogo.prime(this) }.start()
-
-        // Initialise GeckoView in main process only — not in GeckoView's own
-        // service/content subprocesses which also trigger Application.onCreate.
-        if (isMainProcess()) {
-            initializeGeckoOnMainThread()
-        }
     }
 
 
     /**
      * Returns the name of the current process. Used to distinguish the main
-     * application process from GeckoView/Crashlytics helper processes that
+     * application process from the :extractor and :phoenix processes that
      * share our Application class.
      *
      * API 28+ has Application.getProcessName(). For older versions we fall
@@ -1227,59 +1234,14 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         return processName == packageName
     }
 
-    // Deferred 8s: Gecko init spawns child processes + loads native libs — a
-    // huge CPU spike that used to land exactly while the splash's carousel
-    // prefetch and first paint were fighting for the same 4 cores. 8s lands it
-    // on the (static) profile picker. Playback can't be reached that fast from
-    // a cold start, and getNewSession() fails soft if it ever were.
-    private val GECKO_INIT_DELAY_MS = 8_000L
-
-    // Only PRELOAD Gecko in the main process on devices with RAM headroom. Below this,
-    // a ~200 MB runtime resident in the backgrounded main process makes it a prime
-    // low-memory-killer target while the :extractor process (its own Gecko) runs — the
-    // OOM we hit on 2 GB TV boxes. Constrained devices init Gecko on demand instead
-    // (GeckoWebViewManager.getNewSession), which the anime path never triggers.
-    private val GECKO_PRELOAD_MIN_TOTAL_MEM = 2_500_000_000L   // ~2.3 GiB
-
-    private fun initializeGeckoOnMainThread() {
-        // Skip the preload on RAM-constrained devices — Gecko then inits lazily on first
-        // MainWebViewer use, keeping the main process lean during anime playback.
-        val am = getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
-        val memInfo = ActivityManager.MemoryInfo().also { am?.getMemoryInfo(it) }
-        if (am == null || am.isLowRamDevice || memInfo.totalMem < GECKO_PRELOAD_MIN_TOTAL_MEM) {
-            Log.d(TAG, "Skipping Gecko preload (totalMem=${memInfo.totalMem / (1024 * 1024)}MB, " +
-                    "lowRam=${am?.isLowRamDevice}) — runtime will init on demand")
-            return
-        }
-        Handler(Looper.getMainLooper()).postDelayed({
-            // GeckoView ships only armeabi-v7a native libs in this build. On a device
-            // whose ABI can't load them (e.g. the x86_64 Baseline Profile generation
-            // emulator), GeckoThread crashes the ENTIRE process from its own internal
-            // thread while loading libmozglue — an uncaught exception we cannot try/catch.
-            // So skip Gecko entirely on unsupported ABIs. The onn box is armeabi-v7a and
-            // initializes normally.
-            if (Build.SUPPORTED_ABIS.none { it == "armeabi-v7a" }) {
-                Log.w(TAG, "Skipping GeckoWebView init — no armeabi-v7a ABI here (${Build.SUPPORTED_ABIS.joinToString()})")
-                return@postDelayed
-            }
-            try {
-                Log.d(TAG, "Initializing GeckoWebViewManager (deferred ${GECKO_INIT_DELAY_MS}ms)")
-                GeckoWebViewManager.initialize(this)
-                Log.d(TAG, "GeckoWebViewManager initialized")
-            } catch (e: Throwable) {
-                Log.e(TAG, "Failed to initialize GeckoWebView (continuing without it)", e)
-            }
-        }, GECKO_INIT_DELAY_MS)
-    }
-
     override fun newImageLoader(): ImageLoader = coilImageLoader
 
     // ── Memory pressure ────────────────────────────────────────────────────────
     // When RAM runs low, Android first ASKS every app to give memory back
     // (this callback); if that doesn't free enough, the Low Memory Killer
     // starts executing processes — biggest consumers first. On a 2 GB box
-    // running Gecko, BlueHive is a prime target. Our most replaceable holding
-    // is Coil's MEMORY cache: every image in it also lives in the 300 MB disk
+    // BlueHive is a prime target. Our most replaceable holding
+    // is Coil's MEMORY cache: every image in it also lives in the 200 MB disk
     // cache, so clearing it costs a ~30ms re-decode per poster on the
     // throttled background threads — versus the process dying mid-movie.
     //
@@ -1289,7 +1251,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
     // clearing there would wipe the cache on every resume-in-place, so skip it.
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
-        if (!isMainProcess()) return   // helper/Gecko processes never init the image loader
+        if (!isMainProcess()) return   // helper processes never init the image loader
 
         val underPressure = level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
                 level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
@@ -1297,10 +1259,6 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         if (underPressure) {
             Log.w(TAG, "🧹 onTrimMemory(level=$level) — clearing image memory cache to dodge the LMK")
             coilImageLoader.memoryCache?.clear()
-            // Also forward the pressure to Gecko so it drops its OWN native caches.
-            // The embedded browser is the DOMINANT memory consumer on 2 GB boxes,
-            // and clearing Coil alone doesn't touch a byte of Gecko's memory.
-            com.example.bluehive.webview.GeckoWebViewManager.onTrimMemory(level)
         }
     }
 

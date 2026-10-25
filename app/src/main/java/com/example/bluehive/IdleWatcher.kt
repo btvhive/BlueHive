@@ -121,7 +121,7 @@ object IdleWatcher {
      *      notice. (Foreground-return now also checks — see BlueHiveApplication —
      *      but that only helps someone who actually leaves and comes back.)
      *
-     *   2. MEMORY. Coil caches, GeckoView's helper processes and this app's own
+     *   2. MEMORY. Coil caches, the extractor process and this app's own
      *      bitmap history all accumulate. On a 2GB box that is the shape of thing
      *      that has OOM-killed us before.
      *
@@ -185,14 +185,14 @@ object IdleWatcher {
 
     // ── Playback sources ──────────────────────────────────────────────────────
     //
-    // One id per surface that plays REAL content. There are three, and missing any
-    // one of them means that player's viewers get a prompt (or a release) during a
-    // film they are actually watching.
+    // One id per surface that plays REAL content. There are two (a third, the
+    // GeckoView viewer, went with GeckoView in v371), and missing either means
+    // that player's viewers get a prompt (or a release) during a film they are
+    // actually watching.
     const val SOURCE_HLS     = "hls"        // HlsPlayerActivity      — films / TV
     const val SOURCE_MIRURO  = "miruro"     // MiruroPlayerActivity   — anime
-    const val SOURCE_WEBVIEW = "webview"    // MainWebViewer          — GeckoView
 
-    private val PLAYBACK_SOURCES = setOf(SOURCE_HLS, SOURCE_MIRURO, SOURCE_WEBVIEW)
+    private val PLAYBACK_SOURCES = setOf(SOURCE_HLS, SOURCE_MIRURO)
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -256,7 +256,7 @@ object IdleWatcher {
      *
      * Called from the window-callback hook in BlueHiveApplication, which wraps
      * EVERY activity's key and touch dispatch — so this fires for D-pad presses on
-     * Compose screens, on the player, and inside GeckoView without any activity
+     * Compose screens and on the players without any activity
      * needing to know this class exists. Overriding onUserInteraction() per
      * activity would have meant editing two dozen files and silently missing the
      * next one added.

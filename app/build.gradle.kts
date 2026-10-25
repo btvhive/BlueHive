@@ -1,95 +1,104 @@
 // build.gradle.kts
 
-import groovy.json.JsonOutput
-import groovy.json.JsonSlurper
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
-val stripUbo by tasks.registering {
-    val rawXpi = layout.projectDirectory.file("src/main/assets/ublock_origin-1.64.0.xpi")
-    val workDir = layout.buildDirectory.dir("uboPrune")
-    inputs.file(rawXpi)
-    outputs.file("src/main/assets/addons/ublock0-stripped.xpi")
+// Fails the build when an image would be decoded too big to draw well.
+//
+// A folder with no density qualifier (plain drawable/) counts as mdpi, so on
+// our 320 dpi boxes everything in it is decoded at 2x per side. v368 had all
+// the 1080p art there: the home screen needed ~77 MB of textures per frame
+// against Android 7's 48 MB cache and scrolled at 6 fps on the Fire TV 4K
+// stick, and the sidebar came out 204x4320 -- past the GPU's 4096 limit --
+// so it was never drawn at all. v369 moved the art to drawable-xhdpi/.
+val checkDrawableSizes by tasks.registering {
+    val resDir = layout.projectDirectory.dir("src/main/res")
+    inputs.files(fileTree(resDir) { include("drawable*/**") })
 
     doLast {
-        delete(workDir)
+        // Biggest raster allowed in a folder with no density qualifier.
+        val maxUnqualifiedSidePx = 512
+        // GL_MAX_TEXTURE_SIZE on the Fire TV sticks (PowerVR GE8300).
+        val maxTextureSidePx = 4096
+        // Density of every box we ship to (AFTMM, AFTSS, onn 4K).
+        val deviceDpi = 320
+        val densities = mapOf(
+            "ldpi" to 120, "mdpi" to 160, "tvdpi" to 213, "hdpi" to 240,
+            "xhdpi" to 320, "xxhdpi" to 480, "xxxhdpi" to 640,
+        )
 
-        // Unzip everything except manifest.json
-        copy {
-            from(zipTree(rawXpi))
-            into(workDir)
-            exclude("manifest.json")
-        }
-
-        // Unzip only manifest.json, then rewrite it
-        val manifestFile = workDir.get().file("manifest.json").asFile
-        manifestFile.parentFile.mkdirs()
-
-        project.zipTree(rawXpi).matching {
-            include("manifest.json")
-        }.forEach { f ->
-            manifestFile.writeText(
-                f.readText().let { text ->
-                    val parser = JsonSlurper()
-                    @Suppress("UNCHECKED_CAST")
-                    val obj = parser.parseText(text) as Map<String, Any>
-
-                    val pruned = mutableMapOf<String, Any>()
-                    obj.forEach { (k, v) ->
-                        when (k) {
-                            // drop all UI/desktop‐only keys:
-                            "browser_action", "page_action", "sidebar_action",
-                            "menus", "contextMenus", "notifications",
-                            "bookmarks", "history" -> {
-                                // skip
-                            }
-
-                            "permissions" -> {
-                                pruned["permissions"] = listOf(
-                                    "webRequest",
-                                    "webRequestBlocking",
-                                    "storage"
-                                )
-                            }
-
-                            "host_permissions" -> {
-                                pruned["host_permissions"] = listOf("<all_urls>")
-                            }
-
-                            else -> pruned[k] = v
+        // Width x height from the file header, or null when it is not a raster.
+        fun imageSize(f: File): Pair<Int, Int>? {
+            val b = f.inputStream().use { it.readNBytes(64 * 1024) }
+            fun u8(i: Int) = b[i].toInt() and 0xFF
+            fun be16(i: Int) = (u8(i) shl 8) or u8(i + 1)
+            fun le16(i: Int) = u8(i) or (u8(i + 1) shl 8)
+            fun le24(i: Int) = le16(i) or (u8(i + 2) shl 16)
+            fun be32(i: Int) = (be16(i) shl 16) or be16(i + 2)
+            return when {
+                b.size >= 24 && u8(0) == 0x89 && String(b, 1, 3) == "PNG" -> be32(16) to be32(20)
+                b.size >= 30 && String(b, 0, 4) == "RIFF" && String(b, 8, 4) == "WEBP" ->
+                    when (String(b, 12, 4)) {
+                        "VP8X" -> (le24(24) + 1) to (le24(27) + 1)
+                        "VP8L" -> {
+                            val v = le16(21) or (le16(23) shl 16)
+                            ((v and 0x3FFF) + 1) to (((v shr 14) and 0x3FFF) + 1)
+                        }
+                        "VP8 " -> (le16(26) and 0x3FFF) to (le16(28) and 0x3FFF)
+                        else -> null
+                    }
+                b.size >= 4 && u8(0) == 0xFF && u8(1) == 0xD8 -> {
+                    var i = 2
+                    var size: Pair<Int, Int>? = null
+                    while (i + 9 < b.size && size == null) {
+                        if (u8(i) != 0xFF) { i++; continue }
+                        val marker = u8(i + 1)
+                        if (marker in 0xC0..0xCF && marker != 0xC4 && marker != 0xC8 && marker != 0xCC) {
+                            size = be16(i + 7) to be16(i + 5)
+                        } else {
+                            i += 2 + be16(i + 2)
                         }
                     }
-
-                    // ensure minimum fields remain
-                    if (!pruned.containsKey("permissions")) {
-                        pruned["permissions"] = listOf("webRequest", "webRequestBlocking", "storage")
-                    }
-                    if (!pruned.containsKey("host_permissions")) {
-                        pruned["host_permissions"] = listOf("<all_urls>")
-                    }
-
-                    JsonOutput.prettyPrint(JsonOutput.toJson(pruned))
+                    size
                 }
-            )
+                else -> null
+            }
         }
 
-        // Ensure output directory exists
-        file("src/main/assets/addons").mkdirs()
-
-        // Re-zip into the addons folder
-        ant.withGroovyBuilder {
-            "zip"(
-                mapOf(
-                    "destfile" to "${project.projectDir}/src/main/assets/addons/ublock0-stripped.xpi",
-                    "basedir" to workDir.get().asFile
-                )
+        val problems = mutableListOf<String>()
+        resDir.asFile.listFiles { d -> d.isDirectory && d.name.startsWith("drawable") }
+            .orEmpty().sortedBy { it.name }.forEach { dir ->
+                val qualifiers = dir.name.split("-").drop(1)
+                val noScaling = "nodpi" in qualifiers || "anydpi" in qualifiers
+                val folderDpi = qualifiers.firstNotNullOfOrNull { densities[it] }
+                dir.listFiles().orEmpty().sortedBy { it.name }.forEach { f ->
+                    val (w, h) = imageSize(f) ?: return@forEach
+                    val name = "${dir.name}/${f.name} (${w}x$h)"
+                    if (folderDpi == null && !noScaling && maxOf(w, h) > maxUnqualifiedSidePx) {
+                        problems += "$name is in a folder with no density, so it is decoded at " +
+                            "${w * deviceDpi / 160}x${h * deviceDpi / 160} on our TVs. " +
+                            "Move it to the folder for its pixels per dp: drawable-xhdpi/ " +
+                            "at 2 (1080p art), drawable-xxxhdpi/ at 4."
+                    }
+                    val scale = if (noScaling) 1.0 else deviceDpi.toDouble() / (folderDpi ?: 160)
+                    val dw = (w * scale).toInt()
+                    val dh = (h * scale).toInt()
+                    if (maxOf(dw, dh) > maxTextureSidePx) {
+                        problems += "$name decodes to ${dw}x$dh at $deviceDpi dpi, over the " +
+                            "$maxTextureSidePx px GPU limit, so Android 7 will not draw it."
+                    }
+                }
+            }
+        if (problems.isNotEmpty()) {
+            throw GradleException(
+                "Drawable size check failed:\n" + problems.joinToString("\n") { "  - $it" }
             )
         }
     }
 }
 
 tasks.named("preBuild") {
-    dependsOn(stripUbo)
+    dependsOn(checkDrawableSizes)
 }
 
 plugins {
@@ -362,6 +371,90 @@ configurations.matching { it.name.contains("composeMappingProducer") }.configure
     }
 }
 
+// ── Release APK through a TV's own bytecode verifier ─────────────────────────
+//
+// v371-v375 compiled, installed and launched fine, then crashed the moment a TV
+// show opened or a movie source was pressed: R8 mis-allocated registers in the
+// huge TVShowsDetailsScreenContent and ART rejected the whole class with a
+// VerifyError. Nothing in the build or the install reports that. So right after
+// assembleRelease, the APK is pushed to a connected TV and run through its own
+// dex2oat in verify mode (verify-on-device.sh, ~20 s). Any rejected method fails
+// the build and renames the APK, so it cannot be installed by mistake.
+//
+// No TV connected: a warning, not a failure (publish-release.ps1 runs the same
+// check and refuses to publish). -PverifyDevice=<serial> picks the TV (default
+// the onn box; it needs Android 10+), -PskipDeviceVerify skips it.
+val verifyReleaseOnDevice by tasks.registering {
+    val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk")
+    val script = layout.projectDirectory.file("verify-on-device.sh")
+    val scratch = layout.buildDirectory.dir("tmp/verifyReleaseOnDevice")
+    val adbExe = androidComponents.sdkComponents.adb
+    val wanted = (findProperty("verifyDevice") as String?) ?: "192.168.1.74:5555"
+    val skip = hasProperty("skipDeviceVerify")
+
+    doLast {
+        if (skip) {
+            logger.warn("verifyReleaseOnDevice: SKIPPED (-PskipDeviceVerify) - this APK was not checked for VerifyErrors")
+            return@doLast
+        }
+        val adbPath = adbExe.get().asFile.absolutePath
+        fun adb(vararg args: String): String {
+            val p = ProcessBuilder(adbPath, *args).redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().readText()
+            p.waitFor()
+            return out
+        }
+
+        val devices = adb("devices").lines()
+            .mapNotNull { Regex("""^(\S+)\s+device$""").find(it.trim())?.groupValues?.get(1) }
+        val dev = if (wanted in devices) wanted else devices.firstOrNull()
+        if (dev == null) {
+            logger.warn("verifyReleaseOnDevice: no TV connected over adb - this APK was NOT checked " +
+                "for VerifyErrors. publish-release.ps1 checks it again before publishing.")
+            return@doLast
+        }
+
+        // LF only: the TV's sh chokes on the CRLF a Windows checkout may give it.
+        val sh = scratch.get().file("bh-verify.sh").asFile
+        sh.parentFile.mkdirs()
+        sh.writeText(script.asFile.readText().replace("\r\n", "\n"))
+
+        val apkFile = apk.get().asFile
+        logger.lifecycle("verifyReleaseOnDevice: checking every class on $dev (~20 s)")
+        adb("-s", dev, "push", apkFile.absolutePath, "/data/local/tmp/bh-verify.apk")
+        adb("-s", dev, "push", sh.absolutePath, "/data/local/tmp/bh-verify.sh")
+        val out = adb("-s", dev, "shell", "sh", "/data/local/tmp/bh-verify.sh")
+
+        val m = Regex("""RESULT rc=(\d+) classes=(\d+) failed=(\d+)""").find(out)
+        if (m == null) {
+            logger.warn("verifyReleaseOnDevice: $dev gave no usable result - this APK was NOT checked:\n$out")
+            return@doLast
+        }
+        val classes = m.groupValues[2].toInt()
+        val failed = m.groupValues[3].toInt()
+        if (failed > 0) {
+            val rejected = File(apkFile.parentFile, "app-release.REJECTED-by-verifier.apk")
+            rejected.delete()
+            apkFile.renameTo(rejected)
+            throw GradleException(
+                "Android's verifier on $dev REJECTS $failed method(s) - this APK would crash on every TV " +
+                    "that reaches them. Renamed it to ${rejected.name} so it cannot be installed.\n" +
+                    out.lines().filter { it.isNotBlank() && !it.startsWith("RESULT") }.joinToString("\n") { "  $it" }
+            )
+        }
+        if (classes < 1000) {
+            logger.warn("verifyReleaseOnDevice: $dev only reported $classes classes - could not confirm " +
+                "this APK verifies (use the onn box, 192.168.1.74:5555)")
+            return@doLast
+        }
+        logger.lifecycle("verifyReleaseOnDevice: $classes classes, 0 failures on $dev")
+    }
+}
+
+tasks.matching { it.name == "assembleRelease" }.configureEach {
+    finalizedBy(verifyReleaseOnDevice)
+}
+
 dependencies {
 
     // ═══════════════════════════════════════════════════════════
@@ -487,11 +580,6 @@ dependencies {
     implementation(libs.material)
     implementation(libs.androidx.recyclerview)
     implementation(libs.androidx.leanback)
-
-    // ═══════════════════════════════════════════════════════════
-    // GECKO VIEW
-    // ═══════════════════════════════════════════════════════════
-    implementation(libs.geckoview.runtime)
 
     // ═══════════════════════════════════════════════════════════
     // MISC

@@ -143,6 +143,11 @@
             android:screenOrientation="landscape"
             android:theme="@style/Theme.BlueHive" />
         <activity
+            android:name=".settings.SoundsActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.BlueHive" />
+        <activity
             android:name=".diagnostics.DiagnosticsActivity"
             android:exported="false"
             android:screenOrientation="landscape"
@@ -292,18 +297,6 @@
             android:exported="false"
             android:screenOrientation="landscape"
             android:theme="@style/Theme.BlueHive" />
-
-        <activity
-            android:name=".webview.MainWebViewer"
-            android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|smallestScreenSize"
-            android:hardwareAccelerated="true"
-            android:windowSoftInputMode="adjustResize"
-            android:screenOrientation="landscape"
-            android:noHistory="true"
-            android:launchMode="singleTask"
-            android:taskAffinity="com.bluehive.tv.video"
-            android:excludeFromRecents="false"
-            android:exported="false"/>
 
         <!-- Self-update (#5): receives PackageInstaller status callbacks.
              exported=false — only our own PendingIntent targets it. -->

@@ -20,6 +20,7 @@ import retrofit2.http.DELETE
 import retrofit2.http.GET
 import retrofit2.http.PATCH
 import retrofit2.http.POST
+import retrofit2.http.PUT
 import retrofit2.http.Path
 import retrofit2.http.Query
 
@@ -249,6 +250,24 @@ data class ProfileResponse(
     // the household, so the same person's profiles get the same colour dot
     // everywhere. Null outside /profiles/household.
     val account_key:          Int?    = null,
+    // Interface sounds (Settings > Sounds), per profile. NULLABLE ON PURPOSE:
+    // Gson leaves a missing field at 0/false, not at a Kotlin default, so a
+    // server that predates these would otherwise read as "volume 0, every
+    // sound off". Null means "the server doesn't say" -- see SoundPrefs.
+    val ui_sound_volume:      Int?     = null,
+    val ui_sound_muted:       Boolean? = null,
+    val ui_sound_nav:         Boolean? = null,
+    val ui_sound_click:       Boolean? = null,
+    val ui_sound_error:       Boolean? = null,
+)
+
+/** Body of PUT /profiles/{id}/sound. The TV always sends all five. */
+data class ProfileSoundRequest(
+    val volume: Int,
+    val muted:  Boolean,
+    val nav:    Boolean,
+    val click:  Boolean,
+    val error:  Boolean,
 )
 
 data class DeletedProfileResponse(
@@ -1071,6 +1090,13 @@ interface BluehiveApiService {
     @POST("/api/bluehive/profiles/{profileId}/recover")
     suspend fun recoverProfile(
         @Path("profileId") profileId: Int,
+    ): ProfileResponse
+
+    /** Settings > Sounds for one profile. Same reach as selecting it. */
+    @PUT("/api/bluehive/profiles/{profileId}/sound")
+    suspend fun setProfileSound(
+        @Path("profileId") profileId: Int,
+        @Body body: ProfileSoundRequest,
     ): ProfileResponse
 
     @PATCH("/api/bluehive/profiles/{profileId}")

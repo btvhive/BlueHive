@@ -52,10 +52,6 @@
 # Keep type signatures & annotations for Retrofit/Gson
 -keepattributes Signature, *Annotation*
 
-# --- 4. GeckoView ---
--keep class org.mozilla.** { *; }
--dontwarn org.mozilla.**
-
 # --- 5. Coroutines / Lifecycle ---
 -dontwarn kotlinx.coroutines.**
 -keep class kotlinx.coroutines.** { *; }

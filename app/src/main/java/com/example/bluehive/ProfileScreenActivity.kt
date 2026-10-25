@@ -1,5 +1,6 @@
 package com.example.bluehive
 
+import com.example.bluehive.utilities.SoundPrefs
 import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
@@ -585,9 +586,13 @@ class ProfileScreenActivity : ComponentActivity() {
         Log.d(TAG, "Profile selected → id=$profileId name=$displayName")
         // Before the select call, so no request built after it still says "none".
         ActiveProfile.id = profileId
+        // This profile's interface sounds, from the copy on this TV -- at once,
+        // so the very next click already obeys them.
+        SoundPrefs.activate(this, profileId, displayName)
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                ApiClient.bluehiveApi.selectProfile(profileId)
+                val selected = ApiClient.bluehiveApi.selectProfile(profileId)
+                SoundPrefs.fromServer(applicationContext, selected)
                 Log.d(TAG, "✅ selectProfile stamped for id=$profileId")
             } catch (e: Exception) {
                 Log.w(TAG, "⚠️ selectProfile failed (non-fatal): ${e.message}")
@@ -709,6 +714,11 @@ fun ProfileScreen(
             val fetched = household?.own ?: ApiClient.bluehiveApi.listProfiles()
             peerProfiles.clear()
             peerProfiles.addAll(household?.others.orEmpty())
+            // Every profile this TV can enter: keep their sound settings current,
+            // so one recovered or changed on another TV sounds right here too.
+            BlueHiveApplication.appContext?.let {
+                SoundPrefs.fromServer(it, fetched + household?.others.orEmpty())
+            }
             Log.d("ProfileScreen", "✅ Fetched ${fetched.size} profiles: ${fetched.map { it.display_name }}")
 
             // LOCAL-ONLY ordering: the profile last selected ON THIS DEVICE leads

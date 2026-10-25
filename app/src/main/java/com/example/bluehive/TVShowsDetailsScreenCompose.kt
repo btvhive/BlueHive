@@ -24,7 +24,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.bluehive.webview.MainWebViewer
 import androidx.compose.foundation.Image
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.Layout
@@ -91,7 +90,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
-import com.example.bluehive.utilities.PlaybackPrefs
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.focus.focusProperties
@@ -383,9 +381,6 @@ class TVShowsDetailsScreenCompose: ComponentActivity() {
                 resumeToEpisode = resumeToEpisode,
                 recommendationsRepository = recommendationsRepository,
                 episodesRepository = episodesRepository,
-                onStreamingSourceSelected = { source ->
-                    handleStreamingSourceSelected(source)
-                },
                 onEpisodeSelected = { season, episode, epName ->
                     currentSeasonForWatch       = season
                     currentEpisodeForWatch      = episode
@@ -416,53 +411,11 @@ class TVShowsDetailsScreenCompose: ComponentActivity() {
         }
         super.onDestroy()
     }
-
-// TVShowsDetailsScreenCompose
-    private fun handleStreamingSourceSelected(source: StreamingSource) {
-        Log.d(TAG, "Selected streaming source: ${source.name} - URL: ${source.url}")
-
-        (application as BlueHiveApplication).apply {
-            Log.d(
-                "DetailsHistory",
-                "Streaming clicked for '$mediaTitle' – clearing details history for GeckoView"
-            )
-            clearDetailsHistory()
-            setAppState(BlueHiveApplication.AppState.VIDEO_PLAYING)
-        }
-
-        Handler(Looper.getMainLooper()).postDelayed({
-            val intent = Intent(this@TVShowsDetailsScreenCompose, MainWebViewer::class.java).apply {
-                putExtra("PROFILE_ID",      profileId)
-                putExtra("SEASON_NUMBER",   currentSeasonForWatch)
-                putExtra("EPISODE_NUMBER",  currentEpisodeForWatch)
-                putExtra("EPISODE_NAME",    currentEpisodeNameForWatch)
-                putExtra("MEDIA_ID",        mediaId.toString())
-                putExtra("MEDIA_TYPE",      mediaType)
-                putExtra("MEDIA_TITLE",     mediaTitle)
-                putExtra("MEDIA_TYPE", mediaType)
-                putExtra("vote_average", voteAverage)
-                putExtra("SOURCE_NAME", source.name)
-                putExtra("SOURCE_URL", source.url)
-                putExtra("backdrop_url", backdropUrl)
-                putExtra("trailer_url", trailerUrl)
-                putExtra("media_title", mediaTitle)
-                putExtra("poster_url", posterUrl)
-                putExtra("overview", overview)
-                putExtra("contentRating", contentRating)
-                putExtra("originalLanguage", originalLanguage)
-                putExtra("releaseDate", releaseDate)
-                putExtra("logo_url", logoUrl)
-            }
-            startActivity(intent)
-        }, 200)
-    }
-
 }
 
 
 /**
- * Sources that get the ExoPlayer-vs-Gecko prompt and the backend extractor,
- * instead of going straight to the embed.
+ * Sources the backend extractor can drive.
  *
  * The name doubles as the backend's source key once lowercased ("VidEasy" ->
  * "videasy"), which is why the two must stay in step with `_SOURCES` in
@@ -1009,6 +962,52 @@ fun EpisodeBadge(
 
 
 
+/**
+ * The trailer player and its release-on-leave, lifted out of
+ * TVShowsDetailsScreenContent.
+ *
+ * WHY THIS IS ITS OWN FUNCTION. In v371-v375 R8 mis-allocated registers in that
+ * one huge method: on one path a Long sat in the register it later tested as
+ * `trailerUrl` here, ART rejected the whole TVShowsDetailsScreenComposeKt class
+ * ("type Long (Low Half) unexpected as arg to if-eqz") and every TV details
+ * page -- and every movie source button, which calls into this file -- crashed
+ * with a VerifyError. Moving this block out shrinks the method R8 has to colour.
+ * Check any release with `cmd package compile -m verify -f` before shipping.
+ */
+@UnstableApi
+@Composable
+private fun DetailsTrailerLayer(
+    trailerUrl: String?,
+    trailerPlayer: ExoPlayer?,
+    isPlaying: Boolean,
+    showPlayerView: Boolean,
+    shouldExtract: Boolean,
+    onPlaybackStateChanged: (Boolean) -> Unit,
+    onPlayerReady: (ExoPlayer?) -> Unit,
+    modifier: Modifier,
+) {
+    val currentTrailerPlayer by rememberUpdatedState(trailerPlayer)
+
+    // ✅ Make sure we release ExoPlayer when the details screen leaves the tree
+    DisposableEffect(Unit) {
+        onDispose {
+            currentTrailerPlayer?.release()
+        }
+    }
+
+    if (!trailerUrl.isNullOrBlank()) {
+        DetailsTrailerPlayer(
+            trailerUrl = trailerUrl,
+            isPlaying = isPlaying,
+            showPlayerView = showPlayerView,
+            shouldExtract = shouldExtract,
+            onPlaybackStateChanged = onPlaybackStateChanged,
+            onPlayerReady = onPlayerReady,
+            modifier = modifier
+        )
+    }
+}
+
 @SuppressLint("DefaultLocale")
 @UnstableApi
 @Composable
@@ -1034,7 +1033,6 @@ fun TVShowsDetailsScreenContent(
     resumeToEpisode: Boolean = false,
     recommendationsRepository: RecommendationsRepository,
     episodesRepository: EpisodesRepository,
-    onStreamingSourceSelected: (TVShowsDetailsScreenCompose.StreamingSource) -> Unit,
     onEpisodeSelected: (season: Int, episode: Int, episodeName: String?) -> Unit = { _, _, _ -> },
     onMediaClick: (MediaItem) -> Unit
 ) {
@@ -1043,10 +1041,6 @@ fun TVShowsDetailsScreenContent(
     val dongleRegular = AppTypography.dongleRegular
     val context = LocalContext.current
 
-    // Playback settings are per profile. Re-reading on entry is how a
-    // profile switch mid-session is picked up; it no-ops when the profile
-    // has not changed, so this costs nothing on a normal navigation.
-    LaunchedEffect(Unit) { PlaybackPrefs.load(context) }
     val app = context.applicationContext as? BlueHiveApplication
     val prefetch = remember(tmdbId) { app?.consumePrefetch(tmdbId) }
 
@@ -1273,12 +1267,6 @@ fun TVShowsDetailsScreenContent(
     val extrasFocusRequester = remember { FocusRequester() }
     val trailerFocusRequester = remember { FocusRequester() }
 
-    // The playback-method setting used to be reached from a browser button in
-    // this screen's bottom-right corner. It now lives in Settings > Playback
-    // method, so the button, the routes into it and the overlay are all gone
-    // from here. PlaybackPrefs is still READ below -- only the way to change it
-    // moved.
-
     // Armed state is a MOMENT, not a mode. Someone who presses once, reads the
     // notice and walks away should not find the episode silently pressable when
     // they come back -- the second press has to be a deliberate answer to the
@@ -1428,15 +1416,10 @@ fun TVShowsDetailsScreenContent(
     var extractPending by remember { mutableStateOf(false) }
     var showNoDub      by remember { mutableStateOf(false) }
 
-    // ── VidFast: ExoPlayer-vs-Gecko choice + extraction ─────────────────────────
-    // Picking VidFast opens a two-button choice instead of playing immediately:
-    //   • ExoPlayer → headless m3u8 extraction, then our own player. Light: the
-    //     WebView lives ~35s in a killable process instead of GeckoView staying
-    //     resident for the whole episode.
-    //   • Gecko     → the embed, exactly as before. Always works.
-    // A failed extraction silently falls back to Gecko, so a site change degrades
-    // playback rather than breaking it.
-    var vidFastChoiceFor by remember { mutableStateOf<TVShowsDetailsScreenCompose.StreamingSource?>(null) }
+    // ── Source extraction ───────────────────────────────────────────────────────
+    // Every source button goes straight to server-side m3u8 extraction and our
+    // own player. The "open the site directly" alternative was GeckoView, which
+    // was removed in v371 along with the Settings > Playback method switch.
     var isVidFastExtract by remember { mutableStateOf(false) }
     // REAL status text from the extractor process (empty = use the anime flow's
     // stage labels). This is what makes the overlay honest — see the receiver below.
@@ -1826,7 +1809,7 @@ fun TVShowsDetailsScreenContent(
     }
 
     // Back closes whichever prompt/picker is open instead of leaving the screen.
-    BackHandler(enabled = showDefaultPrompt || showServerPicker || vidFastChoiceFor != null) {
+    BackHandler(enabled = showDefaultPrompt || showServerPicker) {
         when {
             showServerPicker -> { showServerPicker = false; showDefaultPrompt = true }
             showDefaultPrompt -> {
@@ -1834,15 +1817,6 @@ fun TVShowsDetailsScreenContent(
                 coroutineScope.launch {
                     awaitFrame()
                     try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                }
-            }
-            // Dismiss the VidFast player prompt back to the source buttons, which
-            // are still on screen underneath it.
-            vidFastChoiceFor != null -> {
-                vidFastChoiceFor = null
-                coroutineScope.launch {
-                    awaitFrame()
-                    try { providerFocusRequesters.firstOrNull()?.requestFocus() } catch (_: Exception) {}
                 }
             }
         }
@@ -2603,32 +2577,24 @@ fun TVShowsDetailsScreenContent(
 
         // Keep this near the top of the Box:
         var trailerPlayer by remember { mutableStateOf<ExoPlayer?>(null) }
-        val currentTrailerPlayer by rememberUpdatedState(trailerPlayer)
 
-        // ✅ Make sure we release ExoPlayer when this composable leaves the tree
-        DisposableEffect(Unit) {
-            onDispose {
-                currentTrailerPlayer?.release()
-            }
-        }
-
-        // This renders BEHIND the gradient overlay due to Box ordering
-        if (!trailerUrl.isNullOrBlank()) {
-            DetailsTrailerPlayer(
-                trailerUrl = trailerUrl,
-                isPlaying = isTrailerPlaying,
-                showPlayerView = hasTrailerBeenPlayed,
-                shouldExtract = shouldExtractTrailer,
-                onPlaybackStateChanged = { playing ->
-                    isTrailerPlaying = playing
-                },
-                onPlayerReady = { player ->
-                    trailerPlayer = player
-                    isExtractingTrailer = false  // ✅ Extraction complete
-                },
-                modifier = Modifier.align(Alignment.TopEnd)
-            )
-        }
+        // This renders BEHIND the gradient overlay due to Box ordering.
+        // Its own function on purpose -- see DetailsTrailerLayer.
+        DetailsTrailerLayer(
+            trailerUrl = trailerUrl,
+            trailerPlayer = trailerPlayer,
+            isPlaying = isTrailerPlaying,
+            showPlayerView = hasTrailerBeenPlayed,
+            shouldExtract = shouldExtractTrailer,
+            onPlaybackStateChanged = { playing ->
+                isTrailerPlaying = playing
+            },
+            onPlayerReady = { player ->
+                trailerPlayer = player
+                isExtractingTrailer = false  // ✅ Extraction complete
+            },
+            modifier = Modifier.align(Alignment.TopEnd)
+        )
 
 
 
@@ -3550,11 +3516,6 @@ fun TVShowsDetailsScreenContent(
                             }
                         )
                     } else {
-                        // Picking VidFast raises the modal player prompt below
-                        // (DefaultServerPrompt) rather than swapping these inline
-                        // buttons — same centred-card style as the anime DuB/SuB
-                        // "default server?" dialog, so the choice reads as a
-                        // question instead of two more source buttons.
                         EpisodeProviderInlineButtons(
                             passionFont = passionFont,
                             sources = episodeSources,
@@ -3568,26 +3529,16 @@ fun TVShowsDetailsScreenContent(
                                     episodeSources.indexOfFirst { it.name == source.name }
                                 )
 
-                                if (usesBackendExtraction(source.name)) {
-                                    // Raise the player prompt. Remember the episode
-                                    // now, because the prompt's callbacks fire after
-                                    // this scope is gone.
-                                    pendingSeason      = selectedSeason
-                                    pendingEpisode     = episodeNumber
-                                    pendingEpisodeName = epName
-                                    if (PlaybackPrefs.askPlayerEachTime) {
-                                        vidFastChoiceFor = source
-                                    } else {
-                                        // Prompt turned off in the playback
-                                        // settings: take its default answer.
-                                        startBuiltInPlayer(source)
-                                    }
-                                } else {
-                                    // Every other source behaves exactly as before.
-                                    stopTrailerAndSelectEpisode(selectedSeason, episodeNumber, epName)
-                                    watchedEpisodes = watchedEpisodes + (selectedSeason to episodeNumber)
-                                    onStreamingSourceSelected(source)
-                                }
+                                // Every source: server-side m3u8 extraction, then our
+                                // own player. The server reports every source as
+                                // extractable; one it could not extract fails into the
+                                // same chain as a dead one. The episode overlay STAYS
+                                // open behind the player, which keeps this button
+                                // attached so focus can return to it on the way back.
+                                pendingSeason      = selectedSeason
+                                pendingEpisode     = episodeNumber
+                                pendingEpisodeName = epName
+                                startBuiltInPlayer(source)
                             },
                             onBack = {
                                 selectedEpisodeOverlayIndex = -1
@@ -3733,38 +3684,6 @@ fun TVShowsDetailsScreenContent(
                     stage  = 2
                 )
             }
-        }
-
-        // ── VidFast: which player? ───────────────────────────────────────────
-        // Same centred-card component as the anime "default server?" dialog, so
-        // the two flows look and behave identically (scrim, focus, D-pad, sounds).
-        // ExoPlayer = extract then play in our own player (light, resume-capable);
-        // Gecko = the embed as before (heavier, but always works).
-        vidFastChoiceFor?.let { choiceSrc ->
-            DefaultServerPrompt(
-                message     = "Watch with our player,\nor open the site directly?",
-                defaultText = "Watch on ExoPlayer",
-                chooseText  = "Watch on website",
-                onDefault   = {
-                    vidFastChoiceFor = null
-                    // The episode overlay deliberately STAYS open (it used to be
-                    // dismissed here). It's hidden behind the full-screen extraction
-                    // overlay and then behind the player, so nothing looks different
-                    // — but keeping it composed keeps the VidFast button attached,
-                    // which is what lets focus return to it on the way back. Every
-                    // other source already behaves this way.
-                    startBuiltInPlayer(choiceSrc)
-                },
-                onChoose    = {
-                    vidFastChoiceFor = null
-                    // Same as onDefault: leave the overlay composed so focus has
-                    // somewhere to come back to (and so the Gecko path matches the
-                    // other embed sources, which never dismissed it either).
-                    stopTrailerAndSelectEpisode(pendingSeason, pendingEpisode, pendingEpisodeName)
-                    watchedEpisodes = watchedEpisodes + (pendingSeason to pendingEpisode)
-                    onStreamingSourceSelected(choiceSrc)
-                }
-            )
         }
 
         if (showDefaultPrompt) {

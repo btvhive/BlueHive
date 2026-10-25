@@ -1067,9 +1067,10 @@ object ExoPlayerConfig {
                 // SvcParam parser, and ten UseDnsHttpsSvcb* symbols.
                 //
                 // WE ALREADY PROVED THE MECHANISM WORKS ON THIS NETWORK — in the
-                // other engine. gecko_config.yaml turns on network.trr.mode 2 plus
-                // network.dns.echconfig.enabled for exactly this filter, and the
-                // note there records the measurement: signtime.site returned 256
+                // other engine. The GeckoView viewer (removed in v371) shipped a
+                // gecko_config.yaml turning on network.trr.mode 2 plus
+                // network.dns.echconfig.enabled for exactly this filter, and its
+                // note recorded the measurement: signtime.site returned 256
                 // bytes (handshake severed) while every other CDN returned ~2800.
                 // GeckoView can do it because it carries its own TLS stack (NSS)
                 // rather than Android's Conscrypt. Cronet carries BoringSSL for the

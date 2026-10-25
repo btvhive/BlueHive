@@ -18,7 +18,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.bluehive.webview.MainWebViewer
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
@@ -320,9 +319,6 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
                 tmdbId = mediaId,
                 startInExtras = startInExtras,
                 recommendationsRepository = recommendationsRepository,
-                onStreamingSourceSelected = { source ->
-                    handleStreamingSourceSelected(source)
-                },
                 onMediaClick = { media ->
                     openMediaDetails(media)
                 }
@@ -348,45 +344,6 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
         }
         super.onDestroy()
     }
-
-    private fun handleStreamingSourceSelected(source: StreamingSource) {
-        Log.d(TAG, "Selected streaming source: ${source.name} - URL: ${source.url}")
-
-        (application as BlueHiveApplication).apply {
-            Log.d(
-                "DetailsHistory",
-                "Streaming clicked for '$mediaTitle' – clearing details history for GeckoView"
-            )
-            clearDetailsHistory()
-            setAppState(BlueHiveApplication.AppState.VIDEO_PLAYING)
-        }
-
-        Handler(Looper.getMainLooper()).postDelayed({
-            val intent = Intent(this@MoviesDetailsScreenCompose, MainWebViewer::class.java).apply {
-                putExtra("PROFILE_ID",  profileId)
-                putExtra("MEDIA_ID",    mediaId.toString())
-                putExtra("MEDIA_TYPE",  mediaType)
-                putExtra("MEDIA_TITLE", mediaTitle)
-                putExtra("vote_average", voteAverage)
-                putExtra("SOURCE_NAME", source.name)
-                putExtra("SOURCE_URL", source.url)
-                putExtra("backdrop_url", backdropUrl)
-                putExtra("trailer_url", trailerUrl)
-                putExtra("media_title", mediaTitle)
-                putExtra("poster_url", posterUrl)
-                putExtra("overview", overview)
-                putExtra("budget", budget)
-                putExtra("revenue", revenue)
-                putExtra("contentRating", contentRating)
-                putExtra("originalLanguage", originalLanguage)
-                putExtra("releaseDate", releaseDate)
-                putExtra("logo_url", logoUrl)
-            }
-            startActivity(intent)
-        }, 300)
-    }
-
-
 }
 
 
@@ -476,18 +433,12 @@ fun MoviesDetailsScreenContent(
     tmdbId: Int,
     startInExtras: Boolean = false,
     recommendationsRepository: RecommendationsRepository,
-    onStreamingSourceSelected: (MoviesDetailsScreenCompose.StreamingSource) -> Unit,
     onMediaClick: (MediaItem) -> Unit
 ) {
     // Load custom fonts
     val passionFont = AppTypography.passionRegular
     val dongleRegular = AppTypography.dongleRegular
     val context = LocalContext.current
-
-    // Playback settings are per profile. Re-reading on entry is how a
-    // profile switch mid-session is picked up; it no-ops when the profile
-    // has not changed, so this costs nothing on a normal navigation.
-    LaunchedEffect(Unit) { PlaybackPrefs.load(context) }
 
     // Decode the loading-overlay bee logo now, while the screen is first
     // composing and memory is comparatively free, and cache it process-wide so
@@ -584,16 +535,10 @@ fun MoviesDetailsScreenContent(
     var showServerPicker  by remember { mutableStateOf(false) } // phase 1 result: the picker
     var showServerError   by remember { mutableStateOf(false) } // transient failure toast
 
-    // ── Backend-extracted sources (VidFast / VidEasy / VidSpark) ───────────────
-    // Same flow the TV screen already has: picking one raises a two-button choice
-    // instead of playing immediately — ExoPlayer (server-side m3u8 extraction,
-    // light + resume-capable) or Gecko (the embed, as before).
-    var backendChoiceFor by remember { mutableStateOf<MoviesDetailsScreenCompose.StreamingSource?>(null) }
-
-    // The playback-method setting used to be reached from a browser button in
-    // this screen's bottom-right corner, mirroring the TV screen. Both now point
-    // at Settings > Playback method instead. PlaybackPrefs is still READ below --
-    // only the way to change it moved.
+    // ── Backend-extracted sources ───────────────────────────────────────────
+    // Every source button goes straight to server-side m3u8 extraction and our
+    // own player. The "open the site directly" alternative was GeckoView, which
+    // was removed in v371 along with the Settings > Playback method switch.
     var isBackendExtract by remember { mutableStateOf(false) }
     var backendStatus    by remember { mutableStateOf("") }
     // The loading screen's "trying 2 of 4": how many sources this chain can
@@ -652,28 +597,12 @@ fun MoviesDetailsScreenContent(
     // Extractor m3u8-extraction error reason (shown as a toast; auto-dismisses).
 
     // Back closes whichever picker/prompt is open instead of leaving the screen.
-    //
-    // backendChoiceFor MUST be listed. It is the "Watch on ExoPlayer / Watch on
-    // Gecko" prompt, and without it here BACK found no handler, fell through to
-    // the Activity, and closed the whole details page — losing the user's place
-    // for what should have been a dismissal. The TV screen has always covered its
-    // equivalent (vidFastChoiceFor); only this screen was missing it.
-    BackHandler(enabled = showDefaultPrompt || showServerPicker || backendChoiceFor != null) {
+    BackHandler(enabled = showDefaultPrompt || showServerPicker) {
         when {
             showServerPicker -> { showServerPicker = false; showDefaultPrompt = true }
             showDefaultPrompt -> {
                 showDefaultPrompt = false
                 // Return the cursor to whichever stream button opened the prompt.
-                coroutineScope.launch {
-                    awaitFrame()
-                    try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                }
-            }
-            // Dismiss the player prompt back to the source buttons, which are
-            // still on screen underneath it. Focus is restored to the button that
-            // opened it, or a D-pad user is left with nothing selected.
-            backendChoiceFor != null -> {
-                backendChoiceFor = null
                 coroutineScope.launch {
                     awaitFrame()
                     try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
@@ -784,9 +713,9 @@ fun MoviesDetailsScreenContent(
             )
             Log.d("scraper", "M Extract → direct=$m3u8  (relay fallback ready)")
             // ── Record the watch ────────────────────────────────────────
-            // The DuB/SuB path goes straight to MiruroPlayerActivity and never
-            // touches MainWebViewer, which is the only place watch history was
-            // otherwise logged — so anime watched this way was invisible to the
+            // The DuB/SuB path goes straight to MiruroPlayerActivity, and watch
+            // history used to be logged only by the old GeckoView viewer -- so
+            // anime watched this way was invisible to the
             // backend. It IS logged, but by the player itself once video is
             // actually rolling (onIsPlayingChanged), NOT here: firing on a
             // successful extract counted a watch even when the stream never
@@ -2186,33 +2115,14 @@ fun MoviesDetailsScreenContent(
                         disableRightSound = aloneInRow || col == 1, // right column / lone centered → mute right edge
                         disableDownSound  = i + 2 >= sources.size,  // no button directly below → mute down
                         onClick = {
-                            // No stopTrailer() here. A backend-extracted source only
-                            // raises the ExoPlayer/Gecko prompt below, and the trailer
-                            // should survive that choice. The branches that really
-                            // launch stop it themselves.
                             // Remember which button launched this so focus comes back
                             // here when the player exits (THE RULE).
                             lastStreamFocusRequester = streamerFocus[i]
-                            // Backend-extracted sources -> m3u8 + ExoPlayer (the
-                            // overlay shows progress); anything the backend cannot
-                            // extract keeps the WebView embed.
-                            if (usesBackendExtraction(source.name)) {
-                                // Raise the ExoPlayer-vs-Gecko prompt.
-                                if (PlaybackPrefs.askPlayerEachTime) {
-                                    backendChoiceFor = source
-                                } else {
-                                    // Prompt turned off in the playback settings
-                                    // (Settings > Playback method): take its
-                                    // default answer. The setting is global,
-                                    // so it has to apply here too -- a viewer who
-                                    // turned the prompt off would otherwise still
-                                    // meet it on every film.
-                                    startBuiltInPlayer(source)
-                                }
-                            } else {
-                                stopTrailer()
-                                onStreamingSourceSelected(source)
-                            }
+                            // Every source: server-side m3u8 extraction, then our own
+                            // player (the overlay shows progress). The server reports
+                            // every source as extractable; one it could not extract
+                            // fails into the same chain as a dead one.
+                            startBuiltInPlayer(source)
                         }
                     )
                 }
@@ -2288,27 +2198,6 @@ fun MoviesDetailsScreenContent(
                     .padding(bottom = 70.dp)
                     .background(Color(0xE6000000), RoundedCornerShape(10.dp))
                     .padding(horizontal = 26.dp, vertical = 12.dp)
-            )
-        }
-
-        // ── Backend-extracted sources: which player? ────────────────────────
-        // Same component and wording as the TV screen, so the two flows are
-        // indistinguishable to the user. ExoPlayer = extract server-side then play
-        // in our own player (light, resume-capable); Gecko = the embed as before.
-        backendChoiceFor?.let { choiceSrc ->
-            DefaultServerPrompt(
-                message     = "Watch with our player,\nor open the site directly?",
-                defaultText = "Watch on ExoPlayer",
-                chooseText  = "Watch on website",
-                onDefault   = {
-                    backendChoiceFor = null
-                    startBuiltInPlayer(choiceSrc)
-                },
-                onChoose    = {
-                    backendChoiceFor = null
-                    stopTrailer()
-                    onStreamingSourceSelected(choiceSrc)
-                }
             )
         }
 

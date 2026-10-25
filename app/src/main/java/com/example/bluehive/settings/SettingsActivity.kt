@@ -1,6 +1,9 @@
 // settings/SettingsActivity.kt
 package com.example.bluehive.settings
 
+import com.example.bluehive.utilities.SoundPrefs
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -44,10 +47,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.BuildConfig
 import com.example.bluehive.diagnostics.DiagnosticsActivity
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import com.example.bluehive.utilities.PlaybackPrefs
-import com.example.bluehive.utilities.PlaybackSettingsOverlay
 
 /**
  * Settings — opened from the sidebar's Settings item (previously a TODO stub).
@@ -70,10 +69,6 @@ class SettingsActivity : ComponentActivity() {
      * note in SettingsScreen), and finish() catches every exit -- the system
      * Back today, anything that calls it later -- without standing in the key's
      * way at all.
-     *
-     * Does not fire while the playback overlay is open: that overlay's own
-     * BackHandler consumes the press and closes itself, which is the sound the
-     * viewer should get for closing a card rather than a page.
      */
     override fun finish() {
         BlueHiveApplication.playBackOutSound()
@@ -94,23 +89,10 @@ private fun SettingsScreen() {
     val context = LocalContext.current
 
     val firstEntryFocus = remember { FocusRequester() }
-    val playbackEntryFocus = remember { FocusRequester() }
+    val soundsEntryFocus = remember { FocusRequester() }
+    // Re-read on every return, so the row shows what the Sounds page just saved.
+    var soundsLine by remember { mutableStateOf(soundsSummary(SoundPrefs.current)) }
 
-    // ── PLAYBACK METHOD ─────────────────────────────────────────────
-    // Previously reached from a browser button in the bottom-right corner of
-    // every non-anime details screen. The setting is global and permanent, so a
-    // control sitting on top of the content it is not about -- on every show and
-    // every film -- was paying page space for something a viewer touches once.
-    //
-    // The overlay itself is UNCHANGED and shared: the same composable the corner
-    // button raised, reading and writing the same PlaybackPrefs. Only the way in
-    // moved. Everywhere that READS the preference still does.
-    var showPlayback by remember { mutableStateOf(false) }
-
-    // The details screens load these prefs themselves; this screen can be opened
-    // without having visited one, so it loads them too rather than showing a
-    // default that is not the stored value.
-    LaunchedEffect(Unit) { PlaybackPrefs.load(context) }
     // Initial focus once the tree is composed…
     LaunchedEffect(Unit) { firstEntryFocus.requestFocus() }
     // …and RE-focus every time we come back from Diagnostics, so focus never
@@ -122,6 +104,7 @@ private fun SettingsScreen() {
         val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
                 runCatching { firstEntryFocus.requestFocus() }
+                soundsLine = soundsSummary(SoundPrefs.current)
             }
         }
         lifecycleOwner.lifecycle.addObserver(obs)
@@ -151,32 +134,18 @@ private fun SettingsScreen() {
 
                 Spacer(Modifier.height(12.dp))
 
+                val forName = SoundPrefs.currentProfileName.let { if (it.isNotBlank()) " for $it" else "" }
                 SettingsEntry(
-                    title = "Playback method",
-                    subtitle = "Whether picking a source asks each time, or goes straight to the built-in player",
-                    focusRequester = playbackEntryFocus,
+                    title = "Sounds",
+                    subtitle = "Menu and navigation sounds$forName — $soundsLine",
+                    focusRequester = soundsEntryFocus,
                     hasAbove = true,
                     hasBelow = false,
-                    onClick = { showPlayback = true },
+                    onClick = {
+                        context.startActivity(Intent(context, SoundsActivity::class.java))
+                    },
                 )
             }
-        }
-
-        if (showPlayback) {
-            PlaybackSettingsOverlay(
-                askEachTime = PlaybackPrefs.askPlayerEachTime,
-                onChoose = { ask ->
-                    PlaybackPrefs.setAskPlayerEachTime(context, ask)
-                    showPlayback = false
-                    // Focus has to be handed back by hand: the overlay took it,
-                    // and nothing else re-focuses the row it came from.
-                    runCatching { playbackEntryFocus.requestFocus() }
-                },
-                onDismiss = {
-                    showPlayback = false
-                    runCatching { playbackEntryFocus.requestFocus() }
-                },
-            )
         }
 
         // Version footer — bottom-left, out of the way.

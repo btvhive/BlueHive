@@ -9,8 +9,6 @@ converterGson = "3.0.0"
 ui = "1.10.0"
 
 
-# ✅ Updated GeckoView version (stable Oct 2025 build)
-geckoviewRuntime = "144.0.20251020122858"
 
 
 kotlin = "2.3.0"
@@ -65,7 +63,6 @@ androidx-profileinstaller = { module = "androidx.profileinstaller:profileinstall
 androidx-benchmark-macro-junit4 = { module = "androidx.benchmark:benchmark-macro-junit4", version.ref = "baselineprofile" }
 androidx-uiautomator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "uiautomator" }
 
-geckoview-runtime = { module = "org.mozilla.geckoview:geckoview-armeabi-v7a", version.ref = "geckoviewRuntime" }
 
 # Image loading
 coil = { module = "io.coil-kt:coil", version.ref = "coil" }

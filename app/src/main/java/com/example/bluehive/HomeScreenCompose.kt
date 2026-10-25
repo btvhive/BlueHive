@@ -1,5 +1,6 @@
 package com.example.bluehive
 
+import com.example.bluehive.utilities.SoundPrefs
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -205,7 +206,11 @@ class HomeScreenCompose : ComponentActivity() {
         val profileAvatarId = intent.getIntExtra("PROFILE_AVATAR_ID", R.drawable.avatar1)
         // Also set by the picker; this covers Android rebuilding the home screen
         // after killing the process, when the picker never ran.
-        if (profileId > 0) ActiveProfile.id = profileId
+        if (profileId > 0) {
+            ActiveProfile.id = profileId
+            // Same for the profile's interface sounds (SoundPrefs).
+            SoundPrefs.activate(this, profileId, profileName)
+        }
 
         setContent {
             HomeScreenComposeContent(

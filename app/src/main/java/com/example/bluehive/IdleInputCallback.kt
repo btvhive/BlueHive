@@ -9,7 +9,7 @@ import android.view.Window
  *
  * Installed on each Activity's Window from BlueHiveApplication.onActivityCreated,
  * so one hook covers every screen in the app — including Compose screens, both
- * ExoPlayer activities and GeckoView, none of which would be reached by an
+ * ExoPlayer activities, none of which would be reached by an
  * `onUserInteraction()` override without editing them individually.
  *
  * PURE OBSERVER. Every method delegates to the wrapped callback and returns its

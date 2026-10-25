@@ -84,7 +84,7 @@ object SidebarReboot {
         })
 
         // Hard-kill ONLY BlueHive's main process — a genuine cold restart:
-        // fresh singletons, fresh Gecko, full splash + warm-up. The host's task is
+        // fresh singletons, full splash + warm-up. The host's task is
         // untouched and stays right behind us, where Back expects it.
         //
         // (The old implementation launched ACTION_MAIN/CATEGORY_HOME — the
