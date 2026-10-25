@@ -7,7 +7,9 @@ import org.junit.Test
 /**
  * Pins TrailerState to what both details screens did before Stage 4 of the
  * details redesign moved the trailer flags into it: the Play/Pause button,
- * stop(), and the two reports from DetailsTrailerPlayer.
+ * stop(), and the reports from DetailsTrailerPlayer. Except for the two
+ * "Loading trailer..." fixes made after the redesign: a press after stop()
+ * with the player made, and a failed extraction.
  */
 class TrailerStateTest {
 
@@ -69,21 +71,58 @@ class TrailerStateTest {
     }
 
     /**
-     * Today's behaviour, pinned on purpose: after stop(), a press counts as a
-     * first press again and shows "Loading trailer..." again, and only the
-     * player's next onPlayerReady clears it. DetailsTrailerPlayer reports a
-     * player only when it builds one.
+     * The fix for case 1. DetailsTrailerPlayer reports a player only when it
+     * builds one, so after stop() -- the player still there and ready -- a press
+     * that showed "Loading trailer..." left it up for good while the trailer
+     * played. Now it plays without it. (The tests report a null player: a JVM
+     * test cannot make an ExoPlayer, and only the report matters here.)
      */
     @Test
-    fun pressAfterStop_showsLoadingAgainUntilThePlayerReports() {
+    fun pressAfterStop_withThePlayerMade_playsWithoutLoading() {
         val trailer = TrailerState(url)
         trailer.onButtonPressed()
         trailer.onPlayerReady(null)
         trailer.stop()
         trailer.onButtonPressed()
-        assertTrue(trailer.isExtracting)
+        assertFalse(trailer.isExtracting)
         assertTrue(trailer.isPlaying)
         assertTrue(trailer.hasPlayed)
+    }
+
+    /** Stopped while the stream is still being extracted: the loading line stays until the player is made. */
+    @Test
+    fun pressAfterStop_beforeThePlayerIsMade_keepsLoading() {
+        val trailer = TrailerState(url)
+        trailer.onButtonPressed()
+        trailer.stop()
+        trailer.onButtonPressed()
+        assertTrue(trailer.isExtracting)
+        assertTrue(trailer.isPlaying)
+        trailer.onPlayerReady(null)
+        assertFalse(trailer.isExtracting)
+    }
+
+    /**
+     * The fix for case 2. A failed extraction never made a player, so nothing
+     * cleared "Loading trailer...", and shouldExtract stayed true, so no press
+     * could ask for the extraction again. Now the button is back to before the
+     * first press, and the next press asks again.
+     */
+    @Test
+    fun failedExtraction_clearsLoadingAndTheNextPressRetries() {
+        val trailer = TrailerState(url)
+        trailer.onButtonPressed()
+        trailer.onExtractionFailed()
+        assertFalse(trailer.isExtracting)
+        assertFalse(trailer.shouldExtract)
+        assertFalse(trailer.hasPlayed)
+        assertFalse(trailer.isPlaying)
+
+        trailer.onButtonPressed()
+        assertTrue(trailer.shouldExtract)
+        assertTrue(trailer.isExtracting)
+        assertTrue(trailer.hasPlayed)
+        assertTrue(trailer.isPlaying)
     }
 
     @Test

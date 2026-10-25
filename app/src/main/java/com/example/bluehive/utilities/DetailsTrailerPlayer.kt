@@ -43,6 +43,7 @@ fun DetailsTrailerPlayer(
     shouldExtract: Boolean,
     onPlaybackStateChanged: (Boolean) -> Unit,
     onPlayerReady: (ExoPlayer?) -> Unit = {},  // Expose player to parent
+    onExtractionFailed: () -> Unit = {},       // No stream: no video id, or every extractor failed
     modifier: Modifier = Modifier,
 ) {
     val ctx = LocalContext.current
@@ -68,6 +69,8 @@ fun DetailsTrailerPlayer(
                 if (videoId.isEmpty()) {
                     Log.e("DetailsTrailerPlayer", "Could not extract video ID from: $trailerUrl")
                     isLoading = false
+                    // Tell the parent, or its "Loading trailer..." stays up for good.
+                    withContext(Dispatchers.Main) { onExtractionFailed() }
                     return@launch
                 }
 
@@ -98,6 +101,8 @@ fun DetailsTrailerPlayer(
                         Log.e("DetailsTrailerPlayer", "Failed to extract stream URL")
                     }
                     isLoading = false
+                    // Tell the parent, or its "Loading trailer..." stays up for good.
+                    if (url == null) onExtractionFailed()
                 }
             }
         }

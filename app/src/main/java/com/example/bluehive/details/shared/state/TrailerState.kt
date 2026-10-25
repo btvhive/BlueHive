@@ -19,6 +19,10 @@ import com.example.bluehive.utilities.seekForward
  * twice. Moved here in Stage 4 of the details redesign; each method is the code
  * it replaces, word for word. Plain snapshot state, so a press lands in the
  * same frame as before (docs/details-redesign-architecture.md §6).
+ *
+ * Two fixes since, both for "Loading trailer..." staying up for good: a press
+ * after stop() no longer shows it when the player is already made, and a failed
+ * extraction is reported ([onExtractionFailed]) instead of never clearing it.
  */
 @Stable
 class TrailerState internal constructor(
@@ -45,6 +49,13 @@ class TrailerState internal constructor(
     var player by mutableStateOf<ExoPlayer?>(null)
         private set
 
+    /**
+     * DetailsTrailerPlayer has reported a player. It reports one only when it
+     * builds one, so after this a press must not wait for another report. Read
+     * only by a press, never while drawing, so a plain field.
+     */
+    private var playerMade = false
+
     /** The title has a trailer. The button is dimmed when it does not. */
     val isAvailable: Boolean get() = !url.isNullOrBlank()
 
@@ -58,12 +69,19 @@ class TrailerState internal constructor(
         hasPlayed = false
     }
 
-    /** The Play/Pause Trailer button. The first press also starts the extraction. */
+    /**
+     * The Play/Pause Trailer button. The first press also asks for the
+     * extraction, and "Loading trailer..." shows until the player is made.
+     */
     fun onButtonPressed() {
         if (!url.isNullOrBlank()) {
             if (!hasPlayed) {
                 shouldExtract = true
-                isExtracting = true  // ✅ Show loading state
+                // ✅ Show loading state -- only until the player is made. After
+                // stop() the player is still there and ready, and reports nothing
+                // more, so showing it then left "Loading trailer..." up for good
+                // while the trailer played underneath.
+                isExtracting = !playerMade
                 hasPlayed = true
             }
             isPlaying = !isPlaying
@@ -95,7 +113,22 @@ class TrailerState internal constructor(
     /** DetailsTrailerPlayer has made its player: the extraction is over. */
     fun onPlayerReady(player: ExoPlayer?) {
         this.player = player
+        playerMade = true
         isExtracting = false  // ✅ Extraction complete
+    }
+
+    /**
+     * DetailsTrailerPlayer could not get a stream: no video id in the url, or
+     * every extractor failed. Back to before the first press, so "Loading
+     * trailer..." goes and the next press tries again. Unreported, the text
+     * stayed up for good, and no press could retry: shouldExtract never changed
+     * again, so the player's extraction never ran again.
+     */
+    fun onExtractionFailed() {
+        shouldExtract = false
+        isExtracting = false
+        hasPlayed = false
+        isPlaying = false
     }
 }
 

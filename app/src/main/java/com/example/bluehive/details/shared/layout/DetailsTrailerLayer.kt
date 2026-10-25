@@ -61,6 +61,7 @@ fun DetailsTrailerLayer(
             onPlayerReady = { player ->
                 trailer.onPlayerReady(player)
             },
+            onExtractionFailed = { trailer.onExtractionFailed() },
             modifier = modifier
         )
     }
