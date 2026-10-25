@@ -470,6 +470,13 @@ val verifyReleaseOnDevice by tasks.registering {
 // budget keeps every details method far under ART's 10,000-unit huge-method
 // limit, above which ART never compiles a method and runs it interpreted.
 //
+// The Favorites and Home redesign (docs/favorites-home-redesign-architecture.md)
+// brings the ratchet back for the app's last two giants, FavoritesScreen and
+// HomeScreenComposeContent: they may not grow, and each ceiling drops after
+// every stage until the function is under the budget and leaves the list. The
+// ceilings sit about 1% (code units) and 2.5% (registers) above the size
+// measured at the last stage, for the reason below.
+//
 // R8 re-decides inlining across the whole app on every build, so a function
 // can grow a little with its source unchanged (Stage 1: +42 units when five
 // moved helpers were inlined back). Code moved out of a composable comes back
@@ -478,8 +485,9 @@ val verifyReleaseOnDevice by tasks.registering {
 // child composable, called where they were, as Stage 10 did.
 //
 // Each method is matched to the class it was WRITTEN in through R8's mapping
-// file. R8 relocates static methods freely (FavoritesScreen ships inside
-// Rhino's org.mozilla.javascript.Kit), so the class it lands in proves nothing.
+// file. R8 relocates static methods freely (FavoritesScreen has shipped inside
+// Rhino's org.mozilla.javascript.Kit, and in v405 inside kotlin.reflect.KClasses
+// next to details code), so the class it lands in proves nothing.
 val checkMethodSizes by tasks.registering {
     val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk")
     val mapping = layout.buildDirectory.file("outputs/mapping/release/mapping.txt")
@@ -491,6 +499,13 @@ val checkMethodSizes by tasks.registering {
         val maxRegisters = 100
         // App methods at least this big carry the same R8 risk: reported, not enforced.
         val warnUnits = 5_000
+        // Being split by the Favorites and Home redesign (units to registers).
+        // At Stage 0 (v405): FavoritesScreen 5,660 / 209, HomeScreenComposeContent
+        // 5,030 / 118.
+        val shrinking = mapOf(
+            "SidebarFavoritesKt.FavoritesScreen" to (5_720 to 214),
+            "HomeScreenComposeKt.HomeScreenComposeContent" to (5_080 to 121),
+        )
 
         val apkFile = apk.get().asFile
         if (!apkFile.exists()) {
@@ -593,12 +608,32 @@ val checkMethodSizes by tasks.registering {
                     "(budget $maxUnits / $maxRegisters). Split it -- see the note above checkMethodSizes."
             }
         }
+        val split = methods.filter { it.key in shrinking }
+        for (m in split) {
+            val (units, registers) = shrinking.getValue(m.key)
+            if (m.units > units || m.registers > registers) {
+                problems += "${m.key} grew to ${m.units} units / ${m.registers} registers " +
+                    "(ceiling $units / $registers). It is being split: put new code in a new composable."
+            }
+        }
+        val gone = shrinking.keys - split.map { it.key }.toSet()
+        if (gone.isNotEmpty()) {
+            logger.lifecycle("checkMethodSizes: no longer in the APK, take off the shrinking list: ${gone.joinToString()}")
+        }
         logger.lifecycle("checkMethodSizes: largest details-screen methods (budget $maxUnits units / $maxRegisters registers):")
         details.sortedByDescending { it.units }.take(5).forEach { m ->
             logger.lifecycle("  %6d units %4d regs  %s".format(m.units, m.registers, m.key))
         }
+        if (split.isNotEmpty()) {
+            logger.lifecycle("checkMethodSizes: being split (docs/favorites-home-redesign-architecture.md):")
+            split.sortedByDescending { it.units }.forEach { m ->
+                val (units, registers) = shrinking.getValue(m.key)
+                logger.lifecycle("  %6d units %4d regs  %s  [ceiling %d / %d]".format(m.units, m.registers, m.key, units, registers))
+            }
+        }
         val giants = methods.filter {
-            !inDetails(it.origin) && it.origin.startsWith("com.example.bluehive.") && it.units >= warnUnits
+            !inDetails(it.origin) && it.key !in shrinking &&
+                it.origin.startsWith("com.example.bluehive.") && it.units >= warnUnits
         }
         if (giants.isNotEmpty()) {
             logger.warn("checkMethodSizes: other app methods over $warnUnits units (same R8 risk, not enforced):")
