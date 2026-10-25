@@ -157,8 +157,10 @@ Release builds, measured the same way as above. Each stage is its own commit.
 | 2 | v378 | **9,800, 251** | **6,307, 163** | **1: the TV function is compiled now** | 12,715 classes, 0 failures |
 | 3 | v379 | 9,576, 237 | 6,084, 163 | not re-measured (still under the limit) | 12,717 classes, 0 failures |
 | 4 | v380 | 8,637, 233 | 5,073, 155 | not re-measured (still under the limit) | 12,721 classes, 0 failures |
+| 5 | v382 | 5,220, 155 | 3,721, 134 | not re-measured (still under the limit) | 12,728 classes, 0 failures |
 
 - **Stage 1** only moved code. R8 then inlined the five moved helpers into both functions, which is why they grew slightly.
 - **Stage 2** took the TV function under ART's 10,000-unit limit, so ART compiles it instead of interpreting it (`dex2oat --dump-stats`: 76,730 of 76,732 methods compiled). The `checkMethodSizes` ceiling keeps it under the limit. Its speed has not been measured yet.
 - **Stage 3** replaced the two copies of the five header buttons with one. The functions shrink less than in Stage 2, because each screen keeps what its presses do as lambdas, and those compile separately anyway. The APK lost 16 KB.
 - **Stage 4** moved the trailer, favorite and Extras state into holders that the header, backdrop, trailer layer and Extras row read themselves. A trailer press, a favorite toggle or an Extras toggle now re-runs those pieces instead of the whole screen function. Both functions lost about 1,000 units.
+- **Stage 5** put both screens on `DetailsScaffold`. The play area and the overlays are slots, so each compiles as a method of its own and re-runs on its own. The TV play-area slot is 2,542 units / 110 registers, 61 of them the variables it captures. That is just over the 2,500 / 100 budget, and no trimming fixes it, so `checkMethodSizes` ratchets pieces of the TV function (2,570 / 112) until Stage 8 splits the play area by what it uses.

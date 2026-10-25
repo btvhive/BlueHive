@@ -124,15 +124,11 @@ import com.example.bluehive.details.shared.playback.extractionErrorMessage
 import com.example.bluehive.details.shared.playback.miruroSourceLabel
 import com.example.bluehive.details.shared.playback.parseExtractReason
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
-import com.example.bluehive.details.shared.layout.DetailsBackdrop
-import com.example.bluehive.details.shared.layout.DetailsGradient
-import com.example.bluehive.details.shared.layout.DetailsHeaderButtons
-import com.example.bluehive.details.shared.layout.DetailsLogoOrTitle
-import com.example.bluehive.details.shared.layout.DetailsOverview
+import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
+import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
-import com.example.bluehive.details.shared.layout.DetailsRecommendations
+import com.example.bluehive.details.shared.layout.DetailsScaffold
 import com.example.bluehive.details.shared.layout.DetailsToast
-import com.example.bluehive.details.shared.layout.DetailsTrailerLayer
 import com.example.bluehive.details.shared.state.DetailsBackHandlers
 import com.example.bluehive.details.shared.state.rememberExtrasState
 import com.example.bluehive.details.shared.state.rememberFavoriteState
@@ -2253,68 +2249,77 @@ fun TVShowsDetailsScreenContent(
 
 
 
-    // Main container with background
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Background, content rating, star and score, and the backdrop picture
-        // (hidden once the trailer has played) -- see DetailsBackdrop.
-        DetailsBackdrop(
+    // Main container with background: the frame both screens share, with this
+    // screen's labels, play area and overlays plugged in -- see DetailsScaffold.
+    DetailsScaffold(
+        info = DetailsInfo(
+            mediaTitle          = mediaTitle,
+            logoUrl             = logoUrl,
+            backdropUrl         = backdropUrl,
+            backdropDescription = "TVShowsDetailsScreenCompose backdrop",
             contentRating       = contentRating,
             voteAverage         = voteAverage,
-            backdropUrl         = backdropUrl,
-            trailer             = trailer,
-            backdropDescription = "TVShowsDetailsScreenCompose backdrop",
-            dongleRegular       = dongleRegular,
-        )
-
-
-        // This renders BEHIND the gradient overlay due to Box ordering.
-        // Its own function on purpose -- see DetailsTrailerLayer.
-        DetailsTrailerLayer(
-            trailer = trailer,
-            modifier = Modifier.align(Alignment.TopEnd),
-            releaseOnLeave = true,
-        )
-
-
-
-        DetailsGradient(backdropUrl)
-        // ========================================================================================================================================= >
-
-
-        // Logo or title, the four labels, then genres and the overview: the
-        // order they were drawn in when this was one block (TvDetailsInfoBlock).
-        DetailsLogoOrTitle(logoUrl = logoUrl, mediaTitle = mediaTitle)
-        TvInfoLabels(
-            seasonsLabel     = seasonsLabel,
-            statusLabel      = statusLabel,
-            releaseDateLabel = releaseDateLabel,
-            languageLabel    = languageLabel,
-            dongleRegular    = dongleRegular,
-        )
-        DetailsOverview(genres = genres, overview = overview, dongleRegular = dongleRegular)
-
-
-        // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:
-        // see DetailsHeaderButtons. Each press runs a state holder's method.
-        DetailsHeaderButtons(
-            fontFamily = passionFont,
-            pressTiming = TvHeaderPressTiming,
-            enableFocus = !blockHeaderInitialFocus,
+            genres              = genres,
+            overview            = overview,
+        ),
+        trailer = trailer,
+        favorite = favorite,
+        extras = extras,
+        header = DetailsHeaderSpec(
+            pressTiming            = TvHeaderPressTiming,
+            enableFocus            = !blockHeaderInitialFocus,
             favoriteFocusRequester = favoriteFocusRequester,
-            extrasFocusRequester = extrasFocusRequester,
-            trailerFocusRequester = trailerFocusRequester,
-            favorite = favorite,
-            extras = extras,
-            trailer = trailer,
-        )
+            extrasFocusRequester   = extrasFocusRequester,
+            trailerFocusRequester  = trailerFocusRequester,
+        ),
+        releaseTrailerOnLeave = true,
+        onOpenRecommendation = { media ->
+            trailer.stop()
+            coroutineScope.launch {
+                // Fire both requests concurrently during the button animation delay
+                val episodesDeferred = if (media.mediaType == "tv") {
+                    async {
+                        try { episodesRepository.getSeasonEpisodes(media.tmdbId, 1).episodes }
+                        catch (_: Exception) { null }
+                    }
+                } else null
 
+                val recsDeferred = async {
+                    try { recommendationsRepository.getRecommendations(media.tmdbId,
+                        media.mediaType
+                    ) }
+                    catch (_: Exception) { emptyList() }
+                }
 
-        val app = context.applicationContext as? BlueHiveApplication
+                delay(1000) // Let button animation complete + give requests time to resolve
 
-        // ✅ Conditionally show StreamerButtons OR RecommendedMediaSection
-        if (!extras.isOn) {
+                app?.storePrefetch(
+                    BlueHiveApplication.MediaPrefetchData(
+                        tmdbId          = media.tmdbId,
+                        mediaType       = media.mediaType,
+                        episodes        = episodesDeferred?.await(),
+                        recommendations = recsDeferred.await(),
+                    )
+                )
+
+                onMediaClick(media)
+            }
+        },
+        onUpFromRecommendations = {
+            BlueHiveApplication.playHoverSound()
+            extrasFocusRequester.requestFocus()
+            Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonglow should be the extra button's focus glow")
+        },
+        labels = {
+            TvInfoLabels(
+                seasonsLabel     = seasonsLabel,
+                statusLabel      = statusLabel,
+                releaseDateLabel = releaseDateLabel,
+                languageLabel    = languageLabel,
+                dongleRegular    = dongleRegular,
+            )
+        },
+        playArea = {
             Image(
                 painter = painterResource(id = R.drawable.top_lower_body),
                 contentDescription = null,
@@ -3134,213 +3139,166 @@ fun TVShowsDetailsScreenContent(
                     }
                 }
             }
+        },
+        overlays = {
+            // ════════════════════════════════════════════════════════════════════
+            //  Anime DuB/SuB overlays — last so they render on top of everything
+            // ════════════════════════════════════════════════════════════════════
+            if (isExtracting) {
+                // TRAPPED, like the server check below it. Without this the episode
+                // tile behind the scrim keeps focus and eats BACK twice — once to
+                // close the episode overlay, once to jump to the season column —
+                // before a third press reaches the BackHandler that cancels.
+                ExtractionFocusTrap {
+                    val stageWords = when (extractStage) {
+                        0, 1 -> "Locating stream source…"
+                        2    -> "Loading stream source…"
+                        3    -> "Preparing video player…"
+                        else -> "Almost there…"
+                    }
+                    ExtractionLoadingOverlay(
+                        // Source chain: the headline says which source of how many,
+                        // and the stage words are the detail under it. Anything else
+                        // keeps vidFastStatus if set, as before.
+                        status = if (isVidFastExtract) stageWords else vidFastStatus.ifBlank { stageWords },
+                        stage  = extractStage,
+                        note   = if (isVidFastExtract) extractNote else null,
+                        chain  = if (isVidFastExtract) extractAttempt to chainTotal else null,
+                    )
+                }
+            }
 
-
-
-        } else {
-            DetailsRecommendations(
-                extras = extras,
-                onOpen = { media ->
-                    trailer.stop()
-                    coroutineScope.launch {
-                        // Fire both requests concurrently during the button animation delay
-                        val episodesDeferred = if (media.mediaType == "tv") {
-                            async {
-                                try { episodesRepository.getSeasonEpisodes(media.tmdbId, 1).episodes }
-                                catch (_: Exception) { null }
-                            }
-                        } else null
-
-                        val recsDeferred = async {
-                            try { recommendationsRepository.getRecommendations(media.tmdbId,
-                                media.mediaType
-                            ) }
-                            catch (_: Exception) { emptyList() }
+            // Actionable failure (currently: an ISP/router filter blocking the source).
+            // Without this the screen just returned to the source buttons and the user
+            // had no way to tell a blocked domain from a dead one.
+            extractionError?.let { msg ->
+                com.example.bluehive.webview.ExtractionErrorOverlay(
+                    message = msg,
+                    onDismiss = {
+                        extractionError = null
+                        coroutineScope.launch {
+                            awaitFrame()
+                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
                         }
-
-                        delay(1000) // Let button animation complete + give requests time to resolve
-
-                        app?.storePrefetch(
-                            BlueHiveApplication.MediaPrefetchData(
-                                tmdbId          = media.tmdbId,
-                                mediaType       = media.mediaType,
-                                episodes        = episodesDeferred?.await(),
-                                recommendations = recsDeferred.await(),
-                            )
-                        )
-
-                        onMediaClick(media)
                     }
-                },
-                onNavigateUp = {
-                    BlueHiveApplication.playHoverSound()
-                    extrasFocusRequester.requestFocus()
-                    Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonglow should be the extra button's focus glow")
-                }
-            )
-        }
-
-
-        // ════════════════════════════════════════════════════════════════════
-        //  Anime DuB/SuB overlays — last so they render on top of everything
-        // ════════════════════════════════════════════════════════════════════
-        if (isExtracting) {
-            // TRAPPED, like the server check below it. Without this the episode
-            // tile behind the scrim keeps focus and eats BACK twice — once to
-            // close the episode overlay, once to jump to the season column —
-            // before a third press reaches the BackHandler that cancels.
-            ExtractionFocusTrap {
-                val stageWords = when (extractStage) {
-                    0, 1 -> "Locating stream source…"
-                    2    -> "Loading stream source…"
-                    3    -> "Preparing video player…"
-                    else -> "Almost there…"
-                }
-                ExtractionLoadingOverlay(
-                    // Source chain: the headline says which source of how many,
-                    // and the stage words are the detail under it. Anything else
-                    // keeps vidFastStatus if set, as before.
-                    status = if (isVidFastExtract) stageWords else vidFastStatus.ifBlank { stageWords },
-                    stage  = extractStage,
-                    note   = if (isVidFastExtract) extractNote else null,
-                    chain  = if (isVidFastExtract) extractAttempt to chainTotal else null,
                 )
             }
-        }
 
-        // Actionable failure (currently: an ISP/router filter blocking the source).
-        // Without this the screen just returned to the source buttons and the user
-        // had no way to tell a blocked domain from a dead one.
-        extractionError?.let { msg ->
-            com.example.bluehive.webview.ExtractionErrorOverlay(
-                message = msg,
-                onDismiss = {
-                    extractionError = null
-                    coroutineScope.launch {
-                        awaitFrame()
-                        try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                    }
+            if (showNoDub) {
+                DetailsToast("No dub available for this episode", dongleRegular)
+            }
+
+            if (isCheckingServers) {
+                // Focus TRAP, not decoration. ExtractionLoadingOverlay draws a scrim
+                // but takes no focus of its own, so the D-pad still reaches the details
+                // screen behind it.
+                //
+                // NOTE ON SCOPE: this only covers the window where this Activity is in
+                // FOREGROUND with the overlay up — the gap between isCheckingServers
+                // going true and MiruroExtractorActivity actually appearing, plus any
+                // non-activity extraction. It does NOT cover the enumerate pass itself,
+                // because that runs in a separate Activity and this screen is paused
+                // throughout. The bug people actually hit lives on the RESUME from that
+                // activity and is guarded in RestoreFocusOnPlayerReturn above.
+                //
+                // Directional and select keys are swallowed; BACK deliberately is not,
+                // so the existing BackHandler can still cancel an enumeration that
+                // hangs. Without that exemption this overlay becomes a trap with no
+                // way out on a remote that has no other keys.
+                ExtractionFocusTrap {
+                    ExtractionLoadingOverlay(
+                        status = "Checking the site for available servers…",
+                        stage  = 2
+                    )
                 }
-            )
-        }
+            }
 
-        if (showNoDub) {
-            DetailsToast("No dub available for this episode", dongleRegular)
-        }
-
-        if (isCheckingServers) {
-            // Focus TRAP, not decoration. ExtractionLoadingOverlay draws a scrim
-            // but takes no focus of its own, so the D-pad still reaches the details
-            // screen behind it.
-            //
-            // NOTE ON SCOPE: this only covers the window where this Activity is in
-            // FOREGROUND with the overlay up — the gap between isCheckingServers
-            // going true and MiruroExtractorActivity actually appearing, plus any
-            // non-activity extraction. It does NOT cover the enumerate pass itself,
-            // because that runs in a separate Activity and this screen is paused
-            // throughout. The bug people actually hit lives on the RESUME from that
-            // activity and is guarded in RestoreFocusOnPlayerReturn above.
-            //
-            // Directional and select keys are swallowed; BACK deliberately is not,
-            // so the existing BackHandler can still cancel an enumeration that
-            // hangs. Without that exemption this overlay becomes a trap with no
-            // way out on a remote that has no other keys.
-            ExtractionFocusTrap {
-                ExtractionLoadingOverlay(
-                    status = "Checking the site for available servers…",
-                    stage  = 2
+            if (showDefaultPrompt) {
+                DefaultServerPrompt(
+                    onDefault = {
+                        showDefaultPrompt = false
+                        coroutineScope.launch {
+                            awaitFrame()
+                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
+                        }
+                        pendingUrl?.let { launchExtract(it, pendingDub, null) }
+                    },
+                    onChoose = {
+                        showDefaultPrompt = false
+                        // NO focus restore here, unlike onDefault above.
+                        //
+                        // onDefault ENDS the dialog flow — extraction starts and the
+                        // screen is the user's again, so pulling focus back to the
+                        // source button is right. onChoose CONTINUES into the picker,
+                        // and handing focus to a button on the screen underneath was
+                        // the bug: on a cache MISS the picker is seconds away (an
+                        // enumerate webview pass), so the D-pad spent that window
+                        // driving the details screen behind the "Checking servers…"
+                        // overlay. On a cache HIT it looked fine only because
+                        // showServerPicker flips in this same frame and
+                        // ServerPickerOverlay's own focus request (Overlays.kt) beat
+                        // the restore — which is why the second press on the same
+                        // episode behaved, and a new episode brought it straight back.
+                        val cached = pendingUrl?.let { serverListCache[serverCacheKey(it, pendingDub)] }
+                        if (cached != null) {
+                            Log.d("scraper", "🗂 server picker from cache (${cached.first.size} servers)")
+                            serverOptions    = cached.first
+                            serverDefaultIdx = cached.second
+                            showServerPicker = true
+                        } else {
+                            pendingUrl?.let { launchEnumerate(it, pendingDub) }
+                        }
+                    }
                 )
             }
-        }
 
-        if (showDefaultPrompt) {
-            DefaultServerPrompt(
-                onDefault = {
-                    showDefaultPrompt = false
-                    coroutineScope.launch {
-                        awaitFrame()
-                        try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
+            if (showServerPicker && serverOptions.isNotEmpty()) {
+                ServerPickerOverlay(
+                    servers      = serverOptions,
+                    audioLabel   = if (pendingDub) "Dub" else "Sub",
+                    onSelect     = { serverName ->
+                        showServerPicker = false
+                        coroutineScope.launch {
+                            awaitFrame()
+                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
+                        }
+                        pendingUrl?.let { launchExtract(it, pendingDub, serverName) }
                     }
-                    pendingUrl?.let { launchExtract(it, pendingDub, null) }
-                },
-                onChoose = {
-                    showDefaultPrompt = false
-                    // NO focus restore here, unlike onDefault above.
-                    //
-                    // onDefault ENDS the dialog flow — extraction starts and the
-                    // screen is the user's again, so pulling focus back to the
-                    // source button is right. onChoose CONTINUES into the picker,
-                    // and handing focus to a button on the screen underneath was
-                    // the bug: on a cache MISS the picker is seconds away (an
-                    // enumerate webview pass), so the D-pad spent that window
-                    // driving the details screen behind the "Checking servers…"
-                    // overlay. On a cache HIT it looked fine only because
-                    // showServerPicker flips in this same frame and
-                    // ServerPickerOverlay's own focus request (Overlays.kt) beat
-                    // the restore — which is why the second press on the same
-                    // episode behaved, and a new episode brought it straight back.
-                    val cached = pendingUrl?.let { serverListCache[serverCacheKey(it, pendingDub)] }
-                    if (cached != null) {
-                        Log.d("scraper", "🗂 server picker from cache (${cached.first.size} servers)")
-                        serverOptions    = cached.first
-                        serverDefaultIdx = cached.second
-                        showServerPicker = true
-                    } else {
-                        pendingUrl?.let { launchEnumerate(it, pendingDub) }
-                    }
-                }
-            )
-        }
+                )
+            }
 
-        if (showServerPicker && serverOptions.isNotEmpty()) {
-            ServerPickerOverlay(
-                servers      = serverOptions,
-                audioLabel   = if (pendingDub) "Dub" else "Sub",
-                onSelect     = { serverName ->
-                    showServerPicker = false
-                    coroutineScope.launch {
-                        awaitFrame()
-                        try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                    }
-                    pendingUrl?.let { launchExtract(it, pendingDub, serverName) }
-                }
-            )
-        }
+            if (showServerError) {
+                DetailsToast("Couldn't reach the site — please try again", dongleRegular)
+            }
 
-        if (showServerError) {
-            DetailsToast("Couldn't reach the site — please try again", dongleRegular)
-        }
+            // Says what the first press did and what a second will do. Carries the
+            // date so the viewer can judge for themselves whether we have it wrong --
+            // which is the entire point of offering the override.
+            if (unairedArmedIndex >= 0) {
+                val armedDate = formatEpisodeAirDate(
+                    episodes.getOrNull(unairedArmedIndex)?.airDate
+                )
+                DetailsToast(
+                    if (armedDate.isNotEmpty())
+                        "This episode airs $armedDate — press again to try anyway"
+                    else
+                        "This episode hasn't aired yet — press again to try anyway",
+                    dongleRegular,
+                    centered = true,
+                    maxWidth = 720.dp,
+                )
+            }
 
-        // Says what the first press did and what a second will do. Carries the
-        // date so the viewer can judge for themselves whether we have it wrong --
-        // which is the entire point of offering the override.
-        if (unairedArmedIndex >= 0) {
-            val armedDate = formatEpisodeAirDate(
-                episodes.getOrNull(unairedArmedIndex)?.airDate
-            )
-            DetailsToast(
-                if (armedDate.isNotEmpty())
-                    "This episode airs $armedDate — press again to try anyway"
-                else
-                    "This episode hasn't aired yet — press again to try anyway",
-                dongleRegular,
-                centered = true,
-                maxWidth = 720.dp,
-            )
-        }
-
-        if (showNotYetAvailable) {
-            DetailsToast(
-                "This show isn't in our search engines yet — it's brand new, so check back in a week or so",
-                dongleRegular,
-                centered = true,
-                maxWidth = 720.dp,
-            )
-        }
-
-
-
-    }
+            if (showNotYetAvailable) {
+                DetailsToast(
+                    "This show isn't in our search engines yet — it's brand new, so check back in a week or so",
+                    dongleRegular,
+                    centered = true,
+                    maxWidth = 720.dp,
+                )
+            }
+        },
+    )
 }
 
 

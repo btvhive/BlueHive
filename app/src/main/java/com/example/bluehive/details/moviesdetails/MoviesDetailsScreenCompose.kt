@@ -16,7 +16,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.Dp
 import com.example.bluehive.utilities.*
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
 import com.example.bluehive.models.MediaItem
@@ -64,15 +63,11 @@ import com.example.bluehive.details.shared.playback.extractionErrorMessage
 import com.example.bluehive.details.shared.playback.miruroSourceLabel
 import com.example.bluehive.details.shared.playback.parseExtractReason
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
-import com.example.bluehive.details.shared.layout.DetailsBackdrop
-import com.example.bluehive.details.shared.layout.DetailsGradient
-import com.example.bluehive.details.shared.layout.DetailsHeaderButtons
-import com.example.bluehive.details.shared.layout.DetailsLogoOrTitle
-import com.example.bluehive.details.shared.layout.DetailsOverview
+import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
+import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
-import com.example.bluehive.details.shared.layout.DetailsRecommendations
+import com.example.bluehive.details.shared.layout.DetailsScaffold
 import com.example.bluehive.details.shared.layout.DetailsToast
-import com.example.bluehive.details.shared.layout.DetailsTrailerLayer
 import com.example.bluehive.details.shared.state.DetailsBackHandlers
 import com.example.bluehive.details.shared.state.rememberExtrasState
 import com.example.bluehive.details.shared.state.rememberFavoriteState
@@ -1558,65 +1553,50 @@ fun MoviesDetailsScreenContent(
 
 
 
-    // Main container with background
-    Box(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Background, content rating, star and score, and the backdrop picture
-        // (hidden once the trailer has played) -- see DetailsBackdrop.
-        DetailsBackdrop(
+    // Main container with background: the frame both screens share, with this
+    // screen's labels, play area and overlays plugged in -- see DetailsScaffold.
+    DetailsScaffold(
+        info = DetailsInfo(
+            mediaTitle          = mediaTitle,
+            logoUrl             = logoUrl,
+            backdropUrl         = backdropUrl,
+            backdropDescription = "Movie backdrop",
             contentRating       = contentRating,
             voteAverage         = voteAverage,
-            backdropUrl         = backdropUrl,
-            trailer             = trailer,
-            backdropDescription = "Movie backdrop",
-            dongleRegular       = dongleRegular,
-        )
-
-
-        // This renders BEHIND the gradient overlay due to Box ordering
-        DetailsTrailerLayer(
-            trailer = trailer,
-            modifier = Modifier.align(Alignment.TopEnd),
-            releaseOnLeave = false,
-        )
-
-
-        DetailsGradient(backdropUrl)
-        // ========================================================================================================================================= >
-
-
-        // Logo or title, the labels, then genres and the overview -- in the
-        // order they were always drawn.
-        DetailsLogoOrTitle(logoUrl = logoUrl, mediaTitle = mediaTitle)
-        MovieInfoLabels(
-            displayRevenue   = displayRevenue,
-            displayBudget    = displayBudget,
-            releaseDate      = releaseDate,
-            originalLanguage = originalLanguage,
-            dongleRegular    = dongleRegular,
-        )
-        DetailsOverview(genres = genres, overview = overview, dongleRegular = dongleRegular)
-
-
-
-        // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:
-        // see DetailsHeaderButtons. Each press runs a state holder's method.
-        DetailsHeaderButtons(
-            fontFamily = passionFont,
-            pressTiming = MovieHeaderPressTiming,
-            enableFocus = !blockHeaderInitialFocus,
+            genres              = genres,
+            overview            = overview,
+        ),
+        trailer = trailer,
+        favorite = favorite,
+        extras = extras,
+        header = DetailsHeaderSpec(
+            pressTiming            = MovieHeaderPressTiming,
+            enableFocus            = !blockHeaderInitialFocus,
             favoriteFocusRequester = favoriteFocusRequester,
-            extrasFocusRequester = extrasFocusRequester,
-            trailerFocusRequester = trailerFocusRequester,
-            favorite = favorite,
-            extras = extras,
-            trailer = trailer,
-        )
-
-        // ✅ Conditionally show StreamerButtons OR RecommendedMediaSection
-
-        if (!extras.isOn) {
+            extrasFocusRequester   = extrasFocusRequester,
+            trailerFocusRequester  = trailerFocusRequester,
+        ),
+        releaseTrailerOnLeave = false,
+        onOpenRecommendation = { media ->
+            trailer.stop()
+            onMediaClick(media)
+        },
+        onUpFromRecommendations = {
+            BlueHiveApplication.playHoverSound()
+            extrasFocusRequester.requestFocus()
+            extrasFocusRequester.requestFocus()
+            Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonGlow should be the extra button's focus glow")
+        },
+        labels = {
+            MovieInfoLabels(
+                displayRevenue   = displayRevenue,
+                displayBudget    = displayBudget,
+                releaseDate      = releaseDate,
+                originalLanguage = originalLanguage,
+                dongleRegular    = dongleRegular,
+            )
+        },
+        playArea = {
             if (isAnime) {
                 // ── Anime: DuB / SuB ────────────────────────────────────
                 AnimeDubButton(
@@ -1706,149 +1686,132 @@ fun MoviesDetailsScreenContent(
                     )
                 }
             }
-
-        } else {
-            DetailsRecommendations(
-                extras = extras,
-                onOpen = { media ->
-                    trailer.stop()
-                    onMediaClick(media)
-                },
-                onNavigateUp = {
-                    BlueHiveApplication.playHoverSound()
-                    extrasFocusRequester.requestFocus()
-                    extrasFocusRequester.requestFocus()
-                    Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonGlow should be the extra button's focus glow")
+        },
+        overlays = {
+            // Instant extraction overlay — last in Box so it renders on top of everything
+            if (isExtracting) {
+                // TRAPPED, like the server check below it — see ExtractionFocusTrap.
+                // Untrapped, the focused source button behind the scrim swallows the
+                // first BACK for its own onBack and the extraction keeps running.
+                ExtractionFocusTrap {
+                    ExtractionLoadingOverlay(
+                        status = when (extractStage) {
+                            0, 1 -> "Locating stream source…"
+                            2    -> "Loading stream source…"
+                            3    -> "Preparing video player…"
+                            else -> "Almost there…"
+                        },
+                        stage = extractStage,
+                        // Source chain only: anime extraction is not a chain.
+                        note  = if (isBackendExtract) extractNote else null,
+                        chain = if (isBackendExtract) extractAttempt to chainTotal else null,
+                    )
                 }
-            )
-        }
+            }
 
+            // "No dub available" toast
+            if (showNoDub) {
+                DetailsToast("No dub available for this title", dongleRegular)
+            }
 
-        // Instant extraction overlay — last in Box so it renders on top of everything
-        if (isExtracting) {
-            // TRAPPED, like the server check below it — see ExtractionFocusTrap.
-            // Untrapped, the focused source button behind the scrim swallows the
-            // first BACK for its own onBack and the extraction keeps running.
-            ExtractionFocusTrap {
-                ExtractionLoadingOverlay(
-                    status = when (extractStage) {
-                        0, 1 -> "Locating stream source…"
-                        2    -> "Loading stream source…"
-                        3    -> "Preparing video player…"
-                        else -> "Almost there…"
+            // ── "Not in our search engine yet" — no AniList mapping for this movie ──
+            if (showNotYetAvailable) {
+                DetailsToast(
+                    "This title isn't in our anime search engine yet — try VidFast below",
+                    dongleRegular,
+                    centered = true,
+                )
+            }
+
+            // Extraction failure the user can act on ("try another source").
+            extractionError?.let { msg ->
+                com.example.bluehive.webview.ExtractionErrorOverlay(
+                    message = msg,
+                    onDismiss = { extractionError = null }
+                )
+            }
+
+            // ── "Checking servers" overlay (No path, phase 1) ───────────────────
+            if (isCheckingServers) {
+                // Focus TRAP, not decoration. ExtractionLoadingOverlay draws a scrim
+                // but takes no focus of its own, so the D-pad still reaches the details
+                // screen behind it.
+                //
+                // NOTE ON SCOPE: this only covers the window where this Activity is in
+                // FOREGROUND with the overlay up. It does NOT cover the enumerate pass
+                // itself — that runs in MiruroExtractorActivity and this screen is
+                // paused throughout. The bug people actually hit lives on the RESUME
+                // from that activity and is guarded in RestoreFocusOnPlayerReturn above.
+                //
+                // BACK and Escape pass through so the existing BackHandler can still
+                // cancel; swallowing them would leave no way out on a TV remote.
+                ExtractionFocusTrap {
+                    ExtractionLoadingOverlay(
+                        status = "Checking the site for available servers…",
+                        stage  = 2
+                    )
+                }
+            }
+
+            // ── Instant "default server?" Yes/No prompt ─────────────────────────
+            if (showDefaultPrompt) {
+                DefaultServerPrompt(
+                    onDefault = {
+                        showDefaultPrompt = false
+                        // Snap focus back to the DuB/Sub button immediately so it
+                        // glows during the 300ms animation window before the loading
+                        // overlay appears.
+                        coroutineScope.launch {
+                            awaitFrame()
+                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
+                        }
+                        stopTrailer()
+                        pendingUrl?.let { launchExtract(it, pendingDub, null) }
                     },
-                    stage = extractStage,
-                    // Source chain only: anime extraction is not a chain.
-                    note  = if (isBackendExtract) extractNote else null,
-                    chain = if (isBackendExtract) extractAttempt to chainTotal else null,
+                    onChoose = {
+                        showDefaultPrompt = false
+                        // NO focus restore here, unlike onDefault above. onDefault ENDS
+                        // the dialog flow, so returning focus to the DuB/Sub button is
+                        // right. onChoose CONTINUES into the picker, and handing focus to
+                        // a button on the screen underneath is exactly what the picker
+                        // then has to fight for it.
+                        val cached = pendingUrl?.let { serverListCache[serverCacheKey(it, pendingDub)] }
+                        if (cached != null) {
+                            Log.d("scraper", "🗂 server picker from cache (${cached.first.size} servers)")
+                            serverOptions    = cached.first
+                            serverDefaultIdx = cached.second
+                            showServerPicker = true
+                        } else {
+                            pendingUrl?.let { launchEnumerate(it, pendingDub) }
+                        }
+                    }
                 )
             }
-        }
 
-        // "No dub available" toast
-        if (showNoDub) {
-            DetailsToast("No dub available for this title", dongleRegular)
-        }
-
-        // ── "Not in our search engine yet" — no AniList mapping for this movie ──
-        if (showNotYetAvailable) {
-            DetailsToast(
-                "This title isn't in our anime search engine yet — try VidFast below",
-                dongleRegular,
-                centered = true,
-            )
-        }
-
-        // Extraction failure the user can act on ("try another source").
-        extractionError?.let { msg ->
-            com.example.bluehive.webview.ExtractionErrorOverlay(
-                message = msg,
-                onDismiss = { extractionError = null }
-            )
-        }
-
-        // ── "Checking servers" overlay (No path, phase 1) ───────────────────
-        if (isCheckingServers) {
-            // Focus TRAP, not decoration. ExtractionLoadingOverlay draws a scrim
-            // but takes no focus of its own, so the D-pad still reaches the details
-            // screen behind it.
-            //
-            // NOTE ON SCOPE: this only covers the window where this Activity is in
-            // FOREGROUND with the overlay up. It does NOT cover the enumerate pass
-            // itself — that runs in MiruroExtractorActivity and this screen is
-            // paused throughout. The bug people actually hit lives on the RESUME
-            // from that activity and is guarded in RestoreFocusOnPlayerReturn above.
-            //
-            // BACK and Escape pass through so the existing BackHandler can still
-            // cancel; swallowing them would leave no way out on a TV remote.
-            ExtractionFocusTrap {
-                ExtractionLoadingOverlay(
-                    status = "Checking the site for available servers…",
-                    stage  = 2
+            // ── Server picker (No path, phase 1 result) ─────────────────────────
+            if (showServerPicker && serverOptions.isNotEmpty()) {
+                ServerPickerOverlay(
+                    servers      = serverOptions,
+                    audioLabel   = if (pendingDub) "Dub" else "Sub",
+                    onSelect     = { serverName ->
+                        showServerPicker = false
+                        // Same: light the original button back up during the 300ms
+                        // window before the loading overlay takes over.
+                        coroutineScope.launch {
+                            awaitFrame()
+                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
+                        }
+                        pendingUrl?.let { launchExtract(it, pendingDub, serverName) }
+                    }
                 )
             }
-        }
 
-        // ── Instant "default server?" Yes/No prompt ─────────────────────────
-        if (showDefaultPrompt) {
-            DefaultServerPrompt(
-                onDefault = {
-                    showDefaultPrompt = false
-                    // Snap focus back to the DuB/Sub button immediately so it
-                    // glows during the 300ms animation window before the loading
-                    // overlay appears.
-                    coroutineScope.launch {
-                        awaitFrame()
-                        try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                    }
-                    stopTrailer()
-                    pendingUrl?.let { launchExtract(it, pendingDub, null) }
-                },
-                onChoose = {
-                    showDefaultPrompt = false
-                    // NO focus restore here, unlike onDefault above. onDefault ENDS
-                    // the dialog flow, so returning focus to the DuB/Sub button is
-                    // right. onChoose CONTINUES into the picker, and handing focus to
-                    // a button on the screen underneath is exactly what the picker
-                    // then has to fight for it.
-                    val cached = pendingUrl?.let { serverListCache[serverCacheKey(it, pendingDub)] }
-                    if (cached != null) {
-                        Log.d("scraper", "🗂 server picker from cache (${cached.first.size} servers)")
-                        serverOptions    = cached.first
-                        serverDefaultIdx = cached.second
-                        showServerPicker = true
-                    } else {
-                        pendingUrl?.let { launchEnumerate(it, pendingDub) }
-                    }
-                }
-            )
-        }
-
-        // ── Server picker (No path, phase 1 result) ─────────────────────────
-        if (showServerPicker && serverOptions.isNotEmpty()) {
-            ServerPickerOverlay(
-                servers      = serverOptions,
-                audioLabel   = if (pendingDub) "Dub" else "Sub",
-                onSelect     = { serverName ->
-                    showServerPicker = false
-                    // Same: light the original button back up during the 300ms
-                    // window before the loading overlay takes over.
-                    coroutineScope.launch {
-                        awaitFrame()
-                        try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                    }
-                    pendingUrl?.let { launchExtract(it, pendingDub, serverName) }
-                }
-            )
-        }
-
-        // ── Transient "couldn't load" toast ─────────────────────────────────
-        if (showServerError) {
-            DetailsToast("Couldn't reach the site — please try again", dongleRegular)
-        }
-
-
-    }   // ← Box closes here
+            // ── Transient "couldn't load" toast ─────────────────────────────────
+            if (showServerError) {
+                DetailsToast("Couldn't reach the site — please try again", dongleRegular)
+            }
+        },
+    )
 }   // ← MoviesDetailsScreenContent closes here
 
 

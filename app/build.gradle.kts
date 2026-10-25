@@ -485,13 +485,23 @@ val checkMethodSizes by tasks.registering {
         val maxUnits = 2_500
         val maxRegisters = 100
         // Being split by the redesign (units to registers). At the last stage:
-        // TV 8,637 / 233, movie 5,073 / 155 (v380, Stage 4). The TV ceiling also
+        // TV 5,220 / 155, movie 3,721 / 134 (v382, Stage 5). The TV ceiling also
         // keeps that function under ART's 10,000-unit huge-method limit. Above
         // it ART never compiles the method, so it runs in the interpreter
         // (dex2oat --dump-stats, docs/details-redesign-baseline.md).
         val shrinking = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (8_730 to 236),
-            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (5_130 to 157),
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (5_280 to 157),
+            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (3_760 to 136),
+        )
+        // Pieces split out of the TV function but still in its file -- its
+        // lambdas and local functions, named TVShowsDetailsScreenContent$... --
+        // until Stage 8 moves the play area into files of its own. Since Stage 5
+        // the play-area slot is one of them: 2,542 units / 110 registers, 61 of
+        // which are the variables it captures, so trimming code cannot bring it
+        // under the budget; only splitting it by what it captures can. Matched
+        // by prefix because R8 numbers lambdas afresh whenever the file changes.
+        val shrinkingParts = mapOf(
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent$" to (2_570 to 112),
         )
         // App methods at least this big carry the same R8 risk: reported, not enforced.
         val warnUnits = 5_000
@@ -591,12 +601,19 @@ val checkMethodSizes by tasks.registering {
         val details = methods.filter { inDetails(it.origin) }
         if (details.isEmpty()) throw GradleException("checkMethodSizes: found no details-screen methods - the dex parse is broken")
         val problems = mutableListOf<String>()
+        fun partCeiling(key: String) = shrinkingParts.entries.firstOrNull { key.startsWith(it.key) }?.value
         for (m in details) {
             val ceiling = shrinking[m.key]
+            val part = partCeiling(m.key)
             if (ceiling != null) {
                 if (m.units > ceiling.first || m.registers > ceiling.second) {
                     problems += "${m.key} grew to ${m.units} units / ${m.registers} registers " +
                         "(ceiling ${ceiling.first} / ${ceiling.second}). It is being split: put new code in a new composable."
+                }
+            } else if (part != null) {
+                if (m.units > maxOf(maxUnits, part.first) || m.registers > maxOf(maxRegisters, part.second)) {
+                    problems += "${m.key} is ${m.units} units / ${m.registers} registers " +
+                        "(ceiling for pieces of the TV function ${part.first} / ${part.second}). Split it."
                 }
             } else if (m.units > maxUnits || m.registers > maxRegisters) {
                 problems += "${m.key} is ${m.units} units / ${m.registers} registers " +
@@ -609,7 +626,10 @@ val checkMethodSizes by tasks.registering {
         }
         logger.lifecycle("checkMethodSizes: largest details-screen methods (budget $maxUnits units / $maxRegisters registers):")
         details.sortedByDescending { it.units }.take(5).forEach { m ->
-            val note = shrinking[m.key]?.let { "  [being split; ceiling ${it.first} / ${it.second}]" } ?: ""
+            val note = shrinking[m.key]?.let { "  [being split; ceiling ${it.first} / ${it.second}]" }
+                ?: partCeiling(m.key)?.takeIf { m.units > maxUnits || m.registers > maxRegisters }
+                    ?.let { "  [piece of the TV function; ceiling ${it.first} / ${it.second}]" }
+                ?: ""
             logger.lifecycle("  %6d units %4d regs  %s%s".format(m.units, m.registers, m.key, note))
         }
         val giants = methods.filter {
