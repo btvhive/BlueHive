@@ -461,9 +461,9 @@ val verifyReleaseOnDevice by tasks.registering {
 // keeps it split. After every release build the dex is measured, and a method
 // from the details screens over the budget fails the build.
 //
-// The two functions being split may not grow -- a ratchet that only tightens,
-// lowered after each split stage, until Stage 10 empties the list. The rest of
-// the app is reported, not enforced.
+// The functions being split may not grow -- a ratchet that only tightens,
+// lowered after each split stage, until Stage 10 empties the list (the movie
+// function left it at Stage 7b). The rest of the app is reported, not enforced.
 //
 // The ceilings sit about 1% (code units) and 2.5% (registers) above the size
 // measured at the last stage, because R8 re-decides inlining across the whole
@@ -487,29 +487,16 @@ val checkMethodSizes by tasks.registering {
         val maxUnits = 2_500
         val maxRegisters = 100
         // Being split by the redesign (units to registers). At the last stage:
-        // TV 4,829 / 145, movie 2,525 / 92 (v388, Stage 7a). The TV ceiling also
-        // keeps that function under ART's 10,000-unit huge-method limit. Above
-        // it ART never compiles the method, so it runs in the interpreter
-        // (dex2oat --dump-stats, docs/details-redesign-baseline.md).
+        // TV 4,658 / 142 (v389, Stage 7b). The TV ceiling also keeps that
+        // function under ART's 10,000-unit huge-method limit. Above it ART never
+        // compiles the method, so it runs in the interpreter (dex2oat
+        // --dump-stats, docs/details-redesign-baseline.md).
         //
-        // R8 inlines rememberSourcePlayback and rememberAnimePlayback into the
-        // movie function while the movie screen is their only caller (mapping.txt
-        // shows them as inlined frames); rememberPlaybackSession has had a second
-        // caller since Stage 7a and is its own method again. The TV screen calls
-        // the other two from Stages 7b and 7c, and the ceiling tightens again then.
+        // The movie function left this list at Stage 7b: at 2,309 / 85 (v389) it
+        // is under the budget, which now holds it. So is the TV play-area slot,
+        // which had a ceiling of its own from Stage 5 (2,400 / 93 at v389).
         val shrinking = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (4_880 to 149),
-            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (2_550 to 95),
-        )
-        // Pieces split out of the TV function but still in its file -- its
-        // lambdas and local functions, named TVShowsDetailsScreenContent$... --
-        // until Stage 8 moves the play area into files of its own. Since Stage 5
-        // the play-area slot is one of them: 2,546 units / 97 registers (v388), 51
-        // of which are the variables it captures, so trimming code cannot bring it
-        // under the budget; only splitting it by what it captures can. Matched
-        // by prefix because R8 numbers lambdas afresh whenever the file changes.
-        val shrinkingParts = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent$" to (2_575 to 100),
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (4_705 to 146),
         )
         // App methods at least this big carry the same R8 risk: reported, not enforced.
         val warnUnits = 5_000
@@ -609,19 +596,12 @@ val checkMethodSizes by tasks.registering {
         val details = methods.filter { inDetails(it.origin) }
         if (details.isEmpty()) throw GradleException("checkMethodSizes: found no details-screen methods - the dex parse is broken")
         val problems = mutableListOf<String>()
-        fun partCeiling(key: String) = shrinkingParts.entries.firstOrNull { key.startsWith(it.key) }?.value
         for (m in details) {
             val ceiling = shrinking[m.key]
-            val part = partCeiling(m.key)
             if (ceiling != null) {
                 if (m.units > ceiling.first || m.registers > ceiling.second) {
                     problems += "${m.key} grew to ${m.units} units / ${m.registers} registers " +
                         "(ceiling ${ceiling.first} / ${ceiling.second}). It is being split: put new code in a new composable."
-                }
-            } else if (part != null) {
-                if (m.units > maxOf(maxUnits, part.first) || m.registers > maxOf(maxRegisters, part.second)) {
-                    problems += "${m.key} is ${m.units} units / ${m.registers} registers " +
-                        "(ceiling for pieces of the TV function ${part.first} / ${part.second}). Split it."
                 }
             } else if (m.units > maxUnits || m.registers > maxRegisters) {
                 problems += "${m.key} is ${m.units} units / ${m.registers} registers " +
@@ -634,10 +614,7 @@ val checkMethodSizes by tasks.registering {
         }
         logger.lifecycle("checkMethodSizes: largest details-screen methods (budget $maxUnits units / $maxRegisters registers):")
         details.sortedByDescending { it.units }.take(5).forEach { m ->
-            val note = shrinking[m.key]?.let { "  [being split; ceiling ${it.first} / ${it.second}]" }
-                ?: partCeiling(m.key)?.takeIf { m.units > maxUnits || m.registers > maxRegisters }
-                    ?.let { "  [piece of the TV function; ceiling ${it.first} / ${it.second}]" }
-                ?: ""
+            val note = shrinking[m.key]?.let { "  [being split; ceiling ${it.first} / ${it.second}]" } ?: ""
             logger.lifecycle("  %6d units %4d regs  %s%s".format(m.units, m.registers, m.key, note))
         }
         val giants = methods.filter {

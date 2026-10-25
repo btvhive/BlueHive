@@ -85,9 +85,13 @@ class SourcePlaybackController internal constructor(
      *
      * WHY SERVER-SIDE: `vidfast.pro` is refused to every client on a Shield-filtered
      * line — the filter reads the hostname out of the TLS ClientHello and severs
-     * the handshake. The backend loads the embed where the filter isn't and returns
-     * only the URL; the TV still streams from the CDN directly, so no video bytes
-     * cross the backend.
+     * the handshake (measured from the TV 2026-08-02: 0/3 with Spectrum Shield on,
+     * 3/3 with it off), so the on-device extractor's retry ladder just spent 60 s
+     * failing identically. The backend loads the embed where the filter isn't and
+     * returns only the URL; the TV still streams from the CDN directly, so no
+     * video bytes cross the backend. That works because CDN tokens are
+     * Referer-bound, not IP-bound (verified: extracted through a VPN, played 105 s
+     * with the tunnel down, zero load errors).
      *
      * No retry loop: the server caches per title and deduplicates concurrent
      * requests, so a second client attempt just re-asks for the same answer.
@@ -124,6 +128,8 @@ class SourcePlaybackController internal constructor(
         }
 
         // Display name IS the backend key once lowercased — see usesBackendExtraction.
+        // Keeps one source of truth instead of a mapping that can silently drift
+        // from the backend's _SOURCES.
         val sourceKey = src.name.lowercase()
 
         val startedAt = System.currentTimeMillis()
@@ -136,7 +142,9 @@ class SourcePlaybackController internal constructor(
                 season  = req.apiSeason,
                 episode = req.apiEpisode,
                 source  = sourceKey,
-                // Accounting only.
+                // Accounting only — rides through to proxy_url so that IF this
+                // playback later falls back to the relay, the row says which
+                // title and source cost us the bytes instead of just "1.4 GB".
                 mtype   = mediaType,
                 title   = mediaTitle,
                 profile = profileId,
@@ -164,8 +172,16 @@ class SourcePlaybackController internal constructor(
             val reason = parseExtractReason(resp)
             Log.e("scraper-vidfast", "${req.logPrefix}extraction failed (http=$code reason=$reason src=${src.name}) " +
                     "${result.exceptionOrNull()?.javaClass?.simpleName ?: ""}")
-            // Failover: the next source in the chain, while the backend allows
-            // failover and the attempts last.
+            // ── FAILOVER ────────────────────────────────────────────────
+            // Walk down the chain rather than hand the viewer an error, while the
+            // backend allows failover and the attempts last. The order is
+            // sources.conf's ORDER, so the fallback and the buttons can never
+            // disagree.
+            //
+            // extractCancelled is already checked above, and BACK cancels
+            // extractJob outright — which kills this recursion with it, so a
+            // viewer who backs out mid-chain is not followed by three more
+            // attempts finishing in the background.
             val next = if (SourceCatalog.failoverEnabled && attempt < SourceCatalog.maxAttempts) {
                 SourceCatalog.nextInChain(
                     BlueHiveApplication.appContext, req.apiType, req.tmdbId, req.catalogSeason, req.catalogEpisode, src.name,
@@ -176,6 +192,9 @@ class SourcePlaybackController internal constructor(
                 Log.e("scraper-vidfast",
                       "failover ${attempt}/${SourceCatalog.maxAttempts}: " +
                       "${src.name} failed ($reason) -> trying ${next.name}")
+                // Put the flags back up BEFORE recursing: they were cleared
+                // above for the success path, and leaving them down would blink
+                // the overlay off and on between attempts.
                 session.isExtracting     = true
                 session.isBackendExtract = true
                 session.extractPending   = true
@@ -196,6 +215,11 @@ class SourcePlaybackController internal constructor(
             return
         }
 
+        // Host + timing so an extraction can be matched to the playback it
+        // produced. `cached` explains the latency (a hit is a Redis GET, a miss
+        // is a real browser run) and `expires_in` says how stale the manifest
+        // already was when playback started — the number that mattered when an
+        // episode died 31 minutes in.
         Log.d("scraper-vidfast", "▶️ ${req.playingLabel(src)} " +
                 "playlist=${runCatching { android.net.Uri.parse(body.m3u8).host }.getOrNull()} " +
                 "cached=${body.cached} expires_in=${body.expires_in}s extract=${tookMs}ms${req.playingTail(body.referer)}")
@@ -323,6 +347,8 @@ private fun SourcePlaybackEffects(controller: SourcePlaybackController) {
     // The extraction half lives inside extractAndPlay; this is the case it
     // cannot see -- a source whose url looked fine and then died in the player,
     // which only the player knows and reports through its activity result.
+    // Same walk, same order, same budget as the extraction half: both call
+    // nextInChain, so the two can never disagree about what comes next.
     //
     // MEASURED 2026-10-19, In the Beginning: VidNest died at 1:30, the player
     // reported the dead source, and nothing here was listening -- the viewer was
