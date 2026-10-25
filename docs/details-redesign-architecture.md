@@ -484,12 +484,21 @@ The existing `SeasonAvailabilityTest`, `UnairedEpisodeTest` and `SourceCatalogTe
 | 7 | Anime Miruro link: TV finds it by name; movies take the 3rd entry | same result today; unified only with a test |
 | 8 | The movie anime notice says "try VidFast below", but anime movies have no VidFast button | kept, and flagged as a bug |
 | 9 | Toast wording: "episode" vs "title"; the not-yet-available text differs | parameters |
-| 10 | Dead code: the hard-coded source lists in both `getStreamingSources` can never run | removed in Stages 6/7 (no behaviour change) |
+| 10 | Dead code: the hard-coded source lists in both `getStreamingSources` can never run | removed in Stage 7d (no behaviour change); their notes moved to SourceCatalog's built-in lists |
 | 11 | Movie Up-from-recommendations asks for focus twice | kept (harmless) |
 | 12 | TV releases the trailer player a second time when the page closes; `DetailsTrailerPlayer` already releases it | a parameter (redundant but harmless) |
 | 13 | Extras loads recommendations on the main thread on TV, and on a background thread on movies | a parameter |
 | 14 | The overlay stack order differs: the not-available notice sits under the error message on movies and over it on TV | each root writes its own stack |
 | 15 | The backdrop's accessibility label differs | a parameter |
+| 16 | Loading headline: for an extraction that is not the source chain's, TV shows the session's status line when one is set; movies always show the stage words. In practice both show the stage words, because only the chain sets that line and it clears it | a parameter (`useBackendStatus`) |
+| 17 | Anime launch: movies stop the trailer when an extraction starts; TV already stopped it on the English/Japanese press (#6) | a parameter (`onLaunch`) |
+| 18 | A source press: TV records the episode and selects it (`stopTrailerAndSelectEpisode`); movies only stop the trailer | the screen's own `onStart` |
+| 19 | Log wording: TV lines name the episode ("s1e2", "episode"), movie lines say "movie" | derived from the request |
+
+Found while moving the playback core (Stages 6–7) and **not** kept, because nothing can tell them apart:
+
+- BACK during loading now logs one line on both screens (the movie's). Logs only; the crash and diagnostic reports capture the whole process log, not by tag.
+- The movie's "Default server" called `stopTrailer()` just before `launchExtract`, which stops the trailer itself on its next line. The duplicate went with the shared prompt (7d).
 
 Each of these can be unified later as its own small change. That's your call, item by item.
 

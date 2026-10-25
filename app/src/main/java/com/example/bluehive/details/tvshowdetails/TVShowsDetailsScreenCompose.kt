@@ -95,8 +95,6 @@ import com.example.bluehive.searchBarComponent.SearchBarActivity
 import com.example.bluehive.api.isJapaneseAnimation
 import com.example.bluehive.api.buildJapaneseAnimationSources
 import com.example.bluehive.webview.BeeLogo
-import com.example.bluehive.webview.ExtractionFocusTrap
-import com.example.bluehive.webview.ExtractionLoadingOverlay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.withContext
@@ -104,6 +102,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 import com.example.bluehive.SourceScreen
+import com.example.bluehive.details.shared.playback.AnimeServerOverlays
 import com.example.bluehive.details.shared.playback.PlaybackErrorOverlay
 import com.example.bluehive.details.shared.playback.PlaybackLoadingOverlay
 import com.example.bluehive.details.shared.playback.StreamSource
@@ -430,54 +429,11 @@ private fun getStreamingSources(
             .sources(BlueHiveApplication.appContext, "tv", mediaId, seasonNumber, episodeNumber)
             .map { StreamSource(it.label, it.name, it.url) }
     }
-    return when (mediaType) {
-        "tv" -> listOf(
-            StreamSource(
-                "Royal Jelly",
-                "VidNest",
-                "https://vidnest.fun/tv/$mediaId/$seasonNumber/$episodeNumber"
-            ),
-            // VidLove — added 2026-08-30 as the second source, beside VidNest. Backend-extracted:
-            // "VidLove" is listed in usesBackendExtraction and keyed as "vidlove"
-            // in the backend's _SOURCES, and the URL shape here MUST match that
-            // template exactly or the two request different pages.
-            //
-            // PLACED BESIDE VIDNEST DELIBERATELY. Both pass the ISP filter
-            // with cleartext SNI (verified 2026-08-30: a2.shows.st and
-            // tiktoks.animanga.fun return certificates, moon.peakstorm.top and
-            // finalroom.top are severed), and neither appears in
-            // relay_sessions at all — while moon.peakstorm.top alone accounts
-            // for 22 of the last 24 hours' 34 relays. Order is the cheapest
-            // lever on relay volume, so the two clean sources lead.
-            //
-            // Verified before listing: both endpoints extract (movie 27205 and
-            // tv 1396 S1E1), and its CDNs a2.shows.st / d.shows.st both publish
-            // ECH with alpn=h3 — so it is covered by the QUIC/ECH path rather
-            // than relying on the relay.
-            StreamSource(
-                "Nectar Stream",
-                "VidLove",
-                "https://player.vidlove.cc/embed/tv/$mediaId/$seasonNumber/$episodeNumber"
-            ),
-            StreamSource(
-                "Queen Stream",
-                "VidFast",
-                 "https://vidfast.pro/tv/$mediaId/$seasonNumber/$episodeNumber?autoPlay=true"
-            ),
-            StreamSource(
-                "Purple Stream",
-                "MoviesAPI",
-                "https://moviesapi.to/tv/$mediaId/$seasonNumber/$episodeNumber"
-            )
-            // VidSrc (\"Swarm Stream\") and VidApi ("Honeycomb") were removed on
-            // 2026-08-30 at the user's request. Both still work server-side — the
-            // 403s that made them look broken were our own Referer/Origin headers,
-            // fixed the same day — so this is a menu decision, not a capability
-            // one. Re-adding them is just restoring the entries; usesBackendExtraction
-            // already matches both names.
-        )
-        else -> emptyList()
-    }
+    // Only a title of the other type gets here, and it has no buttons on
+    // this screen. The hard-coded list that followed could never run and
+    // was removed in Stage 7 of the details redesign; the same sources are
+    // SourceCatalog's built-ins.
+    return emptyList()
 }
 
 
@@ -2272,88 +2228,10 @@ fun TVShowsDetailsScreenContent(
                 DetailsToast("No dub available for this episode", dongleRegular)
             }
 
-            if (anime.isCheckingServers) {
-                // Focus TRAP, not decoration. ExtractionLoadingOverlay draws a scrim
-                // but takes no focus of its own, so the D-pad still reaches the details
-                // screen behind it.
-                //
-                // NOTE ON SCOPE: this only covers the window where this Activity is in
-                // FOREGROUND with the overlay up — the gap between isCheckingServers
-                // going true and MiruroExtractorActivity actually appearing, plus any
-                // non-activity extraction. It does NOT cover the enumerate pass itself,
-                // because that runs in a separate Activity and this screen is paused
-                // throughout. The bug people actually hit lives on the RESUME from that
-                // activity and is guarded in RestoreFocusOnPlayerReturn above.
-                //
-                // Directional and select keys are swallowed; BACK deliberately is not,
-                // so the existing BackHandler can still cancel an enumeration that
-                // hangs. Without that exemption this overlay becomes a trap with no
-                // way out on a remote that has no other keys.
-                ExtractionFocusTrap {
-                    ExtractionLoadingOverlay(
-                        status = "Checking the site for available servers…",
-                        stage  = 2
-                    )
-                }
-            }
-
-            if (anime.showDefaultPrompt) {
-                DefaultServerPrompt(
-                    onDefault = {
-                        anime.showDefaultPrompt = false
-                        coroutineScope.launch {
-                            awaitFrame()
-                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                        }
-                        anime.pendingUrl?.let { anime.launchExtract(it, anime.pendingDub, null) }
-                    },
-                    onChoose = {
-                        anime.showDefaultPrompt = false
-                        // NO focus restore here, unlike onDefault above.
-                        //
-                        // onDefault ENDS the dialog flow — extraction starts and the
-                        // screen is the user's again, so pulling focus back to the
-                        // source button is right. onChoose CONTINUES into the picker,
-                        // and handing focus to a button on the screen underneath was
-                        // the bug: on a cache MISS the picker is seconds away (an
-                        // enumerate webview pass), so the D-pad spent that window
-                        // driving the details screen behind the "Checking servers…"
-                        // overlay. On a cache HIT it looked fine only because
-                        // showServerPicker flips in this same frame and
-                        // ServerPickerOverlay's own focus request (Overlays.kt) beat
-                        // the restore — which is why the second press on the same
-                        // episode behaved, and a new episode brought it straight back.
-                        val cached = anime.pendingUrl?.let { anime.servers.cache[anime.servers.key(it, anime.pendingDub)] }
-                        if (cached != null) {
-                            Log.d("scraper", "🗂 server picker from cache (${cached.first.size} servers)")
-                            anime.serverOptions    = cached.first
-                            anime.serverDefaultIdx = cached.second
-                            anime.showServerPicker = true
-                        } else {
-                            anime.pendingUrl?.let { anime.launchEnumerate(it, anime.pendingDub) }
-                        }
-                    }
-                )
-            }
-
-            if (anime.showServerPicker && anime.serverOptions.isNotEmpty()) {
-                ServerPickerOverlay(
-                    servers      = anime.serverOptions,
-                    audioLabel   = if (anime.pendingDub) "Dub" else "Sub",
-                    onSelect     = { serverName ->
-                        anime.showServerPicker = false
-                        coroutineScope.launch {
-                            awaitFrame()
-                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                        }
-                        anime.pendingUrl?.let { anime.launchExtract(it, anime.pendingDub, serverName) }
-                    }
-                )
-            }
-
-            if (anime.showServerError) {
-                DetailsToast("Couldn't reach the site — please try again", dongleRegular)
-            }
+            // The anime flow's server overlays -- the "Checking servers" trap, the
+            // default-server prompt, the picker and the "couldn't reach" notice,
+            // in that order -- see AnimeServerOverlays.
+            AnimeServerOverlays(anime, dongleRegular)
 
             // Says what the first press did and what a second will do. Carries the
             // date so the viewer can judge for themselves whether we have it wrong --

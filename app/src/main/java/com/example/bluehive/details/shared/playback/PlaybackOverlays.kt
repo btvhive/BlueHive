@@ -1,6 +1,11 @@
 package com.example.bluehive.details.shared.playback
 
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.text.font.FontFamily
+import com.example.bluehive.details.shared.layout.DetailsToast
+import com.example.bluehive.utilities.DefaultServerPrompt
+import com.example.bluehive.utilities.ServerPickerOverlay
 import com.example.bluehive.webview.ExtractionErrorOverlay
 import com.example.bluehive.webview.ExtractionFocusTrap
 import com.example.bluehive.webview.ExtractionLoadingOverlay
@@ -74,5 +79,61 @@ fun PlaybackErrorOverlay(
                 onDismissed()
             }
         )
+    }
+}
+
+/**
+ * The anime flow's server overlays, in their fixed order: the "Checking
+ * servers" trap, the default-server prompt, the picker and the "couldn't reach
+ * the site" notice. Both screens show them together, at the same place in
+ * their own overlay order. Reads the controller itself, so the prompt opening
+ * or closing re-runs this and not the whole overlay stack.
+ */
+@Composable
+fun BoxScope.AnimeServerOverlays(anime: AnimePlaybackController, dongleRegular: FontFamily) {
+    // ── "Checking servers" overlay (No path, phase 1) ───────────────────
+    if (anime.isCheckingServers) {
+        // Focus TRAP, not decoration. ExtractionLoadingOverlay draws a scrim but
+        // takes no focus of its own, so without the trap the D-pad still reaches
+        // the details screen behind it.
+        //
+        // NOTE ON SCOPE: this only covers the window where the screen is in the
+        // FOREGROUND with the overlay up. It does NOT cover the on-device
+        // enumerate pass, because that runs in MiruroExtractorActivity and the
+        // screen is paused throughout; the bug people actually hit lives on the
+        // RESUME from that activity and is guarded in each screen's
+        // RestoreFocusOnPlayerReturn.
+        //
+        // Directional and select keys are swallowed; BACK and Escape deliberately
+        // are not -- a trap with no way out on a remote that has no other keys
+        // would be worse.
+        ExtractionFocusTrap {
+            ExtractionLoadingOverlay(
+                status = "Checking the site for available servers…",
+                stage  = 2
+            )
+        }
+    }
+
+    // ── Instant "default server?" Yes/No prompt ─────────────────────────
+    if (anime.showDefaultPrompt) {
+        DefaultServerPrompt(
+            onDefault = { anime.onDefaultServer() },
+            onChoose  = { anime.onChooseServer() },
+        )
+    }
+
+    // ── Server picker (No path, phase 1 result) ─────────────────────────
+    if (anime.showServerPicker && anime.serverOptions.isNotEmpty()) {
+        ServerPickerOverlay(
+            servers    = anime.serverOptions,
+            audioLabel = if (anime.pendingDub) "Dub" else "Sub",
+            onSelect   = { serverName -> anime.onServerPicked(serverName) },
+        )
+    }
+
+    // ── Transient "couldn't load" toast ─────────────────────────────────
+    if (anime.showServerError) {
+        DetailsToast("Couldn't reach the site — please try again", dongleRegular)
     }
 }

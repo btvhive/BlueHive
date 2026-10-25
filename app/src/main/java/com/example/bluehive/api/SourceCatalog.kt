@@ -142,6 +142,29 @@ object SourceCatalog {
     fun canBackendExtract(name: String): Boolean =
         extractableIn(listOf(memTv, memMovie), name)
 
+    // The built-in order and choices, from the lists the two details screens
+    // used to carry:
+    //
+    // VidLove -- added 2026-08-30 as the second source, beside VidNest.
+    // Backend-extracted: "VidLove" is listed in usesBackendExtraction and keyed
+    // as "vidlove" in the backend's _SOURCES, and the url shape here MUST match
+    // that template exactly or the two request different pages. PLACED BESIDE
+    // VIDNEST DELIBERATELY: both pass the ISP filter with cleartext SNI
+    // (verified 2026-08-30: a2.shows.st and tiktoks.animanga.fun return
+    // certificates, moon.peakstorm.top and finalroom.top are severed), and
+    // neither appeared in relay_sessions at all, while moon.peakstorm.top alone
+    // accounted for 22 of that day's 34 relays. Order is the cheapest lever on
+    // relay volume, so the two clean sources lead. Verified before listing: both
+    // endpoints extract (movie 27205 and tv 1396 S1E1), and its CDNs
+    // a2.shows.st / d.shows.st both publish ECH with alpn=h3, so it is covered by
+    // the QUIC/ECH path rather than relying on the relay.
+    //
+    // VidSrc ("Swarm Stream") and VidApi ("Honeycomb") were removed on
+    // 2026-08-30 at the user's request. Both still worked server-side -- the
+    // 403s that made them look broken were our own Referer/Origin headers, fixed
+    // the same day -- so this is a menu decision, not a capability one.
+    // Re-adding them is just restoring the entries; usesBackendExtraction
+    // already matches both names.
     private val BUILTIN_TV = listOf(
         Source("VidNest",   "Royal Jelly",   "https://vidnest.fun/tv/{tmdb_id}/{season}/{episode}"),
         Source("VidLove",   "Nectar Stream", "https://player.vidlove.cc/embed/tv/{tmdb_id}/{season}/{episode}"),

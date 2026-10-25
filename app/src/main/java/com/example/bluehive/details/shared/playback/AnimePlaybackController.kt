@@ -509,6 +509,56 @@ class AnimePlaybackController internal constructor(
             }
         }
     }
+
+    /**
+     * "Default server" on the prompt. It ENDS the dialog flow, so the cursor
+     * snaps straight back to the DuB/SuB button -- it glows during the short
+     * press animation before the loading overlay appears -- and the extraction
+     * starts.
+     */
+    fun onDefaultServer() {
+        showDefaultPrompt = false
+        restoreFocus()
+        pendingUrl?.let { launchExtract(it, pendingDub, null) }
+    }
+
+    /**
+     * "Choose a server" on the prompt: the picker, at once from the cache, or
+     * after the server-list check.
+     *
+     * NO focus restore here, unlike onDefaultServer. That one ENDS the dialog
+     * flow; this one CONTINUES into the picker, and handing focus to a button
+     * on the screen underneath was the bug: on a cache MISS the picker is
+     * seconds away (an enumerate pass), so the D-pad spent that window driving
+     * the details screen behind the "Checking servers…" overlay. On a cache HIT
+     * it looked fine only because showServerPicker flips in this same frame and
+     * ServerPickerOverlay's own focus request (Overlays.kt) beat the restore --
+     * which is why the second press on the same episode behaved, and a new
+     * episode brought it straight back.
+     */
+    fun onChooseServer() {
+        showDefaultPrompt = false
+        val cached = pendingUrl?.let { servers.cache[servers.key(it, pendingDub)] }
+        if (cached != null) {
+            Log.d("scraper", "🗂 server picker from cache (${cached.first.size} servers)")
+            serverOptions    = cached.first
+            serverDefaultIdx = cached.second
+            showServerPicker = true
+        } else {
+            pendingUrl?.let { launchEnumerate(it, pendingDub) }
+        }
+    }
+
+    /**
+     * A server picked in the picker. Same as "Default server": the original
+     * button lights back up during the short window before the loading overlay
+     * takes over, and that server is extracted.
+     */
+    fun onServerPicked(serverName: String) {
+        showServerPicker = false
+        restoreFocus()
+        pendingUrl?.let { launchExtract(it, pendingDub, serverName) }
+    }
 }
 
 /**

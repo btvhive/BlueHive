@@ -36,8 +36,6 @@ import com.example.bluehive.api.isJapaneseAnimation
 import com.example.bluehive.api.buildJapaneseAnimationSources
 import com.example.bluehive.webview.miruro.MiruroPlayerActivity
 import com.example.bluehive.webview.BeeLogo
-import com.example.bluehive.webview.ExtractionFocusTrap
-import com.example.bluehive.webview.ExtractionLoadingOverlay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.android.awaitFrame
 import androidx.compose.foundation.background
@@ -45,6 +43,7 @@ import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 import com.example.bluehive.SourceScreen
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
+import com.example.bluehive.details.shared.playback.AnimeServerOverlays
 import com.example.bluehive.details.shared.playback.PlaybackErrorOverlay
 import com.example.bluehive.details.shared.playback.PlaybackLoadingOverlay
 import com.example.bluehive.details.shared.playback.PlaybackRequest
@@ -337,54 +336,11 @@ private fun getStreamingSources(mediaType: String, mediaId: Int): List<StreamSou
             .sources(BlueHiveApplication.appContext, "movie", mediaId)
             .map { StreamSource(it.label, it.name, it.url) }
     }
-    return when(mediaType) {
-        "movie" -> listOf(
-            StreamSource(
-                "Royal Jelly",
-                "VidNest",
-                "https://vidnest.fun/movie/$mediaId"
-            ),
-            // VidLove — added 2026-08-30 as the second source, beside VidNest. Backend-extracted:
-            // "VidLove" is listed in usesBackendExtraction and keyed as "vidlove"
-            // in the backend's _SOURCES, and the URL shape here MUST match that
-            // template exactly or the two request different pages.
-            //
-            // PLACED BESIDE VIDNEST DELIBERATELY. Both pass the ISP filter
-            // with cleartext SNI (verified 2026-08-30: a2.shows.st and
-            // tiktoks.animanga.fun return certificates, moon.peakstorm.top and
-            // finalroom.top are severed), and neither appears in
-            // relay_sessions at all — while moon.peakstorm.top alone accounts
-            // for 22 of the last 24 hours' 34 relays. Order is the cheapest
-            // lever on relay volume, so the two clean sources lead.
-            //
-            // Verified before listing: both endpoints extract (movie 27205 and
-            // tv 1396 S1E1), and its CDNs a2.shows.st / d.shows.st both publish
-            // ECH with alpn=h3 — so it is covered by the QUIC/ECH path rather
-            // than relying on the relay.
-            StreamSource(
-                "Nectar Stream",
-                "VidLove",
-                "https://player.vidlove.cc/embed/movie/$mediaId"
-            ),
-            StreamSource(
-                "Queen Stream",
-                "VidFast",
-                "https://vidfast.pro/movie/$mediaId?autoPlay=true",
-            ),
-            StreamSource(
-                "Purple Stream",
-                "MoviesAPI",
-                    "https://moviesapi.to/movie/$mediaId"
-            )
-            // VidSrc (\"Swarm Stream\") and VidApi ("Honeycomb") were removed on
-            // 2026-08-30 at the user's request. Both still work server-side — the
-            // 403s that made them look broken were our own Referer/Origin headers,
-            // fixed the same day — so this is a menu decision, not a capability
-            // one. Re-adding them is just restoring the entries; usesBackendExtraction
-            // already matches both names.
-        )
-        else -> listOf()
-    }
+    // Only a title of the other type gets here, and it has no buttons on
+    // this screen. The hard-coded list that followed could never run and
+    // was removed in Stage 7 of the details redesign; the same sources are
+    // SourceCatalog's built-ins.
+    return emptyList()
 }
 
 
@@ -875,85 +831,10 @@ fun MoviesDetailsScreenContent(
             // Extraction failure the user can act on ("try another source").
             PlaybackErrorOverlay(session)
 
-            // ── "Checking servers" overlay (No path, phase 1) ───────────────────
-            if (anime.isCheckingServers) {
-                // Focus TRAP, not decoration. ExtractionLoadingOverlay draws a scrim
-                // but takes no focus of its own, so the D-pad still reaches the details
-                // screen behind it.
-                //
-                // NOTE ON SCOPE: this only covers the window where this Activity is in
-                // FOREGROUND with the overlay up. It does NOT cover the enumerate pass
-                // itself — that runs in MiruroExtractorActivity and this screen is
-                // paused throughout. The bug people actually hit lives on the RESUME
-                // from that activity and is guarded in RestoreFocusOnPlayerReturn above.
-                //
-                // BACK and Escape pass through so the existing BackHandler can still
-                // cancel; swallowing them would leave no way out on a TV remote.
-                ExtractionFocusTrap {
-                    ExtractionLoadingOverlay(
-                        status = "Checking the site for available servers…",
-                        stage  = 2
-                    )
-                }
-            }
-
-            // ── Instant "default server?" Yes/No prompt ─────────────────────────
-            if (anime.showDefaultPrompt) {
-                DefaultServerPrompt(
-                    onDefault = {
-                        anime.showDefaultPrompt = false
-                        // Snap focus back to the DuB/Sub button immediately so it
-                        // glows during the 300ms animation window before the loading
-                        // overlay appears.
-                        coroutineScope.launch {
-                            awaitFrame()
-                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                        }
-                        stopTrailer()
-                        anime.pendingUrl?.let { anime.launchExtract(it, anime.pendingDub, null) }
-                    },
-                    onChoose = {
-                        anime.showDefaultPrompt = false
-                        // NO focus restore here, unlike onDefault above. onDefault ENDS
-                        // the dialog flow, so returning focus to the DuB/Sub button is
-                        // right. onChoose CONTINUES into the picker, and handing focus to
-                        // a button on the screen underneath is exactly what the picker
-                        // then has to fight for it.
-                        val cached = anime.pendingUrl?.let { anime.servers.cache[anime.servers.key(it, anime.pendingDub)] }
-                        if (cached != null) {
-                            Log.d("scraper", "🗂 server picker from cache (${cached.first.size} servers)")
-                            anime.serverOptions    = cached.first
-                            anime.serverDefaultIdx = cached.second
-                            anime.showServerPicker = true
-                        } else {
-                            anime.pendingUrl?.let { anime.launchEnumerate(it, anime.pendingDub) }
-                        }
-                    }
-                )
-            }
-
-            // ── Server picker (No path, phase 1 result) ─────────────────────────
-            if (anime.showServerPicker && anime.serverOptions.isNotEmpty()) {
-                ServerPickerOverlay(
-                    servers      = anime.serverOptions,
-                    audioLabel   = if (anime.pendingDub) "Dub" else "Sub",
-                    onSelect     = { serverName ->
-                        anime.showServerPicker = false
-                        // Same: light the original button back up during the 300ms
-                        // window before the loading overlay takes over.
-                        coroutineScope.launch {
-                            awaitFrame()
-                            try { lastStreamFocusRequester?.requestFocus() } catch (_: Exception) {}
-                        }
-                        anime.pendingUrl?.let { anime.launchExtract(it, anime.pendingDub, serverName) }
-                    }
-                )
-            }
-
-            // ── Transient "couldn't load" toast ─────────────────────────────────
-            if (anime.showServerError) {
-                DetailsToast("Couldn't reach the site — please try again", dongleRegular)
-            }
+            // The anime flow's server overlays -- the "Checking servers" trap, the
+            // default-server prompt, the picker and the "couldn't reach" notice,
+            // in that order -- see AnimeServerOverlays.
+            AnimeServerOverlays(anime, dongleRegular)
         },
     )
 }   // ← MoviesDetailsScreenContent closes here

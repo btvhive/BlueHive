@@ -487,13 +487,13 @@ val checkMethodSizes by tasks.registering {
         val maxUnits = 2_500
         val maxRegisters = 100
         // Being split by the redesign (units to registers). At the last stage:
-        // TV 3,719 / 117 (v390, Stage 7c). The TV ceiling also keeps that
+        // TV 3,726 / 117 (v391, Stage 7d). The TV ceiling also keeps that
         // function under ART's 10,000-unit huge-method limit. Above it ART never
         // compiles the method, so it runs in the interpreter (dex2oat
         // --dump-stats, docs/details-redesign-baseline.md).
         //
         // The movie function left this list at Stage 7b: at 2,309 / 85 (v389) it
-        // is under the budget, which now holds it (2,019 / 85 at v390). So is the TV
+        // is under the budget, which now holds it (2,010 / 89 at v391). So is the TV
         // play-area slot, which had a ceiling of its own from Stage 5 (2,406 / 92).
         val shrinking = mapOf(
             "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (3_760 to 120),
