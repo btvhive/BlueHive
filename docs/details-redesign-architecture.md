@@ -494,6 +494,7 @@ The existing `SeasonAvailabilityTest`, `UnairedEpisodeTest` and `SourceCatalogTe
 | 17 | Anime launch: movies stop the trailer when an extraction starts; TV already stopped it on the English/Japanese press (#6) | a parameter (`onLaunch`) |
 | 18 | A source press: TV records the episode and selects it (`stopTrailerAndSelectEpisode`); movies only stop the trailer | the screen's own `onStart` |
 | 19 | Log wording: TV lines name the episode ("s1e2", "episode"), movie lines say "movie" | derived from the request |
+| 20 | Details-to-details launches: movies send budget and revenue, and fall back to "movie" / "" for a missing type or title; TV sends its season count and status, and its Back also sends the budget and revenue it never reads | one branch per screen in `DetailsIntents`, pinned by `DetailsIntentsTest` (Stage 9a) |
 
 Found while moving the playback core (Stages 6–7) and **not** kept, because nothing can tell them apart:
 
@@ -519,7 +520,7 @@ Each of these can be unified later as its own small change. That's your call, it
 | **6** | Playback core, **movie screen first**: StreamSource, PlaybackRequest, PlaybackSession, both controllers, PlayerIntents, the loading and error overlays. Done in four commits, 6a–6d (v384–v387). | highest |
 | **7** | The TV screen switches to the same playback core. The default-server prompt, picker and "Checking servers" overlays join PlaybackOverlays here, where the two screens' copies can be compared. | high |
 | **8** | TV seasons and episodes: availability, season column, episode state, row, card, unaired gate, source overlay, play area, focus map | high (focus) |
-| **9** | Activities: Args, `DetailsBackNavigation`, `DetailsIntents`. Optional 9b: the 6 outside callers use it too. | low–medium |
+| **9** | Activities: Args, `DetailsBackNavigation`, `DetailsIntents`. Done in four commits, 9a–9d (v397–v400); in 9d each screen function moved to its own file (`TvShowDetailsScreen.kt`, `MovieDetailsScreen.kt`) and takes the Args, and the two `-keep` rules moved with them. Optional: the 6 outside callers use `DetailsIntents` too (not done). | low–medium |
 | **10** | Lock it in: remove the two `-keep` rules, enforce the size and boundary gates, take the final measurements, update the notes | low |
 
 ### Test rounds

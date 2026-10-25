@@ -150,5 +150,9 @@
 # the movie screen proves nothing. The real fix is splitting both functions;
 # remove these lines only after that, and only once a release build has been
 # opened on a device.
--keep class com.example.bluehive.details.tvshowdetails.TVShowsDetailsScreenComposeKt { *; }
--keep class com.example.bluehive.details.moviesdetails.MoviesDetailsScreenComposeKt { *; }
+#
+# Stage 9 of the details redesign moved both screen functions, with everything
+# else that was top-level in the two Activity files, into TvShowDetailsScreen.kt
+# and MovieDetailsScreen.kt. The rules moved with them.
+-keep class com.example.bluehive.details.tvshowdetails.TvShowDetailsScreenKt { *; }
+-keep class com.example.bluehive.details.moviesdetails.MovieDetailsScreenKt { *; }
