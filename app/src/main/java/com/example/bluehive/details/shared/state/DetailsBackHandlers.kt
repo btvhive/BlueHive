@@ -57,17 +57,3 @@ fun DetailsBackHandlers(
         onExtractionCancelled()
     }
 }
-
-/**
- * The TV screen's, until it moves onto the playback core in Stage 7: Extras
- * only. Its prompt and extraction handlers are still registered further down
- * its root, after this one, so they keep winning while they are open.
- */
-@Composable
-fun DetailsBackHandlers(extras: ExtrasState) {
-    // Back collapses Extras before it leaves the page -- see above.
-    BackHandler(enabled = extras.isOn) {
-        BlueHiveApplication.playBackOutSound()
-        extras.close()
-    }
-}

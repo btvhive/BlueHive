@@ -45,9 +45,24 @@ class AnimeServerList internal constructor() {
 
     /**
      * Fetch and cache the server list for this url and track, unless it is
-     * cached already. The "Default server" path has no list to fail over
-     * through until this fetches one, and warming it for the track that just
-     * played is cheap: the extraction already cached it server-side.
+     * cached already. TWO CALLERS, TWO REASONS.
+     *
+     * The dub failover is only as good as the list it picks from, and on the
+     * "Default server" path there is no list: nothing has opened the picker,
+     * so the cache is empty and pick-next returns null on the first ask. That
+     * is the exact path the failover exists for.
+     *
+     * The play path calls it for whichever track actually played, so that
+     * backing out of the player and opening "Choose a server" finds the list
+     * already here instead of showing a spinner. It used to be dub-only, which
+     * left every sub viewer paying for an enumerate the moment they went
+     * looking for a different provider.
+     *
+     * Cheap now in a way it was not before: the extractor harvests the list
+     * during the extraction itself and the API caches it, so on the play path
+     * this is one HTTP round trip, no browser. Idempotent, and silent on
+     * failure: a missing list means no failover and a picker that fetches its
+     * own, which is where we already were.
      */
     suspend fun ensure(url: String, dub: Boolean, request: PlaybackRequest) {
         if (cache[key(url, dub)] != null) return

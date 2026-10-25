@@ -98,6 +98,9 @@ class PlaybackSession internal constructor() {
         // whether to show "trying 2 of 4", so a stale true would put a source
         // count and an old failover note over the next ANIME load.
         isBackendExtract      = false
+        // And its status line, for the same reason: the TV screen's headline
+        // shows it for an extraction that is not the chain's.
+        backendStatus         = ""
         extractStage          = 0
     }
 }

@@ -38,7 +38,7 @@ import kotlinx.coroutines.launch
  * the screen's state in the shared [PlaybackSession]. The code is the movie
  * screen's, word for word; what differs for an episode comes from the request
  * ([apiType], season and episode), and the TV screen's log lines and error
- * wording follow it too, so the TV can switch over in Stage 7 unchanged.
+ * wording follow it too; the TV screen switched over in Stage 7 unchanged.
  *
  * Every source button goes straight to server-side m3u8 extraction and our own
  * player. The "open the site directly" alternative was GeckoView, which was

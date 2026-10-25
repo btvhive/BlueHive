@@ -42,7 +42,8 @@ import kotlinx.coroutines.launch
  * shared flags in [PlaybackSession] (one loading screen, one BACK-to-cancel,
  * never two extractions at once). The code is the movie screen's, word for
  * word; what differs for an episode comes from the request (type, season and
- * episode, "anime_tv"), so the TV screen can switch over in Stage 7.
+ * episode, "anime_tv"). The TV screen switched over in Stage 7: its own copy
+ * was the same code once the request was mapped to its episode.
  */
 @Stable
 class AnimePlaybackController internal constructor(
@@ -251,12 +252,23 @@ class AnimePlaybackController internal constructor(
     }
 
     /**
-     * Anime via the BACKEND extractor. For a film, /api/anime/resolve maps it
-     * straight to its AniList id with a null episode, and the miruro movie
-     * template omits ?ep= entirely.
+     * Anime via the BACKEND extractor.
      *
-     * @param acceptAnyTrack play the wrong track anyway — set only once every
-     *        dub server has been tried.
+     * MEASURED 2026-08-07 from the extractor container: miruro.tv extracts in
+     * 2.0 s / 2.6 s / 1.9 s (3/3) through the SAME generic path every other
+     * source uses, well inside the default budget -- which is why this is a
+     * call rather than a port.
+     *
+     * TMDB coordinates go over the wire, not a Miruro URL: the backend resolves
+     * tmdb -> AniList itself via /api/anime/resolve (AniBridge primary, Fribb
+     * fill-in, multi-cour seasons reconstructed). Sending a URL would fork that
+     * mapping into two places. A film maps straight to its AniList id with a
+     * null episode, and the miruro movie template omits ?ep= entirely.
+     *
+     * @param acceptAnyTrack play whatever came back even if it is the wrong
+     *        track. Set only once every dub server has been tried, so a dub
+     *        request ends in sub audio rather than a black screen -- labelled
+     *        Sub, because that is what it is.
      */
     internal suspend fun extractViaBackend(dub: Boolean = false,
                                            server: String? = null,
@@ -271,6 +283,9 @@ class AnimePlaybackController internal constructor(
                 season  = req.apiSeason,
                 episode = req.apiEpisode,
                 source  = "miruro",
+                // anime_movie / anime_tv, not the screen's mediaType -- the whole
+                // point of the column is telling anime traffic apart in
+                // relay_sessions.
                 mtype   = req.animeType,
                 title   = mediaTitle,
                 profile = profileId,
@@ -285,8 +300,10 @@ class AnimePlaybackController internal constructor(
 
         if (body == null || body.m3u8.isBlank()) return ExtractOutcome.MISS
 
-        // Dub asked for, sub delivered. A null `audio` is an older backend:
-        // unknowable, so treat it as before.
+        // Dub asked for, sub delivered. The manifest is real, so every other
+        // check passes -- this is the only place it can be caught, and only since
+        // ExtractResponse started carrying the track it produced. A null `audio`
+        // is an older backend: unknowable, so treat it as before.
         val wrongTrack = dub && body.audio?.equals("dub", ignoreCase = true) == false
         if (wrongTrack && !acceptAnyTrack) {
             Log.e("scraper", "🎧 asked for dub, backend returned '${body.audio}'" +
@@ -347,9 +364,11 @@ class AnimePlaybackController internal constructor(
 
                 // BACKEND FIRST for EVERY anime play — sub, dub and named
                 // servers alike. The backend drives the Language and Provider
-                // dropdowns itself, so there is no case left that it cannot serve.
+                // dropdowns itself (measured: dub in 1.9 s vs 18.4 s on-device),
+                // so there is no case left that it cannot serve.
                 // Still falls THROUGH on failure: the on-device extractor below is
-                // untouched, so a backend outage costs seconds, not the film.
+                // untouched, so a backend outage costs seconds, not the film --
+                // and that fallback is what makes routing every play here safe.
                 //
                 // Burn the provider here, not in extractorLauncher — that handler
                 // only sees ON-DEVICE results, so the tried set never grew and the
@@ -358,16 +377,22 @@ class AnimePlaybackController internal constructor(
 
                 // Cancellable: leaving the page while the backend works must end
                 // this coroutine, not count as a miss and launch the on-device
-                // fallback through the closed page's launcher (PageCoroutines.kt).
+                // fallback through the closed page's launcher -- the v350 crash
+                // (PageCoroutines.kt).
                 var outcome = runCatchingCancellable {
                     extractViaBackend(dub = dub, server = server)
                 }.getOrDefault(ExtractOutcome.MISS)
 
+                // Dub asked for, sub delivered. Same response the on-device path
+                // has always had (RESULT_DUB_FALLBACK) and the same answer: walk
+                // the rest of the dub providers before settling.
                 if (outcome == ExtractOutcome.WRONG_TRACK) {
                     ensureServerList(url, true)
                     // The DUB list specifically, not pickNextServer — that helper
                     // falls back to `serverOptions`, which may still hold the sub
-                    // list from the last picker.
+                    // list from the last picker. Handing a `…-sub` provider to an
+                    // audio=dub extract is how a dub failover would quietly become
+                    // another sub playback.
                     val next = servers.cache[servers.key(url, true)]?.first
                         ?.firstOrNull { it.name !in servers.tried }?.name
                     if (next != null) {
@@ -378,6 +403,10 @@ class AnimePlaybackController internal constructor(
                         failoverRequest = Triple(url, true, next)
                         return@launch
                     }
+                    // Out of servers. Play the sub rather than nothing -- but say so
+                    // at a level the release build keeps, because silence here is
+                    // exactly how Japanese audio arrived under a Dub button with no
+                    // trace anywhere.
                     Log.e("scraper", "🔁 dub unavailable on every server — playing sub as last resort")
                     outcome = runCatchingCancellable {
                         extractViaBackend(dub = dub, server = server, acceptAnyTrack = true)
@@ -388,6 +417,9 @@ class AnimePlaybackController internal constructor(
                     // Warm the picker for the track that just played. Playback
                     // has already started and the list is cached server-side by
                     // the extraction, so this is one round trip and delays nothing.
+                    // This is the "back out and choose a different server" path:
+                    // without it that press paid for a whole browser run to
+                    // enumerate a page we had open seconds earlier.
                     ensureServerList(url, dub)
                     session.isExtracting   = false
                     session.extractPending = false
