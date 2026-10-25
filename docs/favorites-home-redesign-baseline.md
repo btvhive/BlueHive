@@ -109,6 +109,25 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 |---|---|---|---|---|
 | 0 | v405 code (the APK was up to date: no app code changed) | 5,660 units, 209 registers | 5,030 units, 118 registers | v405: 12,726 classes, 0 failures |
 | F1 | v406 | 4,977 units, 141 registers (ceiling now 5,030 / 145) | 5,030 units, 118 registers | v406: 12,728 classes, 0 failures (checked at 18:01 UTC, after the build: both boxes were playing video at build time) |
+| F2 | v408 | 3,837 units, 95 registers (ceiling now 3,880 / 97) | 5,030 units, 118 registers | not yet: the box was in use at build time (18:29 UTC, the other session's v407 on it) |
+
+### F2 (v408)
+
+- **FavoritesScreen: 4,977 → 3,837 units, 141 → 95 registers**, under the register budget for the first time. Its fifteen pieces of state are now three holder references, and its seven effects are child composables.
+- **The new code:**
+
+| Method | Code units | Registers |
+|---|---|---|
+| `FavoritesData.load` (the fetch) | 594 | 31 |
+| `FavoritesGridEffects` (effects 3 to 6) | 461 | 23 |
+| `FavoritesData.commitRemovals` | 205 | 20 |
+| `FavoritesResetOnDispose` (effect 1) | 176 | 14 |
+
+- **R8 still packs FavoritesScreen with other code:** in v408 it is `kotlin.io.ByteStreamsKt` again, now next to the details header buttons, `DetailsBackNavigation` and `TvWideLazyRow`. F3 brings it under 2,500 units.
+- **Gates:**
+  - JVM unit tests: 224 pass. 16 are new: `FavoritesFilterTest` (8), `FavoritesGridFocusTest` (5, one of which checks `gridTarget` against the old arrow branches for every grid up to 30 cards, 1 to 8 to a row) and `FavoritesDataTest` (3). One more is the other session's.
+  - `checkMethodSizes`: passes with the lower ceiling.
+  - `checkDetailsBoundaries`: passes.
 
 ### F1 (v406)
 

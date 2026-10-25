@@ -2,8 +2,9 @@
 
 **Status:** approved 2026-10-25.
 - Stage 0 is done: the two launch records, the two ratchets, and the size and speed baselines in `docs/favorites-home-redesign-baseline.md`.
-- F1 is done (v406, verified on the onn box): Favorites is in `favorites/`, and `FavoritesScreen` is down to 4,977 units / 141 registers.
-- Next is F2.
+- F1 is done (v406, verified on the onn box): Favorites is in `favorites/`.
+- F2 is done (v408): the three state holders and the seven effects as child composables. `FavoritesScreen` is down to 3,837 units / 95 registers. The on-device check of v408 is still to run.
+- Next is F3.
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
 
@@ -279,11 +280,13 @@ Speed is measured before and after (needs your OK to drive the boxes):
 | # | What | Plan |
 |---|---|---|
 | 1 | Favorites' type tabs move focus with `Handler.postDelayed(50 ms)`, which is not cancelled if the page closes inside that window | kept; candidate fix after the split |
-| 2 | Favorites resets every piece of state when it leaves the screen; that state is discarded anyway, so the code does nothing | kept unless you OK removing it in F2 |
+| 2 | Favorites resets every piece of state when it leaves the screen; that state is discarded anyway, so the code does nothing | kept: since F2 it is the child composable `FavoritesResetOnDispose`, still effect 1 of 7; it goes only with your OK |
 | 3 | The home function re-runs every 6 s | fixed in H1: a performance fix, nothing on screen changes |
 | 4 | The TV Shows and Anime shelves log a line on every recomposition | kept; #3 removes most of those lines |
 | 5 | Favorites and Home build their own details-launch extras, with `""` and `"N/A"` defaults (Home adds budget and revenue), unlike `DetailsIntents` | kept per screen, pinned by tests |
 | 6 | Found in F1. In Favorites' press-and-prefetch, a failed details request fails its `async`, which cancels the pressing coroutine. The `try`/`catch` logs that and clears the navigating flag, but the request's exception still travels up to the screen's coroutine scope. What that does on a box (a crash, or a scope that stops launching) is untested | kept: `prefetchDetailsLaunch` starts the requests in the same scope as before; candidate fix after the split |
+| 7 | Found in F2. Undo's focus restore asks the card requesters that existed before the undo. The restored cards make the list longer, so the grid gets new requesters, and the old ones are attached to nothing: focus is probably not put back on a card. Untested | kept: the screen still hands each click and effect the requesters of its own composition; candidate fix after the split |
+| 8 | Found in F2. In remove mode, two OK presses on one card within 150 ms record it twice in the removed list. Accept then toggles it twice, which puts it back in the favourites on the server. Undo adds it twice, and two cards with one key can crash the grid. Untested | kept; candidate fix after the split |
 
 ---
 
