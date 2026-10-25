@@ -4,8 +4,8 @@
 - Stage 0 is done: the two launch records, the two ratchets, and the size and speed baselines in `docs/favorites-home-redesign-baseline.md`.
 - F1 is done (v406, verified on the onn box): Favorites is in `favorites/`.
 - F2 is done (v408, verified on the onn box): the three state holders and the seven effects as child composables.
-- F3 is done (v409): the seven section composables. `FavoritesScreen` is down to 1,131 units / 45 registers, under the budget and off the ratchet. The on-device check of v409 is still to run.
-- Next is Round A: v409 on the onn box (with your OK) and the Favorites checklist (§11). Nothing is published (ground rule 7).
+- F3 is done (v409, verified): the seven section composables. `FavoritesScreen` is down to 1,131 units / 45 registers, under the budget and off the ratchet.
+- Round A is open: v409 is on the onn box since 18:50 UTC, for the Favorites checklist (§11). Nothing is published (ground rule 7).
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
 

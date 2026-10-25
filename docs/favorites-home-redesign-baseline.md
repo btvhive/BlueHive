@@ -110,7 +110,7 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 | 0 | v405 code (the APK was up to date: no app code changed) | 5,660 units, 209 registers | 5,030 units, 118 registers | v405: 12,726 classes, 0 failures |
 | F1 | v406 | 4,977 units, 141 registers (ceiling now 5,030 / 145) | 5,030 units, 118 registers | v406: 12,728 classes, 0 failures (checked at 18:01 UTC, after the build: both boxes were playing video at build time) |
 | F2 | v408 | 3,837 units, 95 registers (ceiling now 3,880 / 97) | 5,030 units, 118 registers | v408: 12,733 classes, 0 failures (checked at 18:33 UTC, after the build: the box was in use at build time) |
-| F3 | v409 | 1,131 units, 45 registers: under the budget, off the ratchet | 5,030 units, 118 registers | not yet: the box was playing video at build time |
+| F3 | v409 | 1,131 units, 45 registers: under the budget, off the ratchet | 5,030 units, 118 registers | v409: 12,737 classes, 0 failures (18:49 UTC), then installed on the onn box for Round A (18:50 UTC) |
 
 ### F3 (v409)
 
