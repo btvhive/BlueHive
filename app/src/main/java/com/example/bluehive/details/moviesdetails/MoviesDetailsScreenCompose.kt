@@ -29,9 +29,6 @@ import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.focus.focusRequester
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.SourceCatalog
-import com.example.bluehive.sidebarComponents.FavoritesScreenActivity
-import com.example.bluehive.sidebarComponents.HistoryScreenActivity
-import com.example.bluehive.searchBarComponent.SearchBarActivity
 import com.example.bluehive.api.isJapaneseAnimation
 import com.example.bluehive.api.buildJapaneseAnimationSources
 import com.example.bluehive.webview.miruro.MiruroPlayerActivity
@@ -41,7 +38,6 @@ import kotlinx.coroutines.android.awaitFrame
 import androidx.compose.foundation.background
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
-import com.example.bluehive.SourceScreen
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
 import com.example.bluehive.details.shared.playback.AnimeServerOverlays
 import com.example.bluehive.details.shared.playback.PlaybackErrorOverlay
@@ -62,6 +58,7 @@ import com.example.bluehive.details.shared.state.rememberFavoriteState
 import com.example.bluehive.details.shared.state.rememberTrailerState
 import com.example.bluehive.details.shared.navigation.DetailsScreen
 import com.example.bluehive.details.shared.navigation.DetailsIntents
+import com.example.bluehive.details.shared.navigation.DetailsBackNavigation
 
 
 
@@ -91,37 +88,36 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
     }
 
     fun openMediaDetails(media: MediaItem) {
-        val app = application as BlueHiveApplication
-        app.pushDetailsHistory(MediaItem(
-            tmdbId = mediaId,
-            mediaId = mediaId,
-            title = mediaTitle,
-            mediaType = mediaType,
-            posterUrl = posterUrl,
-            backdropUrl = backdropUrl,
-            logoUrl = logoUrl,
-            overview = overview,
-            releaseDate = releaseDate,
-            status = null,
-            voteAverage = voteAverage,
-            voteCount = null,
-            popularity = null,
-            popularityRank = null,
-            originalLanguage = originalLanguage,
-            numberOfSeasons = null,
-            numberOfEpisodes = null,
-            contentRating = contentRating,
-            runtime = null,
-            budget = budget,
-            revenue = revenue,
-            trailerUrl = trailerUrl,
-            genres = genres?.split(", ")?.map { it.trim() },
-            similarItems = null,
-            whereToWatch = null
-        ))
-        Log.d(
-            "DetailsHistory",
-            "Details -> openMediaDetails: pushed '${media.title}', size=${app.historySize()}"
+        DetailsBackNavigation.pushCurrent(
+            this,
+            MediaItem(
+                tmdbId = mediaId,
+                mediaId = mediaId,
+                title = mediaTitle,
+                mediaType = mediaType,
+                posterUrl = posterUrl,
+                backdropUrl = backdropUrl,
+                logoUrl = logoUrl,
+                overview = overview,
+                releaseDate = releaseDate,
+                status = null,
+                voteAverage = voteAverage,
+                voteCount = null,
+                popularity = null,
+                popularityRank = null,
+                originalLanguage = originalLanguage,
+                numberOfSeasons = null,
+                numberOfEpisodes = null,
+                contentRating = contentRating,
+                runtime = null,
+                budget = budget,
+                revenue = revenue,
+                trailerUrl = trailerUrl,
+                genres = genres?.split(", ")?.map { it.trim() },
+                similarItems = null,
+                whereToWatch = null
+            ),
+            media,
         )
 
         val intent = DetailsIntents.open(
@@ -149,57 +145,10 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
         // ✅ Handle system back with sound + history stack
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                BlueHiveApplication.playBackOutSound()
-
-                val app = application as BlueHiveApplication
-                val previous = app.popPreviousDetails()
-
-                if (previous == null) {
-                    when (sourceScreen) {
-                        SourceScreen.HISTORY -> {
-                            Log.d("DetailsHistory", "Back: returning to History")
-                            startActivity(
-                                Intent(this@MoviesDetailsScreenCompose, HistoryScreenActivity::class.java)
-                                    .putExtra("PROFILE_ID", profileId)
-                            )
-                            finish()
-                            return
-                        }
-                        SourceScreen.FAVORITES -> {
-                            Log.d("DetailsHistory", "Back: returning to Favorites")
-                            startActivity(
-                                Intent(this@MoviesDetailsScreenCompose, FavoritesScreenActivity::class.java)
-                                    .putExtra("PROFILE_ID", profileId)
-                            )
-                            finish()
-                            return
-                        }
-                        SourceScreen.SEARCH -> {
-                            Log.d("DetailsHistory", "Back: returning to Search")
-                            startActivity(
-                                Intent(this@MoviesDetailsScreenCompose, SearchBarActivity::class.java)
-                                    .putExtra("PROFILE_ID",    profileId)
-                                    .putExtra("INITIAL_QUERY", searchQuery ?: "")
-                            )
-                            finish()
-                            return
-                        }
-                        else -> {
-                            Log.d("DetailsHistory", "Back: no previous details, finishing to Home")
-                            finish()
-                            return
-                        }
-                    }
-                }
-
-                Log.d("DetailsHistory", "Back: navigating to previous '${previous.title}'")
-
-                val intent = DetailsIntents.back(
+                DetailsBackNavigation.goBack(
                     this@MoviesDetailsScreenCompose, MoviesDetailsScreenCompose::class.java, DetailsScreen.Movie,
-                    previous, profileId, sourceScreen, searchQuery,
+                    profileId, sourceScreen, searchQuery,
                 )
-                startActivity(intent)
-                finish()
             }
         })
 
