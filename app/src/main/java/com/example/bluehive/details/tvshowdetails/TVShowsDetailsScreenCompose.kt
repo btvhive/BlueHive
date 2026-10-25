@@ -13,13 +13,10 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.foundation.layout.*
-import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 import com.example.bluehive.utilities.*
@@ -31,22 +28,10 @@ import com.example.bluehive.repository.RecommendationsRepository
 import kotlinx.coroutines.launch
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.LocalActivity
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
-import android.os.SystemClock
-import androidx.compose.ui.input.key.onKeyEvent
-import androidx.compose.ui.input.key.type
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import com.example.bluehive.repository.EpisodesRepository
 import com.example.bluehive.models.Episode
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.ui.focus.focusRequester
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.LocalDensity
@@ -83,10 +68,6 @@ import com.example.bluehive.details.shared.state.rememberFavoriteState
 import com.example.bluehive.details.shared.state.rememberTrailerState
 
 
-// ⬅️➡️ Hold-to-repeat navigation speed for the episode LazyRow: the minimum time (ms)
-// between focus moves while LEFT/RIGHT is HELD DOWN. HIGHER = SLOWER. (Continue Watching
-// uses CW_NAV_REPEAT_MS = 70L; episode tiles are chunkier, so this starts a touch slower.)
-private const val EPISODE_NAV_REPEAT_MS = 140L
 
 class TVShowsDetailsScreenCompose: ComponentActivity() {
 
@@ -916,92 +897,15 @@ fun TVShowsDetailsScreenContent(
                 contentScale = ContentScale.Fit
             )
 
-                    // 🔴 Inline Seasons LazyRow (no separate TVSeasonsRow composable)
-                    // Lists Season 1..listedSeasons, so a season with nothing
-                    // aired yet never renders. Waits for that answer rather than
-                    // listing every season and then dropping one.
-                    val listed = listedSeasons ?: 0
-                    if (numberOfSeasons > 0 && listed > 0) {
-                        val seasons = remember(listed) { (1..listed).toList() }
-                        val listState = focusMap.seasonList
-
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .offset(x = 28.5.dp, y = 313.25.dp)   // tweak these to line up visually
-                                .width(180.25.dp)
-                                .height(201.5.dp)
-                                //.background(Color.Red)            // debug; remove later
-                        ) {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.fillMaxSize(),
-                                verticalArrangement  = Arrangement.spacedBy((-6).dp),   // ① between items
-                                contentPadding = PaddingValues(horizontal = 11.5.dp, vertical = 19.5.dp)      // ② padding at edges and top margin
-                            ) {
-
-                                itemsIndexed(seasons) { seasonIndex, seasonNumber ->
-                                    SeasonButton(
-                                        label = "Season $seasonNumber",
-                                        isSelected = (seasonNumber == episodesState.selectedSeason),
-                                        fontFamily = passionFont,
-                                        focusRequester = focusMap.seasons[seasonIndex],
-                                                modifier = Modifier.onKeyEvent { event ->
-                                            if (event.type == KeyEventType.KeyDown) {
-                                                when (event.key) {
-                                                    Key.DirectionDown -> {
-                                                        if (seasonIndex == seasons.lastIndex) {
-                                                            // Last season — nothing below it. Swallow the
-                                                            // key so holding DOWN at the bottom stops
-                                                            // repeating the nav sound (and doesn't move).
-                                                            true
-                                                        } else {
-                                                            BlueHiveApplication.playTitleCardNavigation()
-                                                            false
-                                                        }
-                                                    }
-                                                    Key.DirectionUp -> {
-                                                        BlueHiveApplication.playTitleCardNavigation()
-                                                        false
-                                                    }
-                                                    Key.DirectionRight -> {
-                                                        if (episodesState.episodes.isNotEmpty() && episodesState.focusRequesters.isNotEmpty()) {
-                                                            BlueHiveApplication.playHoverSound()
-
-                                                            val targetIndex = episodesState.lastFocusedEpisodeIndex
-                                                                .coerceIn(0, episodesState.focusRequesters.lastIndex)
-
-                                                            coroutineScope.launch {
-                                                                episodesState.rowState.scrollToItem(targetIndex)
-                                                                episodesState.focusRequesters
-                                                                    .getOrNull(targetIndex)
-                                                                    ?.requestFocus()
-                                                                    ?: episodesState.focusRequesters.first().requestFocus()
-                                                            }
-
-                                                            true
-                                                        } else {
-                                                            false
-                                                        }
-                                                    }
-                                                    else -> false
-                                                }
-                                            } else {
-                                                false
-                                            }
-                                        },
-                                        onClick = {
-                                            if (episodesState.selectedSeason != seasonNumber) {
-                                                episodesState.selectedSeason = seasonNumber
-                                                episodesState.loadSeasonEpisodes(seasonNumber)
-                                            }
-                                        },
-                                    )
-                                }
-
-                            }
-                        }
-                    }
+            // The season column -- see SeasonColumn.
+            SeasonColumn(
+                listedSeasons   = listedSeasons,
+                numberOfSeasons = numberOfSeasons,
+                episodesState   = episodesState,
+                focusMap        = focusMap,
+                passionFont     = passionFont,
+                coroutineScope  = coroutineScope,
+            )
 
             Image(
                 painter = painterResource(id = R.drawable.top_upper_body),
@@ -1049,190 +953,19 @@ fun TVShowsDetailsScreenContent(
                 contentScale = ContentScale.Fit
             )
 
-            // ================================================================> episode lazy row
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .offset(x = 236.dp, y = 299.5.dp) // adjust to sit between side decorations
-                    .width(683.75.dp)
-                    .height(260.dp) //122.25
-                //.background(Color.Red)
-            ) {
-                when {
-                    episodesState.isLoadingEpisodes -> {
-                        // Simple loading state (optional)
-                        Text(
-                            text = "Loading episodes...",
-                            color = Color(0xFFAAAAAA),
-                            fontFamily = dongleRegular,
-                            fontSize = 23.sp,
-                            modifier = Modifier.align(Alignment.TopCenter)
-                                .offset(y = 45.dp)
-                        )
-                    }
-
-                    episodesState.episodes.isEmpty() -> {
-                        // Optional empty state
-                        Text(
-                            text = "No episodes found for Season ${episodesState.selectedSeason}",
-                            color = Color(0xFFAAAAAA),
-                            fontFamily = dongleRegular,
-                            fontSize = 23.sp,
-                            modifier = Modifier.align(Alignment.TopCenter)
-                                .offset(y = 45.dp)
-                        )
-                    }
-
-                    else -> {
-                        val totalEpisodes = episodesState.episodes.size
-
-                        LazyRow(
-                            state = episodesState.rowState,
-                            userScrollEnabled = episodesState.selectedEpisodeOverlayIndex == -1,
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalArrangement = Arrangement.spacedBy(14.dp),
-                            contentPadding = PaddingValues(
-                                start = 18.dp,   // same as before
-                                end = 40.dp,     // ⬅ bump this up until the last card clears the decor nicely
-                                top = 12.dp,
-                                bottom = 12.dp
-                            )
-                        ) {
-
-                            itemsIndexed(
-                                items = episodesState.episodes,
-                                key = { _, ep -> ep.tmdbEpisodeId }
-                            ) { index, episode ->
-
-                                // Watched marker for THIS episode. watchedEpisodes changes only on
-                                // load and when the user starts a stream, so reading it per item
-                                // costs nothing during D-pad navigation.
-                                val isWatched = (episodesState.selectedSeason to episode.episodeNumber) in episodesState.watchedEpisodes
-
-                                // Still FOCUSABLE when unaired -- people want to read what is
-                                // coming -- but not pressable. See the scrim in EpisodeCard and
-                                // the Enter branch below.
-                                val isUnaired = remember(episode.airDate, todayYmd) {
-                                    isEpisodeUnaired(episode.airDate, todayYmd)
-                                }
-
-                                EpisodeCard(
-                                    episode                = episode,
-                                    index                  = index,
-                                    totalEpisodes          = totalEpisodes,
-                                    isWatched              = isWatched,
-                                    isUnaired              = isUnaired,
-                                    isEpisodeSelectOverlay = episodesState.selectedEpisodeOverlayIndex == index,
-                                    backdropUrl            = backdropUrl,
-                                    rowState               = episodesState.rowState,
-                                    focusRequester         = episodesState.focusRequesters[index],
-                                    passionFont            = passionFont,
-                                    dongleRegular          = dongleRegular,
-                                    onFocused = {
-                                        episodesState.lastFocusedEpisodeIndex = index
-                                        episodesState.episodeFocusLanded = true  // confirms initial focus actually landed
-                                        // Arming belongs to ONE episode. Landing on a
-                                        // different one drops it, so a press here can
-                                        // never be the second half of a pair begun on a
-                                        // neighbour three cards away.
-                                        if (unairedGate.armedIndex != index) unairedGate.armedIndex = -1
-                                    },
-                                    onKeyEvent = { event ->
-                                        if (event.type == KeyEventType.KeyDown) {
-                                            when (event.key) {
-                                                Key.Back -> {
-                                                    when {
-                                                        episodesState.selectedEpisodeOverlayIndex == index -> {
-                                                            episodesState.selectedEpisodeOverlayIndex = -1
-                                                            true
-                                                        }
-                                                        (listedSeasons ?: numberOfSeasons) > 1 && focusMap.seasons.isNotEmpty() -> {
-                                                            val seasonIdx = (episodesState.selectedSeason - 1)
-                                                                .coerceIn(0, focusMap.seasons.lastIndex)
-                                                            BlueHiveApplication.playHoverSound()
-                                                            // Don't assume the season button is attached. On the
-                                                            // Continue Watching path the episode tile is focused
-                                                            // programmatically under load, before the season
-                                                            // LazyColumn has placed its buttons — a direct
-                                                            // requestFocus() no-ops and Back appears dead. Scroll
-                                                            // the season in, wait for layout, then focus.
-                                                            coroutineScope.launch {
-                                                                focusMap.focusSeasonReliably(seasonIdx)
-                                                            }
-                                                            true
-                                                        }
-                                                        else -> false
-                                                    }
-                                                }
-
-
-                                                Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
-                                                    if (isUnaired && unairedGate.armedIndex != index) {
-                                                        // REFUSED, NOT IGNORED. Silence here is
-                                                        // indistinguishable from a dropped press,
-                                                        // and the answer to that is to press again
-                                                        // harder. The sound says the box heard it
-                                                        // -- and the notice says what a second
-                                                        // press will do.
-                                                        BlueHiveApplication.playErrorSound()
-                                                        unairedGate.armedIndex = index
-                                                    } else {
-                                                        BlueHiveApplication.playClickSound()
-                                                        unairedGate.armedIndex = -1
-                                                        episodesState.selectedEpisodeOverlayIndex = index
-                                                    }
-                                                    true
-                                                }
-
-
-                                                Key.DirectionDown -> {
-                                                    if (episodesState.selectedEpisodeOverlayIndex == index) {
-                                                        // move focus into the provider grid
-                                                        focusMap.providers.firstOrNull()?.requestFocus()
-                                                        true
-                                                    } else {
-                                                        // Nothing below a tile now that the corner button is
-                                                        // gone. Consumed with no move, so the press is silent
-                                                        // rather than sending focus somewhere arbitrary.
-                                                        true
-                                                    }
-                                                }
-                                                Key.DirectionLeft, Key.DirectionRight -> {
-                                                    if (episodesState.selectedEpisodeOverlayIndex == index) {
-                                                        true
-                                                    } else if (event.key == Key.DirectionRight && index == episodesState.episodes.lastIndex) {
-                                                        // Dead-end: RIGHT on the last episode has nowhere to go —
-                                                        // consume it silently (no scroll sound, no no-op traversal).
-                                                        true
-                                                    } else {
-                                                        // Hold-to-repeat throttle (see EPISODE_NAV_REPEAT_MS): swallow
-                                                        // repeats that land sooner than the interval so holding L/R
-                                                        // scrolls at a controlled pace, like the Continue Watching list.
-                                                        val now = SystemClock.uptimeMillis()
-                                                        if (now - episodesState.navGate[0] < EPISODE_NAV_REPEAT_MS) {
-                                                            true   // too soon — consume, no move (and no sound)
-                                                        } else {
-                                                            episodesState.navGate[0] = now
-                                                            BlueHiveApplication.playTitleCardNavigation()
-                                                            false  // allow the move
-                                                        }
-                                                    }
-                                                }
-                                                else -> false
-                                            }
-                                        } else {
-                                            false
-                                        }
-                                    },
-                                    onAnchored = { episodesState.overlayAnchor = it },
-                                )
-                            }
-
-                        }
-                    }
-                }
-            }
-            // ================================================================> episode lazy row
+            // The episode row -- see EpisodeRow.
+            EpisodeRow(
+                episodesState   = episodesState,
+                focusMap        = focusMap,
+                unairedGate     = unairedGate,
+                listedSeasons   = listedSeasons,
+                numberOfSeasons = numberOfSeasons,
+                todayYmd        = todayYmd,
+                backdropUrl     = backdropUrl,
+                passionFont     = passionFont,
+                dongleRegular   = dongleRegular,
+                coroutineScope  = coroutineScope,
+            )
 
 
 

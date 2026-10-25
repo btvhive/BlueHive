@@ -487,7 +487,7 @@ val checkMethodSizes by tasks.registering {
         val maxUnits = 2_500
         val maxRegisters = 100
         // Being split by the redesign (units to registers). At the last stage:
-        // TV 3,661 / 98 (v394, Stage 8c). The TV ceiling also keeps that
+        // TV 3,695 / 97 (v395, Stage 8d). The TV ceiling also keeps that
         // function under ART's 10,000-unit huge-method limit. Above it ART never
         // compiles the method, so it runs in the interpreter (dex2oat
         // --dump-stats, docs/details-redesign-baseline.md).
