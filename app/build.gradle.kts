@@ -2,6 +2,7 @@
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
+import java.util.zip.ZipFile
 
 // Fails the build when an image would be decoded too big to draw well.
 //
@@ -451,8 +452,233 @@ val verifyReleaseOnDevice by tasks.registering {
     }
 }
 
+// ── Details screens: no giant functions ──────────────────────────────────────
+//
+// R8 has miscompiled TVShowsDetailsScreenContent twice (2026-09-21 and
+// v371-v375): one composable of 11,297 dex code units and 287 registers, and
+// what R8 got wrong both times was register allocation across a method that
+// size. The redesign splits it (docs/details-redesign-architecture.md); this
+// keeps it split. After every release build the dex is measured, and a method
+// from the details screens over the budget fails the build.
+//
+// The two functions being split are allowed at their current size and no
+// bigger -- a ratchet that only tightens -- until Stage 10 empties the list.
+// The rest of the app is reported, not enforced.
+//
+// Each method is matched to the class it was WRITTEN in through R8's mapping
+// file. R8 relocates static methods freely (FavoritesScreen ships inside
+// Rhino's org.mozilla.javascript.Kit), so the class it lands in proves nothing.
+val checkMethodSizes by tasks.registering {
+    val apk = layout.buildDirectory.file("outputs/apk/release/app-release.apk")
+    val mapping = layout.buildDirectory.file("outputs/mapping/release/mapping.txt")
+    val scratch = layout.buildDirectory.dir("tmp/checkMethodSizes")
+    val sdkDir = androidComponents.sdkComponents.sdkDirectory
+
+    doLast {
+        val maxUnits = 2_500
+        val maxRegisters = 100
+        // Being split by the redesign: today's size is the ceiling (units to registers).
+        val shrinking = mapOf(
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (11_297 to 287),
+            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (8_682 to 191),
+        )
+        // App methods at least this big carry the same R8 risk: reported, not enforced.
+        val warnUnits = 5_000
+
+        val apkFile = apk.get().asFile
+        if (!apkFile.exists()) {
+            logger.warn("checkMethodSizes: no release APK at $apkFile - not checked")
+            return@doLast
+        }
+        val tools = File(sdkDir.get().asFile, "build-tools").listFiles().orEmpty()
+            .filter { File(it, "dexdump.exe").exists() || File(it, "dexdump").exists() }
+            .maxByOrNull { dir -> dir.name.split('.').joinToString("") { it.padStart(5, '0') } }
+            ?: throw GradleException("checkMethodSizes: no dexdump under ${sdkDir.get().asFile}/build-tools")
+        val dexdump = File(tools, if (File(tools, "dexdump.exe").exists()) "dexdump.exe" else "dexdump")
+
+        // "residual.Class.method" -> the class it was written in. A member line
+        // whose original name differs from the residual name is an inlined
+        // frame, not the method itself, and is skipped.
+        val owner = HashMap<String, String>()
+        val mapFile = mapping.get().asFile
+        if (mapFile.exists()) {
+            var headerOrig = ""
+            var headerResidual = ""
+            mapFile.bufferedReader().useLines { lines ->
+                lines.forEach { line ->
+                    if (line.isEmpty() || line[0] == '#') return@forEach
+                    if (line[0] != ' ') {
+                        val arrow = line.indexOf(" -> ")
+                        if (arrow > 0 && line.endsWith(":")) {
+                            headerOrig = line.substring(0, arrow)
+                            headerResidual = line.substring(arrow + 4, line.length - 1)
+                        }
+                        return@forEach
+                    }
+                    val arrow = line.lastIndexOf(" -> ")
+                    val paren = line.indexOf('(')
+                    if (arrow < 0 || paren < 0 || paren > arrow) return@forEach
+                    val residualName = line.substring(arrow + 4)
+                    val qualified = line.substring(line.lastIndexOf(' ', paren) + 1, paren)
+                    val dot = qualified.lastIndexOf('.')
+                    if ((if (dot >= 0) qualified.substring(dot + 1) else qualified) != residualName) return@forEach
+                    owner.getOrPut("$headerResidual.$residualName") {
+                        if (dot >= 0) qualified.substring(0, dot) else headerOrig
+                    }
+                }
+            }
+        } else {
+            logger.warn("checkMethodSizes: no R8 mapping file - methods are matched by the class they land in")
+        }
+
+        fun inDetails(origin: String): Boolean {
+            val simple = origin.substringAfterLast('.')
+            return origin.startsWith("com.example.bluehive.details.") ||
+                simple.startsWith("TVShowsDetailsScreenCompose") ||
+                simple.startsWith("MoviesDetailsScreenCompose")
+        }
+
+        data class Method(val key: String, val origin: String, val units: Int, val registers: Int)
+        val methods = ArrayList<Method>()
+        val dexDir = scratch.get().asFile.apply { deleteRecursively(); mkdirs() }
+        ZipFile(apkFile).use { zip ->
+            zip.entries().asSequence().filter { Regex("""classes\d*\.dex""").matches(it.name) }.forEach { entry ->
+                File(dexDir, entry.name).outputStream().use { out -> zip.getInputStream(entry).use { it.copyTo(out) } }
+            }
+        }
+        dexDir.listFiles().orEmpty().filter { it.extension == "dex" }.sortedBy { it.name }.forEach { dex ->
+            val p = ProcessBuilder(dexdump.absolutePath, dex.absolutePath)
+                .redirectError(ProcessBuilder.Redirect.DISCARD)
+                .start()
+            var cls = ""
+            var name = ""
+            var registers = -1
+            p.inputStream.bufferedReader().useLines { lines ->
+                lines.forEach { raw ->
+                    val t = raw.trimStart()
+                    when {
+                        t.startsWith("Class descriptor") ->
+                            cls = t.substringAfter("'L").substringBefore(";'").replace('/', '.')
+                        t.startsWith("name ") -> {
+                            name = t.substringAfter("'").substringBeforeLast("'")
+                            registers = -1
+                        }
+                        t.startsWith("registers ") -> registers = t.substringAfter(':').trim().toIntOrNull() ?: -1
+                        t.startsWith("insns size ") && registers >= 0 -> {
+                            val units = t.substringAfter(':').trim().substringBefore(' ').toIntOrNull() ?: 0
+                            val origin = owner["$cls.$name"] ?: cls
+                            if (units >= 1_000 || inDetails(origin)) {
+                                methods += Method("${origin.substringAfterLast('.')}.$name", origin, units, registers)
+                            }
+                        }
+                    }
+                }
+            }
+            p.waitFor()
+        }
+
+        val details = methods.filter { inDetails(it.origin) }
+        if (details.isEmpty()) throw GradleException("checkMethodSizes: found no details-screen methods - the dex parse is broken")
+        val problems = mutableListOf<String>()
+        for (m in details) {
+            val ceiling = shrinking[m.key]
+            if (ceiling != null) {
+                if (m.units > ceiling.first || m.registers > ceiling.second) {
+                    problems += "${m.key} grew to ${m.units} units / ${m.registers} registers " +
+                        "(ceiling ${ceiling.first} / ${ceiling.second}). It is being split: put new code in a new composable."
+                }
+            } else if (m.units > maxUnits || m.registers > maxRegisters) {
+                problems += "${m.key} is ${m.units} units / ${m.registers} registers " +
+                    "(budget $maxUnits / $maxRegisters). Split it."
+            }
+        }
+        val gone = shrinking.keys - details.map { it.key }.toSet()
+        if (gone.isNotEmpty()) {
+            logger.lifecycle("checkMethodSizes: no longer in the APK, take off the shrinking list: ${gone.joinToString()}")
+        }
+        logger.lifecycle("checkMethodSizes: largest details-screen methods (budget $maxUnits units / $maxRegisters registers):")
+        details.sortedByDescending { it.units }.take(5).forEach { m ->
+            val note = shrinking[m.key]?.let { "  [being split; ceiling ${it.first} / ${it.second}]" } ?: ""
+            logger.lifecycle("  %6d units %4d regs  %s%s".format(m.units, m.registers, m.key, note))
+        }
+        val giants = methods.filter {
+            !inDetails(it.origin) && it.origin.startsWith("com.example.bluehive.") && it.units >= warnUnits
+        }
+        if (giants.isNotEmpty()) {
+            logger.warn("checkMethodSizes: other app methods over $warnUnits units (same R8 risk, not enforced):")
+            giants.sortedByDescending { it.units }.forEach {
+                logger.warn("  %6d units %4d regs  %s".format(it.units, it.registers, it.key))
+            }
+        }
+        if (problems.isNotEmpty()) {
+            throw GradleException("Method size check failed:\n" + problems.joinToString("\n") { "  - $it" })
+        }
+    }
+}
+
+// The cheap local check first, then the one that needs a TV.
+verifyReleaseOnDevice.configure { mustRunAfter(checkMethodSizes) }
+
 tasks.matching { it.name == "assembleRelease" }.configureEach {
-    finalizedBy(verifyReleaseOnDevice)
+    finalizedBy(checkMethodSizes, verifyReleaseOnDevice)
+}
+
+// ── Details screens: who may use whom ────────────────────────────────────────
+//
+// The details redesign (docs/details-redesign-architecture.md §5) splits the
+// two screens into details/moviesdetails, details/tvshowdetails and
+// details/shared. The walls are the point: in v371-v375 the movie screen
+// called into the TV file, so when ART rejected the TV class, movie playback
+// died with it. Kotlin's `internal` covers the whole app module and cannot
+// enforce this, so it is checked on every build:
+//   - moviesdetails never uses tvshowdetails, and the other way round;
+//   - details/shared uses neither screen;
+//   - code outside details/ reaches a screen only through its Activity.
+// Whole-line comments are skipped. Anything else that names a forbidden
+// package fails, including a trailing comment -- reword the comment.
+val checkDetailsBoundaries by tasks.registering {
+    val javaDir = layout.projectDirectory.dir("src/main/java")
+    inputs.files(fileTree(javaDir) { include("**/*.kt") })
+
+    doLast {
+        val appDir = javaDir.dir("com/example/bluehive").asFile
+        val entryPoints = setOf(
+            "com.example.bluehive.details.moviesdetails.MoviesDetailsScreenCompose",
+            "com.example.bluehive.details.tvshowdetails.TVShowsDetailsScreenCompose",
+        )
+        val screenRef = Regex("""com\.example\.bluehive\.details\.(moviesdetails|tvshowdetails)((?:\.[A-Za-z_][A-Za-z0-9_]*)*)(\.\*)?""")
+        val problems = mutableListOf<String>()
+        appDir.walkTopDown().filter { it.isFile && it.extension == "kt" }.forEach { file ->
+            val rel = file.relativeTo(appDir).invariantSeparatorsPath
+            val area = when {
+                rel.startsWith("details/moviesdetails/") -> "moviesdetails"
+                rel.startsWith("details/tvshowdetails/") -> "tvshowdetails"
+                rel.startsWith("details/") -> "shared"
+                else -> "outside"
+            }
+            file.readLines().forEachIndexed { index, raw ->
+                val line = raw.trim()
+                if (line.startsWith("//") || line.startsWith("*") || line.startsWith("/*")) return@forEachIndexed
+                screenRef.findAll(raw).forEach { m ->
+                    val screen = m.groupValues[1]
+                    val allowed = when (area) {
+                        "moviesdetails", "tvshowdetails" -> screen == area
+                        "shared" -> false
+                        else -> m.groupValues[3].isEmpty() &&
+                            entryPoints.any { m.value == it || m.value.startsWith("$it.") }
+                    }
+                    if (!allowed) problems += "$rel:${index + 1}: $area code must not use ${m.value}"
+                }
+            }
+        }
+        if (problems.isNotEmpty()) {
+            throw GradleException("Details boundary check failed:\n" + problems.joinToString("\n") { "  - $it" })
+        }
+    }
+}
+
+tasks.named("preBuild") {
+    dependsOn(checkDetailsBoundaries)
 }
 
 dependencies {
@@ -592,6 +818,9 @@ dependencies {
     // TESTING
     // ═══════════════════════════════════════════════════════════
     testImplementation(libs.junit)
+    // The real org.json for JVM tests. android.jar's copy is a stub that throws,
+    // which would make every JSON-reading helper look like it returns null.
+    testImplementation("org.json:json:20240303")
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
