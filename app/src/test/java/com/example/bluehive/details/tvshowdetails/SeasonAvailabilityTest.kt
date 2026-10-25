@@ -1,4 +1,4 @@
-package com.example.bluehive
+package com.example.bluehive.details.tvshowdetails
 
 import com.example.bluehive.models.Episode
 import kotlinx.coroutines.runBlocking

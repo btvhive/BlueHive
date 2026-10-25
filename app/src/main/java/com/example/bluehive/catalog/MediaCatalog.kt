@@ -74,9 +74,9 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.bluehive.BlueHiveApplication
-import com.example.bluehive.MoviesDetailsScreenCompose
+import com.example.bluehive.details.moviesdetails.MoviesDetailsScreenCompose
 import com.example.bluehive.R
-import com.example.bluehive.TVShowsDetailsScreenCompose
+import com.example.bluehive.details.tvshowdetails.TVShowsDetailsScreenCompose
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.repository.EpisodesRepository

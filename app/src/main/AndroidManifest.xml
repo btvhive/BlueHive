@@ -287,13 +287,13 @@
             android:windowSoftInputMode="adjustNothing" />
 
         <activity
-            android:name=".MoviesDetailsScreenCompose"
+            android:name=".details.moviesdetails.MoviesDetailsScreenCompose"
             android:exported="false"
             android:screenOrientation="landscape"
             android:theme="@style/Theme.BlueHive" />
 
         <activity
-            android:name=".TVShowsDetailsScreenCompose"
+            android:name=".details.tvshowdetails.TVShowsDetailsScreenCompose"
             android:exported="false"
             android:screenOrientation="landscape"
             android:theme="@style/Theme.BlueHive" />

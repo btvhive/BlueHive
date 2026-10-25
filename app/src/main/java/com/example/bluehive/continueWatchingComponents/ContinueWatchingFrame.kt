@@ -78,8 +78,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import com.example.bluehive.MoviesDetailsScreenCompose
-import com.example.bluehive.TVShowsDetailsScreenCompose
+import com.example.bluehive.details.moviesdetails.MoviesDetailsScreenCompose
+import com.example.bluehive.details.tvshowdetails.TVShowsDetailsScreenCompose
 import com.example.bluehive.repository.RecommendationsRepository
 import com.example.bluehive.repository.EpisodesRepository
 import androidx.compose.runtime.DisposableEffect

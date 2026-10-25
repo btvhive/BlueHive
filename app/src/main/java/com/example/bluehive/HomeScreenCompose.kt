@@ -84,6 +84,8 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import com.example.bluehive.auth.DeviceEventStream
 import com.example.bluehive.sidebarComponents.openLiveTvScreen
+import com.example.bluehive.details.moviesdetails.MoviesDetailsScreenCompose
+import com.example.bluehive.details.tvshowdetails.TVShowsDetailsScreenCompose
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch

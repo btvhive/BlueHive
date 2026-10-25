@@ -94,8 +94,8 @@ import java.util.Locale
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
-import com.example.bluehive.MoviesDetailsScreenCompose
-import com.example.bluehive.TVShowsDetailsScreenCompose
+import com.example.bluehive.details.moviesdetails.MoviesDetailsScreenCompose
+import com.example.bluehive.details.tvshowdetails.TVShowsDetailsScreenCompose
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import com.example.bluehive.repository.RecommendationsRepository

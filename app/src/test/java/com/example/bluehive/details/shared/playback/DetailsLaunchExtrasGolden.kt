@@ -1,4 +1,4 @@
-package com.example.bluehive
+package com.example.bluehive.details.shared.playback
 
 import com.example.bluehive.webview.hls.HlsExtract
 import com.example.bluehive.webview.hls.HlsPlayerActivity

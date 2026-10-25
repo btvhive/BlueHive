@@ -1,5 +1,6 @@
-package com.example.bluehive
+package com.example.bluehive.details.shared.playback
 
+import com.example.bluehive.BuildConfig
 import com.example.bluehive.api.ExtractServerOption
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
@@ -11,11 +12,10 @@ import org.junit.Test
 import java.net.URLEncoder
 
 /**
- * PINS TODAY'S BEHAVIOUR of the pure helpers the two details screens share,
- * before the redesign moves them (docs/details-redesign-architecture.md,
- * Stage 0). They live in TVShowsDetailsScreenCompose.kt today and move to
- * details/shared/playback at Stage 1; this file moves with them and must keep
- * passing unchanged.
+ * PINS THE BEHAVIOUR of the pure helpers the two details screens share
+ * (docs/details-redesign-architecture.md). Written in Stage 0 while they still
+ * lived in TVShowsDetailsScreenCompose.kt; at Stage 1 they moved, word for
+ * word, to ExtractionMessages.kt here, and this file moved with them unchanged.
  *
  * Every expected string is copied from the source, character for character,
  * including the em dashes. A test that fails here means a viewer would read a

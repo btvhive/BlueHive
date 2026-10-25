@@ -150,5 +150,5 @@
 # the movie screen proves nothing. The real fix is splitting both functions;
 # remove these lines only after that, and only once a release build has been
 # opened on a device.
--keep class com.example.bluehive.TVShowsDetailsScreenComposeKt { *; }
--keep class com.example.bluehive.MoviesDetailsScreenComposeKt { *; }
+-keep class com.example.bluehive.details.tvshowdetails.TVShowsDetailsScreenComposeKt { *; }
+-keep class com.example.bluehive.details.moviesdetails.MoviesDetailsScreenComposeKt { *; }
