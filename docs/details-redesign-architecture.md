@@ -115,6 +115,8 @@ app/src/main/java/com/example/bluehive/details/
 - No file over about 600 lines.
 - Each root screen around 150 lines or less.
 
+**As built (Stage 10):** the tree holds, except for the movie screen. `MovieSourceGrid.kt` and `MovieAnimeButtons.kt` were never split out, so those buttons are still in `MovieDetailsScreen.kt` (757 lines, the longest file). Every method is under the budget. The roots are longer than planned (the TV function is 427 lines, the movie's 466, much of it comments), but at 2,142 and 1,515 units they are well under it.
+
 **The Activity class names stay as they are; only their package changes.** That keeps logs, adb checks and crash reports comparable before and after. A rename can come at the very end if wanted.
 
 **Helper files elsewhere that only the details screens use stay where they are** during the refactor: `DetailsTrailerPlayer.kt`, `PlayerReturnFocus.kt`, the two prompts in `Overlays.kt`, and `ExtractionErrorOverlay.kt`. Moving them is an optional tidy-up afterwards.
@@ -443,7 +445,7 @@ Target: every number equal or better.
 1. **`verifyReleaseOnDevice`.** Already exists since v376.
 2. **`checkMethodSizes`, new.**
    - It reads the release dex and fails the build if any method in `com.example.bluehive.details` is over 2,500 code units or 100 registers.
-   - It only reports on the old files until Stage 10, then enforces.
+   - Until Stage 10 the functions being split had ratchet ceilings instead; since then every method in `details/` is held to the budget.
    - It also warns about the app's other giants: `FavoritesScreen` (5,653), `HomeScreenComposeContent` (5,031) and `MediaCatalogScreen` (3,507).
 3. **`checkDetailsBoundaries`, new.** It fails the build if `moviesdetails` imports `tvshowdetails` or the other way round, or if `shared` imports either.
 
@@ -521,7 +523,7 @@ Each of these can be unified later as its own small change. That's your call, it
 | **7** | The TV screen switches to the same playback core. The default-server prompt, picker and "Checking servers" overlays join PlaybackOverlays here, where the two screens' copies can be compared. | high |
 | **8** | TV seasons and episodes: availability, season column, episode state, row, card, unaired gate, source overlay, play area, focus map | high (focus) |
 | **9** | Activities: Args, `DetailsBackNavigation`, `DetailsIntents`. Done in four commits, 9a–9d (v397–v400); in 9d each screen function moved to its own file (`TvShowDetailsScreen.kt`, `MovieDetailsScreen.kt`) and takes the Args, and the two `-keep` rules moved with them. Optional: the 6 outside callers use `DetailsIntents` too (not done). | low–medium |
-| **10** | Lock it in: remove the two `-keep` rules, enforce the size and boundary gates, take the final measurements, update the notes | low |
+| **10** | Lock it in: remove the two `-keep` rules, enforce the size and boundary gates, take the final measurements, update the notes. Done in three commits, 10a–10c (v401–v402): the TV function's labels and effects moved beside their state (2,860 → 2,190 units), the ratchet went (one budget for every method), then the `-keep` rules. The speed re-measurement on the boxes is not done yet. | low |
 
 ### Test rounds
 

@@ -1,8 +1,8 @@
 # tvshowdetails
 
-This folder will hold the TV show details screen, split out of `TVShowsDetailsScreenCompose.kt` (4,987 lines today).
+The TV show details screen, split out of `TVShowsDetailsScreenCompose.kt` (4,987 lines before the redesign).
 
-The full plan is in `docs/details-redesign-architecture.md`.
+The plan is in `docs/details-redesign-architecture.md`, and the sizes after each stage are in `docs/details-redesign-baseline.md`.
 
 | File | Holds |
 |---|---|
@@ -21,7 +21,8 @@ The full plan is in `docs/details-redesign-architecture.md`.
 | EpisodeSourceOverlay.kt | the "Watch on …" grid under a tile |
 | EpisodeAnimeButtons.kt | Watch in English / Japanese under a tile |
 
-Rules:
+Rules, checked on every build:
 
-- Never import anything from `moviesdetails`.
+- Never import anything from `moviesdetails` (`checkDetailsBoundaries`).
 - Code both screens need goes in `details/shared`.
+- No method over 2,500 dex code units or 100 registers (`checkMethodSizes`, after each release build). Effects moved out of a composable go in a restartable child composable, called where they were: R8 inlines a one-caller `remember…` function straight back.
