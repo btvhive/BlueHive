@@ -52,14 +52,11 @@ import com.example.bluehive.webview.ExtractionLoadingOverlay
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.android.awaitFrame
 import androidx.compose.foundation.background
-import com.example.bluehive.webview.hls.HlsPlayerActivity
 import com.example.bluehive.api.extractStreamAwait
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 import com.example.bluehive.SourceScreen
-import com.example.bluehive.details.shared.playback.extractionErrorMessage
 import com.example.bluehive.details.shared.playback.miruroSourceLabel
-import com.example.bluehive.details.shared.playback.parseExtractReason
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
 import com.example.bluehive.details.shared.playback.PlaybackErrorOverlay
 import com.example.bluehive.details.shared.playback.PlaybackLoadingOverlay
@@ -67,6 +64,7 @@ import com.example.bluehive.details.shared.playback.PlaybackRequest
 import com.example.bluehive.details.shared.playback.PlayerIntents
 import com.example.bluehive.details.shared.playback.StreamSource
 import com.example.bluehive.details.shared.playback.rememberPlaybackSession
+import com.example.bluehive.details.shared.playback.rememberSourcePlayback
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
@@ -766,228 +764,17 @@ fun MoviesDetailsScreenContent(
         }
     }
 
-    // Which chain step the player currently on screen came from. Read when it
-    // reports a playback failure, so the chain keeps counting rather than
-    // restarting -- see the TV screen's twin.
-    var chainAttempt by remember { mutableIntStateOf(1) }
-
-    // Set by the launcher below, consumed by the LaunchedEffect after
-    // startBuiltInPlayer. A hop through state because the launcher has to exist
-    // before extractAndPlayMovie does, and its callback is not a coroutine.
-    // (dead source, where it died in ms) -- the next source starts there.
-    var playbackFailedSource by remember { mutableStateOf<Pair<String, Long>?>(null) }
-
-    val playerLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == HlsPlayerActivity.RESULT_SOURCE_FAILED) {
-            val atMs = result.data?.getLongExtra(HlsPlayerActivity.EXTRA_FAILED_AT_MS, 0L) ?: 0L
-            result.data?.getStringExtra(HlsPlayerActivity.EXTRA_FAILED_SOURCE)
-                ?.takeIf { it.isNotBlank() }
-                ?.let { playbackFailedSource = it to atMs }
-        }
-    }
-
-    // ── Backend-extracted sources ───────────────────────────────────────────
-    // Every source button goes straight to server-side m3u8 extraction and our
-    // own player. The "open the site directly" alternative was GeckoView, which
-    // was removed in v371 along with the Settings > Playback method switch.
-    /**
-     * Server-side extraction for VidFast / VidEasy / VidSpark, then our own player.
-     *
-     * The movie twin of TVShowsDetailsScreenCompose.extractAndPlay — same endpoint,
-     * same contract, minus season/episode. Kept as its own function rather than
-     * shared because the two screens hold different state (no pendingSeason here)
-     * and the Intent extras differ.
-     *
-     * WHY SERVER-SIDE: `vidfast.pro` is refused to every client on a Shield-filtered
-     * line — the filter reads the hostname out of the TLS ClientHello and severs
-     * the handshake. The backend loads the embed where the filter isn't and returns
-     * only the URL; the TV still streams from the CDN directly, so no video bytes
-     * cross the backend.
-     *
-     * No retry loop: the server caches per title and deduplicates concurrent
-     * requests, so a second client attempt just re-asks for the same answer.
-     */
-    suspend fun extractAndPlayMovie(
-        src: StreamSource,
-        /** 1 for the source the viewer pressed; higher for each chain step. */
-        attempt: Int = 1,
-        /** The sources already tried and failed, oldest first. */
-        tried: List<String> = emptyList(),
-        /** Where to start, in ms: 0 for a press, the dead source's spot for a failover. */
-        startAtMs: Long = 0L,
-    ) {
-        session.extractCancelled = false
-        session.isExtracting     = true
-        session.isBackendExtract = true
-        session.extractPending   = true
-        session.extractStage     = 1
-        // EVERY attempt stamps this, not only the failover ones. Setting it only
-        // on failover left it holding the previous title's last attempt number,
-        // so the first failover of the NEXT title could write the same value,
-        // fail to change the key, and freeze the stage dots -- the exact bug
-        // this field exists to prevent.
-        session.extractAttempt   = attempt
-        session.backendStatus    = "Finding your stream…"
-        // A fresh press starts a fresh chain: count what it can try, and drop
-        // any note left from the last one.
-        if (attempt == 1) {
-            session.chainTotal  = SourceCatalog.plannedAttempts(
-                BlueHiveApplication.appContext, "movie", mediaId, 0, 0, src.name,
-            ) { usesBackendExtraction(it) }
-            session.extractNote = null
-        }
-
-        // Display name IS the backend key once lowercased — see usesBackendExtraction.
-        val sourceKey = src.name.lowercase()
-
-        val startedAt = System.currentTimeMillis()
-        // Cancellable: leaving the page mid-extract must stop here, not read as
-        // a miss and walk on to the next source (see PageCoroutines.kt).
-        val result = runCatchingCancellable {
-            ApiClient.bluehiveApi.extractStreamAwait(
-                type   = "movie",
-                tmdbId = tmdbId,
-                source = sourceKey,
-                // Accounting only — see the TV screen's extractAndPlay.
-                mtype   = mediaType,
-                title   = mediaTitle,
-                profile = favoriteProfileId,
-                device  = SessionManager.get().deviceFingerprint,
-            )
-        }
-        val tookMs = System.currentTimeMillis() - startedAt
-
-        session.isExtracting     = false
-        session.isBackendExtract = false
-        session.extractPending   = false
-        session.backendStatus    = ""
-
-        // The user left. Do not raise an error and do not start a player over
-        // whatever they are looking at now.
-        if (session.extractCancelled) {
-            Log.d("scraper-vidapi", "extraction finished after BACK — discarding result")
-            return
-        }
-
-        val body = result.getOrNull()?.takeIf { it.isSuccessful }?.body()
-        if (body == null || body.m3u8.isBlank()) {
-            val resp   = result.getOrNull()
-            val code   = resp?.code()
-            val reason = parseExtractReason(resp)
-            Log.e("scraper-vidfast", "movie extraction failed (http=$code reason=$reason src=${src.name}) " +
-                    "${result.exceptionOrNull()?.javaClass?.simpleName ?: ""}")
-            // Failover — see the twin on the TV screen for the full note.
-            val next = if (SourceCatalog.failoverEnabled && attempt < SourceCatalog.maxAttempts) {
-                SourceCatalog.nextInChain(
-                    BlueHiveApplication.appContext, "movie", mediaId, 0, 0, src.name,
-                ) { usesBackendExtraction(it) }
-            } else null
-
-            if (next != null) {
-                Log.e("scraper-vidfast",
-                      "failover ${attempt}/${SourceCatalog.maxAttempts}: " +
-                      "${src.name} failed ($reason) -> trying ${next.name}")
-                session.isExtracting     = true
-                session.isBackendExtract = true
-                session.extractPending   = true
-                session.extractStage     = 1
-                session.backendStatus    = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}\u2026"
-                session.extractNote      = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}"
-                extractAndPlayMovie(
-                    StreamSource(next.label, next.name, next.url),
-                    attempt + 1,
-                    tried + src.name,
-                    startAtMs,
-                )
-                return
-            }
-
-            session.extractionError =
-                extractionErrorMessage(code, reason, src.name, "movie", tried + src.name)
-            return
-        }
-
-        Log.d("scraper-vidfast", "▶️ movie ${src.name} " +
-                "playlist=${runCatching { android.net.Uri.parse(body.m3u8).host }.getOrNull()} " +
-                "cached=${body.cached} expires_in=${body.expires_in}s extract=${tookMs}ms")
-
-        // launch(), not startActivity(): the result is how a playback failure
-        // gets back here to continue the chain. This was startActivity until
-        // 2026-10-19, so a movie that died in the player never failed over.
-        chainAttempt = attempt
-        playerLauncher.launchIfActive(
-            PlayerIntents.hlsPlayer(
-                context    = context,
-                request    = PlaybackRequest.Movie(tmdbId),
-                body       = body,
-                embedUrl   = src.url,
-                sourceName = src.name,
-                profileId  = favoriteProfileId,
-                mediaType  = mediaType,
-                mediaTitle = mediaTitle,
-                startAtMs  = startAtMs,
-            )
-        )
-    }
-
-    /** See the TV screen's twin: one body shared by the prompt's default button
-     *  and the skip-the-prompt path, so the two cannot drift apart. */
-    fun startBuiltInPlayer(src: StreamSource) {
-        stopTrailer()
-        try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
-        session.extractJob = coroutineScope.launch { extractAndPlayMovie(src) }
-    }
-
-    // ── FAILOVER, PLAYBACK HALF ─────────────────────────────────────────────
-    // The extraction half lives inside extractAndPlayMovie; this is the case it
-    // cannot see -- a source whose url looked fine and then died in the player,
-    // which only the player knows and reports through its activity result.
-    //
-    // MEASURED 2026-10-19, In the Beginning: VidNest died at 1:30, the player
-    // reported the dead source, and nothing here was listening -- the viewer was
-    // left on the buttons while MoviesAPI had the film the whole time.
-    //
-    // THE NEXT STEP RUNS IN THE SCREEN'S SCOPE, NOT THIS EFFECT'S. Clearing the
-    // key below recomposes and cancels this effect, so an extraction started
-    // inside it would die at its first suspension -- and runCatching would read
-    // that cancellation as a failed extraction and race down the whole chain.
-    // Holding it in extractJob also lets BACK cancel it like any other attempt.
-    LaunchedEffect(playbackFailedSource) {
-        val (failed, atMs) = playbackFailedSource ?: return@LaunchedEffect
-        playbackFailedSource = null
-
-        val next = if (SourceCatalog.failoverEnabled &&
-                       chainAttempt < SourceCatalog.maxAttempts) {
-            SourceCatalog.nextInChain(
-                BlueHiveApplication.appContext, "movie", mediaId, 0, 0, failed,
-            ) { usesBackendExtraction(it) }
-        } else null
-
-        if (next == null) {
-            Log.e("scraper-vidfast",
-                  "movie playback failed on $failed — chain exhausted, staying put")
-            return@LaunchedEffect
-        }
-        Log.e("scraper-vidfast",
-              "failover ${chainAttempt}/${SourceCatalog.maxAttempts} (playback): " +
-              "$failed died in the player at ${atMs}ms -> trying ${next.name}")
-        val step = chainAttempt + 1
-        // The player only reports the source's routing name; the viewer knows it
-        // by its button label.
-        val failedLabel = SourceCatalog.sources(BlueHiveApplication.appContext, "movie", mediaId, 0, 0)
-            .firstOrNull { it.name.equals(failed, ignoreCase = true) }?.label ?: failed
-        session.extractNote = "$failedLabel stopped playing — trying ${next.label}"
-        session.extractJob = coroutineScope.launch {
-            extractAndPlayMovie(
-                StreamSource(next.label, next.name, next.url),
-                step,
-                listOf(failed),
-                atMs,
-            )
-        }
-    }
+    // The source chain: a "Watch on ..." press, the backend extraction, the
+    // player, and both failover halves -- see SourcePlaybackController.
+    val sourcePlayback = rememberSourcePlayback(
+        session    = session,
+        scope      = coroutineScope,
+        profileId  = favoriteProfileId,
+        mediaType  = mediaType,
+        mediaTitle = mediaTitle,
+        request    = { PlaybackRequest.Movie(tmdbId) },
+        onStart    = { stopTrailer() },
+    )
 
 
     // ── BACK cancels an extraction in progress ───────────────────────
@@ -1538,7 +1325,7 @@ fun MoviesDetailsScreenContent(
                             // player (the overlay shows progress). The server reports
                             // every source as extractable; one it could not extract
                             // fails into the same chain as a dead one.
-                            startBuiltInPlayer(source)
+                            sourcePlayback.start(source)
                         }
                     )
                 }

@@ -19,3 +19,22 @@ sealed interface PlaybackRequest {
         val episodeName: String?,
     ) : PlaybackRequest
 }
+
+/** The type the backend and SourceCatalog use: "movie" or "tv". */
+val PlaybackRequest.apiType: String
+    get() = when (this) {
+        is PlaybackRequest.Movie -> "movie"
+        is PlaybackRequest.Episode -> "tv"
+    }
+
+/** SourceCatalog's season: 0 for a film. */
+val PlaybackRequest.catalogSeason: Int get() = (this as? PlaybackRequest.Episode)?.season ?: 0
+
+/** SourceCatalog's episode: 0 for a film. */
+val PlaybackRequest.catalogEpisode: Int get() = (this as? PlaybackRequest.Episode)?.episode ?: 0
+
+/** The backend's season: none for a film, the same as leaving it out. */
+val PlaybackRequest.apiSeason: Int? get() = (this as? PlaybackRequest.Episode)?.season
+
+/** The backend's episode: none for a film, the same as leaving it out. */
+val PlaybackRequest.apiEpisode: Int? get() = (this as? PlaybackRequest.Episode)?.episode
