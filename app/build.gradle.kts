@@ -485,13 +485,13 @@ val checkMethodSizes by tasks.registering {
         val maxUnits = 2_500
         val maxRegisters = 100
         // Being split by the redesign (units to registers). At the last stage:
-        // TV 9,800 / 251, movie 6,307 / 163 (v378, Stage 2). The TV ceiling also
+        // TV 9,576 / 237, movie 6,084 / 163 (v379, Stage 3). The TV ceiling also
         // keeps that function under ART's 10,000-unit huge-method limit. Above
         // it ART never compiles the method, so it runs in the interpreter
         // (dex2oat --dump-stats, docs/details-redesign-baseline.md).
         val shrinking = mapOf(
-            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (9_900 to 254),
-            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (6_370 to 165),
+            "TVShowsDetailsScreenComposeKt.TVShowsDetailsScreenContent" to (9_680 to 240),
+            "MoviesDetailsScreenComposeKt.MoviesDetailsScreenContent" to (6_150 to 165),
         )
         // App methods at least this big carry the same R8 risk: reported, not enforced.
         val warnUnits = 5_000

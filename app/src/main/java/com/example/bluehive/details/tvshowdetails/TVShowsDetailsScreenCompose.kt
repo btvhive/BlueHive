@@ -90,7 +90,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.focus.focusProperties
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.SourceCatalog
 import com.example.bluehive.api.ExtractOutcome
@@ -128,8 +127,10 @@ import com.example.bluehive.details.shared.playback.parseExtractReason
 import com.example.bluehive.details.shared.playback.usesBackendExtraction
 import com.example.bluehive.details.shared.layout.DetailsBackdrop
 import com.example.bluehive.details.shared.layout.DetailsGradient
+import com.example.bluehive.details.shared.layout.DetailsHeaderButtons
 import com.example.bluehive.details.shared.layout.DetailsLogoOrTitle
 import com.example.bluehive.details.shared.layout.DetailsOverview
+import com.example.bluehive.details.shared.layout.DetailsPressTiming
 import com.example.bluehive.details.shared.layout.DetailsToast
 import com.example.bluehive.details.shared.layout.DetailsTrailerLayer
 
@@ -783,6 +784,12 @@ fun EpisodeBadge(
 
 
 
+
+/**
+ * How the header buttons press on this screen: quicker than the movie screen's
+ * 180/140 ms. Kept apart until that is decided (architecture §10, #1).
+ */
+private val TvHeaderPressTiming = DetailsPressTiming(durationMillis = 110, bounceBackDelayMillis = 80)
 
 @SuppressLint("DefaultLocale")
 @UnstableApi
@@ -2334,13 +2341,15 @@ fun TVShowsDetailsScreenContent(
         DetailsOverview(genres = genres, overview = overview, dongleRegular = dongleRegular)
 
 
-        // Favorite Button - Uses internal offset for positioning
-        TVShowsFavoriteButton(
+        // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:
+        // see DetailsHeaderButtons. What each press does stays here.
+        DetailsHeaderButtons(
             fontFamily = passionFont,
-            focusRequester = favoriteFocusRequester,
+            pressTiming = TvHeaderPressTiming,
             enableFocus = !blockHeaderInitialFocus,
+            favoriteFocusRequester = favoriteFocusRequester,
             isFavorited = isFavorited,
-            onToggle = {
+            onToggleFavorite = {
                 if (favoriteProfileId != -1) {
                     coroutineScope.launch {
                         try {
@@ -2358,15 +2367,10 @@ fun TVShowsDetailsScreenContent(
                         }
                     }
                 }
-            }
-        )
-
-        TVShowsExtrasButton(
-            fontFamily = passionFont,
-            focusRequester = extrasFocusRequester,
-            isToggled = isExtrasToggled,          // 🔹 NEW
-            enableFocus = !blockHeaderInitialFocus,
-            onClick = {
+            },
+            extrasFocusRequester = extrasFocusRequester,
+            isExtrasToggled = isExtrasToggled,
+            onExtrasClick = {
                 isExtrasToggled = !isExtrasToggled
 
                 // Load recommendations when toggled on
@@ -2376,18 +2380,11 @@ fun TVShowsDetailsScreenContent(
                         recommendations = result                       // safe: returns on Main
                     }
                 }
-            }
-        )
-
-
-
-        TVShowsTrailerButton(
-            fontFamily = passionFont,
-            focusRequester = trailerFocusRequester,
-            isPlaying = isTrailerPlaying,
+            },
+            trailerFocusRequester = trailerFocusRequester,
+            isTrailerPlaying = isTrailerPlaying,
             trailerAvailable = !trailerUrl.isNullOrBlank(),
-            enableFocus = !blockHeaderInitialFocus,
-            onClick = {
+            onTrailerClick = {
                 if (!trailerUrl.isNullOrBlank()) {
                     if (!hasTrailerBeenPlayed) {
                         shouldExtractTrailer = true
@@ -2396,41 +2393,18 @@ fun TVShowsDetailsScreenContent(
                     }
                     isTrailerPlaying = !isTrailerPlaying
                 }
-            }
-        )
-
-        // Optional: Show loading indicator
-        if (isExtractingTrailer) {
-            Text(
-                text = "Loading trailer...",
-                color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(top = 150.dp, end = 250.dp)
-            )
-        }
-
-
-        TVShowsRewindButton(
-            fontFamily = passionFont,
-            focusRequester = remember { FocusRequester() },
-            enableFocus = !blockHeaderInitialFocus,
-            onClick = {
+            },
+            isExtractingTrailer = isExtractingTrailer,
+            onRewind = {
                 if (isTrailerPlaying) {
                     seekBackward(trailerPlayer)
                 }
-            }
-        )
-
-        TVShowsFastForwardButton(
-            fontFamily = passionFont,
-            focusRequester = remember { FocusRequester() },
-            enableFocus = !blockHeaderInitialFocus,
-            onClick = {
+            },
+            onFastForward = {
                 if (isTrailerPlaying) {
                     seekForward(trailerPlayer)
                 }
-            }
+            },
         )
 
 
@@ -3472,396 +3446,6 @@ fun TVShowsDetailsScreenContent(
 }
 
 
-
-
-
-
-@Composable
-fun TVShowsFavoriteButton(
-    fontFamily: FontFamily,
-    focusRequester: FocusRequester,
-    offsetX: Dp = 27.75.dp,
-    offsetY: Dp = 139.dp,
-    enableFocus: Boolean = true,
-    isFavorited: Boolean = false,
-    onToggle: () -> Unit = {}
-) {
-    ModularButton(
-        textConfig = ModularButtonTextConfig(
-            text = "+ Add to Favorites",
-            toggledText = "- Remove from Favorites"
-        ),
-        isToggleable = true,
-        fontFamily = fontFamily,
-        focusRequester = focusRequester,
-        modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
-            .focusProperties { canFocus = enableFocus }
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    (event.key == Key.DirectionLeft ||
-                            event.key == Key.DirectionRight ||
-                            event.key == Key.DirectionDown)
-                ) {
-                    // 🔇 No sound when pressing LEFT on the leftmost button
-                    if (event.key != Key.DirectionLeft) {
-                        BlueHiveApplication.playHoverSound()
-                    }
-                }
-                false // let focus system handle movement
-            },
-        dimensions = ModularButtonDimensions(
-            mainWidth = 146.dp,
-            mainHeight = 24.dp,
-            mainYOffset = 0.5.dp,
-            secondWidth = 146.dp,
-            secondHeight = 22.dp,
-            secondYOffset = 7.dp,
-            shadowHeight = 6.dp,
-            glowWidth = 168.dp,
-            glowHeight = 44.dp,
-            mainCornerRadius = 7f,
-            secondCornerRadius = 8f,
-        ),
-        // Shared — see FavoriteButtonColors in utilities/ModularButton.kt.
-        colors = FavoriteButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_wide_glow,
-            toggledRes = R.drawable.button_focus_wide_nonglow,
-            offsetX = (146.dp - 168.dp) / 2,
-            offsetY = (-4).dp
-        ),
-        animationConfig = ModularButtonAnimationConfig(
-            pressOffset = 2.5.dp,
-            textOffsetDefault = 1.dp,
-            textOffsetPressed = 2.4.dp,
-            durationMillis = 110,
-            bounceBackDelayMillis = 80
-        ),
-        // 🔇 Disable internal pop sound (we'll use SoundPool instead)
-        externalToggled = isFavorited,
-        onClick = {
-            BlueHiveApplication.playClickSound()
-            onToggle()
-        }
-    )
-}
-
-
-
-
-@Composable
-fun TVShowsExtrasButton(
-    fontFamily: FontFamily,
-    focusRequester: FocusRequester,
-    isToggled: Boolean,                 // 🔹 NEW PARAM
-    offsetX: Dp = 182.dp,
-    offsetY: Dp = 139.dp,
-    enableFocus: Boolean = true,
-    onClick: () -> Unit = {},
-) {
-    ModularButton(
-        textConfig = ModularButtonTextConfig(
-            // NOT a toggle any more — the label is driven from outside, exactly
-            // like the trailer button's "Play/Pause Trailer". ModularButton only
-            // consults toggledText when isToggleable is true, so setting one here
-            // would be dead config; the state has to arrive through `text`.
-            text = if (isToggled) "Providers" else "Extras"
-        ),
-        // false, so this behaves as a plain button: press animation, a brief
-        // pressed flash, then back to rest. Previously true, which parked it in a
-        // permanently "held down" visual state whenever providers were showing.
-        isToggleable = false,
-        fontFamily = fontFamily,
-        focusRequester = focusRequester,
-        modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
-            .focusProperties { canFocus = enableFocus }
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    (event.key == Key.DirectionLeft ||
-                            event.key == Key.DirectionRight ||
-                            event.key == Key.DirectionDown)
-                ) {
-                    BlueHiveApplication.playHoverSound()
-                }
-                false
-            },
-        dimensions = ModularButtonDimensions(
-            mainWidth = 49.5.dp,
-            mainHeight = 24.dp,
-            mainYOffset = 0.5.dp,
-            secondWidth = 49.5.dp,
-            secondHeight = 22.dp,
-            secondYOffset = 7.dp,
-            shadowHeight = 6.dp,
-            glowWidth = 71.6.dp,
-            glowHeight = 44.dp,
-            mainCornerRadius = 7f,
-            secondCornerRadius = 6f,
-        ),
-        // Shared — see ExtrasButtonColors in utilities/ModularButton.kt.
-        colors = ExtrasButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_narrow_glow,
-            toggledRes = R.drawable.button_focus_narrow_nonglow,
-            offsetX = (49.5.dp - 71.6.dp) / 2,
-            offsetY = (-4).dp
-        ),
-        animationConfig = ModularButtonAnimationConfig(
-            pressOffset = 2.5.dp,
-            textOffsetDefault = 1.dp,
-            textOffsetPressed = 2.4.dp,
-            durationMillis = 110,
-            bounceBackDelayMillis = 80
-        ),
-        onClick = {
-            BlueHiveApplication.playClickSound()
-            onClick()
-        }
-    )
-}
-
-
-
-
-@Composable
-fun TVShowsTrailerButton(
-    fontFamily: FontFamily,
-    focusRequester: FocusRequester,
-    isPlaying: Boolean = false,
-    trailerAvailable: Boolean = true,
-    offsetX: Dp =  256.25.dp,
-    offsetY: Dp = 139.dp,
-    enableFocus: Boolean = true,
-    onClick: () -> Unit = {}
-) {
-    ModularButton(
-        textConfig = ModularButtonTextConfig(
-            text = if (isPlaying) "Pause Trailer" else "Play Trailer",
-            toggledText = if (isPlaying) "Play Trailer" else "Pause Trailer"
-        ),
-        isToggleable = false,
-        fontFamily = fontFamily,
-        focusRequester = focusRequester,
-        modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
-            .alpha(if (trailerAvailable) 1f else 0.5f)
-            .focusProperties { canFocus = enableFocus }
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    (event.key == Key.DirectionLeft ||
-                            event.key == Key.DirectionRight ||
-                            event.key == Key.DirectionDown)
-                ) {
-                    BlueHiveApplication.playHoverSound()
-                }
-                false
-            },
-        dimensions = ModularButtonDimensions(
-            mainWidth = 100.dp,
-            mainHeight = 24.dp,
-            mainYOffset = 0.5.dp,
-            secondWidth = 100.dp,
-            secondHeight = 22.dp,
-            secondYOffset = 7.dp,
-            shadowHeight = 6.dp,
-            glowWidth = 116.5.dp,
-            glowHeight = 44.dp,
-            mainCornerRadius = 7f,
-            secondCornerRadius = 6f,
-        ),
-        // Shared — see TrailerControlButtonColors in utilities/ModularButton.kt.
-        colors = TrailerControlButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_wide_glow,
-            toggledRes = R.drawable.button_focus_wide_nonglow,
-            offsetX = (100.dp - 116.5.dp) / 2,
-            offsetY = (-4).dp
-        ),
-        animationConfig = ModularButtonAnimationConfig(
-            pressOffset = 2.5.dp,
-            textOffsetDefault = 1.dp,
-            textOffsetPressed = 2.4.dp,
-            durationMillis = 110,
-            bounceBackDelayMillis = 80
-        ),
-        onClick = {
-            BlueHiveApplication.playClickSound()
-            onClick()
-        }
-    )
-}
-
-
-@Composable
-fun TVShowsRewindButton(
-    fontFamily: FontFamily,
-    focusRequester: FocusRequester,
-    offsetX: Dp = 367.25.dp,
-    offsetY: Dp = 139.dp,
-    enableFocus: Boolean = true,
-    onClick: () -> Unit = {}
-) {
-    ModularButton(
-        textConfig = ModularButtonTextConfig(
-            // ── A REAL SEEK ICON, NOT A CHEVRON ──────────────────────
-            // "<" and ">" are less-than and greater-than: punctuation that
-            // happens to point. They read as paging, which is not what these
-            // do -- both seek the trailer by exactly 10 seconds.
-            //
-            // A DOUBLE TRIANGLE, not the player band's circular "10". Both
-            // seek by SEEK_INCREMENT_MS (10s), so the numbered asset was
-            // accurate -- but at 14dp on a button this size the digits are
-            // detail nobody reads, while two triangles carry the direction on
-            // their own. The band keeps the numbered version, where it is
-            // large enough for the 10 to be worth printing.
-            //
-            // `text` still carries the label: it is unused for drawing when
-            // iconRes is set, and becomes the icon's contentDescription.
-            text = "Rewind 10 seconds",
-            iconRes = R.drawable.ic_seek_rewind,
-            iconSize = 14.dp,
-        ),
-        isToggleable = false,
-        fontFamily = fontFamily,
-        focusRequester = focusRequester,
-        modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
-            .focusProperties { canFocus = enableFocus }
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    (event.key == Key.DirectionLeft ||
-                            event.key == Key.DirectionRight ||
-                            event.key == Key.DirectionDown)
-                ) {
-                    BlueHiveApplication.playHoverSound()
-                }
-                false
-            },
-        dimensions = ModularButtonDimensions(
-            mainWidth = 26.5.dp,
-            mainHeight = 24.dp,
-            mainYOffset = 0.5.dp,
-            secondWidth = 26.5.dp,
-            secondHeight = 22.dp,
-            secondYOffset = 7.dp,
-            shadowHeight = 6.dp,
-            glowWidth = 41.dp,
-            glowHeight = 44.dp,
-            mainCornerRadius = 7f,
-            secondCornerRadius = 6f,
-        ),
-        // Shared — see TrailerControlButtonColors in utilities/ModularButton.kt.
-        colors = TrailerControlButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_narrow_glow,
-            toggledRes = R.drawable.button_focus_narrow_nonglow,
-            offsetX = (-7.5).dp,
-            offsetY = (-4).dp
-        ),
-        animationConfig = ModularButtonAnimationConfig(
-            pressOffset = 2.5.dp,
-            textOffsetDefault = 1.dp,
-            textOffsetPressed = 2.4.dp,
-            durationMillis = 110,
-            bounceBackDelayMillis = 80
-        ),
-        onClick = {
-            BlueHiveApplication.playClickSound()
-            onClick()
-        }
-    )
-}
-
-
-@Composable
-fun TVShowsFastForwardButton(
-    fontFamily: FontFamily,
-    focusRequester: FocusRequester,
-    offsetX: Dp = 400.25.dp,
-    offsetY: Dp = 139.dp,
-    enableFocus: Boolean = true,
-    onClick: () -> Unit = {}
-) {
-    ModularButton(
-        textConfig = ModularButtonTextConfig(
-            // ── A REAL SEEK ICON, NOT A CHEVRON ──────────────────────
-            // "<" and ">" are less-than and greater-than: punctuation that
-            // happens to point. They read as paging, which is not what these
-            // do -- both seek the trailer by exactly 10 seconds.
-            //
-            // A DOUBLE TRIANGLE, not the player band's circular "10". Both
-            // seek by SEEK_INCREMENT_MS (10s), so the numbered asset was
-            // accurate -- but at 14dp on a button this size the digits are
-            // detail nobody reads, while two triangles carry the direction on
-            // their own. The band keeps the numbered version, where it is
-            // large enough for the 10 to be worth printing.
-            //
-            // `text` still carries the label: it is unused for drawing when
-            // iconRes is set, and becomes the icon's contentDescription.
-            text = "Forward 10 seconds",
-            iconRes = R.drawable.ic_seek_forward,
-            iconSize = 14.dp,
-        ),
-        isToggleable = false,
-        fontFamily = fontFamily,
-        focusRequester = focusRequester,
-        modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
-            .focusProperties { canFocus = enableFocus }
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    (event.key == Key.DirectionLeft ||
-                            event.key == Key.DirectionRight ||
-                            event.key == Key.DirectionDown)
-                ) {
-                    // 🔇 No sound when pressing RIGHT on the rightmost button
-                    if (event.key != Key.DirectionRight) {
-                        BlueHiveApplication.playHoverSound()
-                    }
-                }
-                false
-            },
-        dimensions = ModularButtonDimensions(
-            mainWidth = 26.5.dp,
-            mainHeight = 24.dp,
-            mainYOffset = 0.5.dp,
-            secondWidth = 26.5.dp,
-            secondHeight = 22.dp,
-            secondYOffset = 7.dp,
-            shadowHeight = 6.dp,
-            glowWidth = 41.dp,
-            glowHeight = 44.dp,
-            mainCornerRadius = 7f,
-            secondCornerRadius = 6f,
-        ),
-        // Shared — see TrailerControlButtonColors in utilities/ModularButton.kt.
-        colors = TrailerControlButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_narrow_glow,
-            toggledRes = R.drawable.button_focus_narrow_nonglow,
-            offsetX = (-7.5).dp,
-            offsetY = (-4).dp
-        ),
-        animationConfig = ModularButtonAnimationConfig(
-            pressOffset = 2.5.dp,
-            textOffsetDefault = 1.dp,
-            textOffsetPressed = 2.4.dp,
-            durationMillis = 110,
-            bounceBackDelayMillis = 80
-        ),
-        onClick = {
-            BlueHiveApplication.playClickSound()
-            onClick()
-        }
-    )
-}
 
 
 

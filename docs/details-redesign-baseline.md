@@ -155,6 +155,8 @@ Release builds, measured the same way as above. Each stage is its own commit.
 | 0 | v376 | 11,297 units, 287 registers | 8,682 units, 191 registers | 2, including the TV function | 12,710 classes, 0 failures |
 | 1 | v377 | 11,339, 280 | 8,704, 193 | not measured | 12,712 classes, 0 failures |
 | 2 | v378 | **9,800, 251** | **6,307, 163** | **1: the TV function is compiled now** | 12,715 classes, 0 failures |
+| 3 | v379 | 9,576, 237 | 6,084, 163 | not re-measured (still under the limit) | 12,717 classes, 0 failures |
 
 - **Stage 1** only moved code. R8 then inlined the five moved helpers into both functions, which is why they grew slightly.
-- **Stage 2** took the TV function under ART's 10,000-unit limit, so ART compiles it instead of interpreting it (`dex2oat --dump-stats`: 76,730 of 76,732 methods compiled). The `checkMethodSizes` ceiling of 9,900 keeps it under the limit. Its speed has not been measured yet.
+- **Stage 2** took the TV function under ART's 10,000-unit limit, so ART compiles it instead of interpreting it (`dex2oat --dump-stats`: 76,730 of 76,732 methods compiled). The `checkMethodSizes` ceiling keeps it under the limit. Its speed has not been measured yet.
+- **Stage 3** replaced the two copies of the five header buttons with one. The functions shrink less than in Stage 2, because each screen keeps what its presses do as lambdas, and those compile separately anyway. The APK lost 16 KB.
