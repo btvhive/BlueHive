@@ -117,12 +117,41 @@ class TrailerStateTest {
         assertFalse(trailer.shouldExtract)
         assertFalse(trailer.hasPlayed)
         assertFalse(trailer.isPlaying)
+        assertTrue(trailer.loadFailed)
 
         trailer.onButtonPressed()
         assertTrue(trailer.shouldExtract)
         assertTrue(trailer.isExtracting)
         assertTrue(trailer.hasPlayed)
         assertTrue(trailer.isPlaying)
+        assertFalse(trailer.loadFailed)  // the retry takes the notice down
+    }
+
+    /** "Couldn't load this trailer" stays until TrailerFailedNotice's timer dismisses it. */
+    @Test
+    fun failedExtraction_showsTheNoticeUntilDismissed() {
+        val trailer = TrailerState(url)
+        assertFalse(trailer.loadFailed)
+        trailer.onButtonPressed()
+        trailer.onExtractionFailed()
+        assertTrue(trailer.loadFailed)
+        trailer.dismissLoadFailed()
+        assertFalse(trailer.loadFailed)
+    }
+
+    /**
+     * Stopped before the extraction failed -- a source, episode or
+     * recommendation pressed meanwhile: no notice, the page has moved on.
+     */
+    @Test
+    fun failedExtraction_afterStop_showsNoNotice() {
+        val trailer = TrailerState(url)
+        trailer.onButtonPressed()
+        trailer.stop()
+        trailer.onExtractionFailed()
+        assertFalse(trailer.loadFailed)
+        assertFalse(trailer.isExtracting)
+        assertFalse(trailer.shouldExtract)
     }
 
     @Test

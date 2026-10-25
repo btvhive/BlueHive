@@ -22,7 +22,8 @@ import com.example.bluehive.utilities.seekForward
  *
  * Two fixes since, both for "Loading trailer..." staying up for good: a press
  * after stop() no longer shows it when the player is already made, and a failed
- * extraction is reported ([onExtractionFailed]) instead of never clearing it.
+ * extraction is reported ([onExtractionFailed]) instead of never clearing it --
+ * with a short "Couldn't load this trailer" notice ([loadFailed]).
  */
 @Stable
 class TrailerState internal constructor(
@@ -43,6 +44,14 @@ class TrailerState internal constructor(
 
     /** The stream is being extracted: "Loading trailer..." shows. */
     var isExtracting by mutableStateOf(false)
+        private set
+
+    /**
+     * The extraction failed while the trailer was still wanted: "Couldn't load
+     * this trailer" shows (TrailerFailedNotice) until [dismissLoadFailed] or the
+     * next press.
+     */
+    var loadFailed by mutableStateOf(false)
         private set
 
     /** The trailer's player, once DetailsTrailerPlayer has made one. */
@@ -75,6 +84,7 @@ class TrailerState internal constructor(
      */
     fun onButtonPressed() {
         if (!url.isNullOrBlank()) {
+            loadFailed = false  // a press after a failure tries again
             if (!hasPlayed) {
                 shouldExtract = true
                 // ✅ Show loading state -- only until the player is made. After
@@ -123,12 +133,22 @@ class TrailerState internal constructor(
      * trailer..." goes and the next press tries again. Unreported, the text
      * stayed up for good, and no press could retry: shouldExtract never changed
      * again, so the player's extraction never ran again.
+     *
+     * "Couldn't load this trailer" shows only if the trailer is still wanted.
+     * After stop() -- a source, episode or recommendation pressed meanwhile --
+     * the page has moved on, and the notice would land on the loading screen.
      */
     fun onExtractionFailed() {
+        loadFailed = hasPlayed
         shouldExtract = false
         isExtracting = false
         hasPlayed = false
         isPlaying = false
+    }
+
+    /** The failure notice has been up long enough. */
+    fun dismissLoadFailed() {
+        loadFailed = false
     }
 }
 

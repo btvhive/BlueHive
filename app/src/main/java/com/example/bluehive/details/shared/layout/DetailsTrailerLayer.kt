@@ -1,13 +1,17 @@
 package com.example.bluehive.details.shared.layout
 
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.media3.common.util.UnstableApi
 import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.utilities.DetailsTrailerPlayer
+import kotlinx.coroutines.delay
 
 /**
  * The trailer player and its release-on-leave, lifted out of
@@ -64,5 +68,27 @@ fun DetailsTrailerLayer(
             onExtractionFailed = { trailer.onExtractionFailed() },
             modifier = modifier
         )
+    }
+}
+
+/** How long "Couldn't load this trailer" stays up: as long as the other short failure notices. */
+private const val TRAILER_FAILED_NOTICE_MS = 2_500L
+
+/**
+ * "Couldn't load this trailer" at the bottom centre, after the trailer's
+ * extraction fails while it is still wanted ([TrailerState.loadFailed]). Each
+ * screen calls it last in its overlay stack, so it draws on top and is always
+ * composed, which keeps its timer running.
+ */
+@Composable
+fun BoxScope.TrailerFailedNotice(trailer: TrailerState, dongleRegular: FontFamily) {
+    LaunchedEffect(trailer.loadFailed) {
+        if (trailer.loadFailed) {
+            delay(TRAILER_FAILED_NOTICE_MS)
+            trailer.dismissLoadFailed()
+        }
+    }
+    if (trailer.loadFailed) {
+        DetailsToast("Couldn't load this trailer", dongleRegular)
     }
 }

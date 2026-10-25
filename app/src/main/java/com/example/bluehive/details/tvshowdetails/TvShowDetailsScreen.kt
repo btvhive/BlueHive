@@ -33,6 +33,7 @@ import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
 import com.example.bluehive.details.shared.layout.DetailsScaffold
 import com.example.bluehive.details.shared.layout.DetailsToast
+import com.example.bluehive.details.shared.layout.TrailerFailedNotice
 import com.example.bluehive.details.shared.state.DetailsBackHandlers
 import com.example.bluehive.details.shared.state.rememberExtrasState
 import com.example.bluehive.details.shared.state.rememberFavoriteState
@@ -477,6 +478,9 @@ fun TvShowDetailsScreen(
                     maxWidth = 720.dp,
                 )
             }
+
+            // The trailer could not be loaded -- see TrailerFailedNotice.
+            TrailerFailedNotice(trailer, dongleRegular)
         },
     )
 }

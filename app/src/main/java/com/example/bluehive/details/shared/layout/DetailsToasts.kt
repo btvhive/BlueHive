@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 
 /**
  * The notice both details screens show at the bottom centre: no dub, server
- * unreachable, not available yet, not aired yet.
+ * unreachable, not available yet, not aired yet, trailer couldn't load.
  *
  * Every notice was written out by hand in each screen. They differ only in the
  * words and in two settings, kept exactly as they were:
