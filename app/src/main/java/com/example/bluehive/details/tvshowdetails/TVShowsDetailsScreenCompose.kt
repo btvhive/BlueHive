@@ -22,7 +22,6 @@ import com.example.bluehive.models.MediaItem
 import com.example.bluehive.repository.RecommendationsRepository
 import kotlinx.coroutines.launch
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.compose.LocalActivity
 import com.example.bluehive.repository.EpisodesRepository
 import com.example.bluehive.models.Episode
 import kotlinx.coroutines.delay
@@ -58,27 +57,10 @@ import com.example.bluehive.details.shared.navigation.DetailsBackNavigation
 class TVShowsDetailsScreenCompose: ComponentActivity() {
 
 
-    internal var profileId: Int = -1
-    private var mediaType: String = "tv"
-    private var mediaId: Int = 0
+    private lateinit var args: TvShowDetailsArgs
     internal var currentSeasonForWatch: Int = 1
     internal var currentEpisodeForWatch: Int = 1
     internal var currentEpisodeNameForWatch: String? = null
-    private var voteAverage: Double = 0.0
-    private var mediaTitle: String = ""
-    private var posterUrl: String? = null
-    private var backdropUrl: String? = null
-    private var trailerUrl: String? = null
-    private var overview: String? = null
-    private var contentRating: String? = null
-    private var releaseDate: String? = null
-    private var originalLanguage: String? = null
-    private var logoUrl: String? = null
-    private var genres: String? = null
-    private var numberOfSeasons: Int = 0
-    private var status: String? = null
-    private var sourceScreen: String? = null
-    private var searchQuery:  String? = null
 
 
     companion object {
@@ -88,39 +70,13 @@ class TVShowsDetailsScreenCompose: ComponentActivity() {
     fun openMediaDetails(media: MediaItem) {
         DetailsBackNavigation.pushCurrent(
             this,
-            MediaItem(
-                tmdbId = mediaId,
-                mediaId = mediaId,
-                title = mediaTitle,
-                mediaType = mediaType,
-                posterUrl = posterUrl,
-                backdropUrl = backdropUrl,
-                logoUrl = logoUrl,
-                overview = overview,
-                releaseDate = releaseDate,
-                status = status,
-                voteAverage = voteAverage,
-                voteCount = null,
-                popularity = null,
-                popularityRank = null,
-                originalLanguage = originalLanguage,
-                numberOfSeasons = numberOfSeasons,
-                numberOfEpisodes = null,
-                contentRating = contentRating,
-                runtime = null,
-                budget = null,
-                revenue = null,
-                trailerUrl = trailerUrl,
-                genres = genres?.split(", ")?.map { it.trim() },
-                similarItems = null,
-                whereToWatch = null
-            ),
+            args.toHistoryItem(),
             media,
         )
 
         val intent = DetailsIntents.open(
             this, TVShowsDetailsScreenCompose::class.java, DetailsScreen.Tv,
-            media, profileId, sourceScreen, searchQuery,
+            media, args.profileId, args.sourceScreen, args.searchQuery,
         )
 
         startActivity(intent)
@@ -144,64 +100,41 @@ class TVShowsDetailsScreenCompose: ComponentActivity() {
             override fun handleOnBackPressed() {
                 DetailsBackNavigation.goBack(
                     this@TVShowsDetailsScreenCompose, TVShowsDetailsScreenCompose::class.java, DetailsScreen.Tv,
-                    profileId, sourceScreen, searchQuery,
+                    args.profileId, args.sourceScreen, args.searchQuery,
                 )
             }
         })
 
 
         // Extract media data from intent
-        mediaType = intent.getStringExtra("media_type") ?: "tv"
-        contentRating = intent.getStringExtra("contentRating")
-        originalLanguage = intent.getStringExtra("original_language")
-        mediaId = intent.getIntExtra("media_id", 0)
-        voteAverage = intent.getDoubleExtra("vote_average", 0.0)
-        mediaTitle = intent.getStringExtra("media_title") ?: ""
-        posterUrl = intent.getStringExtra("poster_url")
-        backdropUrl = intent.getStringExtra("backdrop_url")
-        trailerUrl = intent.getStringExtra("youtube_trailer_url")
-        overview = intent.getStringExtra("overview")
-        logoUrl = intent.getStringExtra("logo_url")
-        releaseDate = intent.getStringExtra("release_date")
-        genres = intent.getStringExtra("genres")
-        numberOfSeasons = intent.getIntExtra("number_of_seasons", 0)
-        status = intent.getStringExtra("status")
-        profileId = intent.getIntExtra("PROFILE_ID", -1)
-        sourceScreen = intent.getStringExtra("SOURCE_SCREEN")
-        searchQuery  = intent.getStringExtra("SEARCH_QUERY")
+        args = TvShowDetailsArgs.from(intent)
 
-        val startInExtras  = intent.getBooleanExtra("start_in_extras", false)
-        val lastSeason     = intent.getIntExtra("last_season",  1)
-        val lastEpisode    = intent.getIntExtra("last_episode", 1)
-        // Resume entries (Continue Watching) explicitly attach these extras
-        // even for S1E1; fresh opens (search/trending/recommendations) never
-        // do. Presence — not "episode > 1" — is what should drive episode focus.
-        val resumeToEpisode = intent.hasExtra("last_season") || intent.hasExtra("last_episode")
         val recommendationsRepository = RecommendationsRepository()
         val episodesRepository = EpisodesRepository()
 
 
         setContent {
             TVShowsDetailsScreenContent(
-                mediaTitle = mediaTitle,
-                mediaType = mediaType,
-                mediaId = mediaId,
-                backdropUrl = backdropUrl,
-                trailerUrl = trailerUrl,
-                logoUrl = logoUrl,
-                overview = overview,
-                contentRating = contentRating,
-                originalLanguage = originalLanguage,
-                voteAverage = voteAverage,
-                releaseDate = releaseDate,
-                numberOfSeasons = numberOfSeasons,
-                status = status,
-                genres = genres,
-                tmdbId = mediaId,
-                startInExtras = startInExtras,
-                lastSeason    = lastSeason,
-                lastEpisode   = lastEpisode,
-                resumeToEpisode = resumeToEpisode,
+                mediaTitle = args.mediaTitle,
+                mediaType = args.mediaType,
+                mediaId = args.mediaId,
+                backdropUrl = args.backdropUrl,
+                trailerUrl = args.trailerUrl,
+                logoUrl = args.logoUrl,
+                overview = args.overview,
+                contentRating = args.contentRating,
+                originalLanguage = args.originalLanguage,
+                voteAverage = args.voteAverage,
+                releaseDate = args.releaseDate,
+                numberOfSeasons = args.numberOfSeasons,
+                status = args.status,
+                genres = args.genres,
+                tmdbId = args.mediaId,
+                profileId = args.profileId,
+                startInExtras = args.startInExtras,
+                lastSeason    = args.lastSeason,
+                lastEpisode   = args.lastEpisode,
+                resumeToEpisode = args.resumeToEpisode,
                 recommendationsRepository = recommendationsRepository,
                 episodesRepository = episodesRepository,
                 onEpisodeSelected = { season, episode, epName ->
@@ -269,6 +202,7 @@ fun TVShowsDetailsScreenContent(
     status: String?,
     genres: String?,
     tmdbId: Int,
+    profileId: Int,
     startInExtras: Boolean = false,
     lastSeason:    Int     = 1,
     lastEpisode:   Int     = 1,
@@ -476,8 +410,7 @@ fun TVShowsDetailsScreenContent(
     }
 
 
-    val activity = LocalActivity.current as? TVShowsDetailsScreenCompose
-    val favoriteProfileId = activity?.profileId ?: -1
+    val favoriteProfileId = profileId
 
     // Favorites: checked on open, toggled by the header button -- see
     // FavoriteState. This screen sends the title with a toggle (§10, #3).

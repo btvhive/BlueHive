@@ -25,7 +25,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.input.key.*
 import androidx.activity.OnBackPressedCallback
-import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.focus.focusRequester
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.SourceCatalog
@@ -63,24 +62,7 @@ import com.example.bluehive.details.shared.navigation.DetailsBackNavigation
 
 
 class MoviesDetailsScreenCompose : ComponentActivity() {
-    private var mediaType: String = "movie"
-    private var mediaId: Int = 0
-    private var voteAverage: Double = 0.0
-    private var mediaTitle: String = ""
-    private var posterUrl: String? = null
-    private var backdropUrl: String? = null
-    private var trailerUrl: String? = null
-    private var overview: String? = null
-    private var contentRating: String? = null
-    private var releaseDate: String? = null
-    private var budget: Long = 0
-    private var revenue: Long = 0
-    private var originalLanguage: String? = null
-    private var logoUrl: String? = null
-    private var genres: String? = null
-    internal var profileId: Int = -1
-    private var sourceScreen: String? = null
-    private var searchQuery:  String? = null
+    private lateinit var args: MovieDetailsArgs
 
 
     companion object {
@@ -90,39 +72,13 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
     fun openMediaDetails(media: MediaItem) {
         DetailsBackNavigation.pushCurrent(
             this,
-            MediaItem(
-                tmdbId = mediaId,
-                mediaId = mediaId,
-                title = mediaTitle,
-                mediaType = mediaType,
-                posterUrl = posterUrl,
-                backdropUrl = backdropUrl,
-                logoUrl = logoUrl,
-                overview = overview,
-                releaseDate = releaseDate,
-                status = null,
-                voteAverage = voteAverage,
-                voteCount = null,
-                popularity = null,
-                popularityRank = null,
-                originalLanguage = originalLanguage,
-                numberOfSeasons = null,
-                numberOfEpisodes = null,
-                contentRating = contentRating,
-                runtime = null,
-                budget = budget,
-                revenue = revenue,
-                trailerUrl = trailerUrl,
-                genres = genres?.split(", ")?.map { it.trim() },
-                similarItems = null,
-                whereToWatch = null
-            ),
+            args.toHistoryItem(),
             media,
         )
 
         val intent = DetailsIntents.open(
             this, MoviesDetailsScreenCompose::class.java, DetailsScreen.Movie,
-            media, profileId, sourceScreen, searchQuery,
+            media, args.profileId, args.sourceScreen, args.searchQuery,
         )
 
         startActivity(intent)
@@ -147,49 +103,30 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
             override fun handleOnBackPressed() {
                 DetailsBackNavigation.goBack(
                     this@MoviesDetailsScreenCompose, MoviesDetailsScreenCompose::class.java, DetailsScreen.Movie,
-                    profileId, sourceScreen, searchQuery,
+                    args.profileId, args.sourceScreen, args.searchQuery,
                 )
             }
         })
 
 
         // Extract media data from intent
-        mediaType = intent.getStringExtra("media_type") ?: "movie"
-        contentRating = intent.getStringExtra("contentRating")
-        originalLanguage = intent.getStringExtra("original_language")
-        mediaId = intent.getIntExtra("media_id", 0)
-        voteAverage = intent.getDoubleExtra("vote_average", 0.0)
-        mediaTitle = intent.getStringExtra("media_title") ?: ""
-        posterUrl = intent.getStringExtra("poster_url")
-        backdropUrl = intent.getStringExtra("backdrop_url")
-        trailerUrl = intent.getStringExtra("youtube_trailer_url")
-        overview = intent.getStringExtra("overview")
-        budget = intent.getLongExtra("budget", 0L)
-        revenue = intent.getLongExtra("revenue", 0L)
-        logoUrl = intent.getStringExtra("logo_url")
-        releaseDate = intent.getStringExtra("release_date")
-        genres    = intent.getStringExtra("genres")
-        profileId = intent.getIntExtra("PROFILE_ID", -1)
-        sourceScreen = intent.getStringExtra("SOURCE_SCREEN")
-        searchQuery  = intent.getStringExtra("SEARCH_QUERY")
-
-        val startInExtras = intent.getBooleanExtra("start_in_extras", false)
+        args = MovieDetailsArgs.from(intent)
 
         val recommendationsRepository = RecommendationsRepository()
 
 
         // ✅ Debug logging to see what we received
         Log.d(TAG, "📝 Intent extras received:")
-        Log.d(TAG, "  mediaTitle: $mediaTitle")
-        Log.d(TAG, "  mediaType: $mediaType")
-        Log.d(TAG, "  mediaId: $mediaId")
-        Log.d(TAG, "  backdropUrl: $backdropUrl")
-        Log.d(TAG, "  trailerUrl: $trailerUrl")
-        Log.d(TAG, "  logoUrl (raw): '$logoUrl'")
-        Log.d(TAG, "  logoUrl isEmpty: ${logoUrl.isNullOrEmpty()}")
-        Log.d(TAG, "  logoUrl isBlank: ${logoUrl.isNullOrBlank()}")
+        Log.d(TAG, "  mediaTitle: ${args.mediaTitle}")
+        Log.d(TAG, "  mediaType: ${args.mediaType}")
+        Log.d(TAG, "  mediaId: ${args.mediaId}")
+        Log.d(TAG, "  backdropUrl: ${args.backdropUrl}")
+        Log.d(TAG, "  trailerUrl: ${args.trailerUrl}")
+        Log.d(TAG, "  logoUrl (raw): '${args.logoUrl}'")
+        Log.d(TAG, "  logoUrl isEmpty: ${args.logoUrl.isNullOrEmpty()}")
+        Log.d(TAG, "  logoUrl isBlank: ${args.logoUrl.isNullOrBlank()}")
 
-        Log.d(TAG, "Received media: $mediaTitle (ID: $mediaId, Type: $mediaType)")
+        Log.d(TAG, "Received media: ${args.mediaTitle} (ID: ${args.mediaId}, Type: ${args.mediaType})")
 
         Log.d(TAG, "🔍 Intent extras:")
         intent.extras?.keySet()?.forEach { key ->
@@ -199,22 +136,23 @@ class MoviesDetailsScreenCompose : ComponentActivity() {
 
         setContent {
             MoviesDetailsScreenContent(
-                mediaTitle = mediaTitle,
-                mediaType = mediaType,
-                mediaId = mediaId,
-                backdropUrl = backdropUrl,
-                trailerUrl = trailerUrl,
-                logoUrl = logoUrl,
-                overview = overview,
-                revenue = revenue,
-                budget = budget,
-                contentRating = contentRating,
-                originalLanguage = originalLanguage,
-                voteAverage = voteAverage,
-                releaseDate = releaseDate,
-                genres = genres,
-                tmdbId = mediaId,
-                startInExtras = startInExtras,
+                mediaTitle = args.mediaTitle,
+                mediaType = args.mediaType,
+                mediaId = args.mediaId,
+                backdropUrl = args.backdropUrl,
+                trailerUrl = args.trailerUrl,
+                logoUrl = args.logoUrl,
+                overview = args.overview,
+                revenue = args.revenue,
+                budget = args.budget,
+                contentRating = args.contentRating,
+                originalLanguage = args.originalLanguage,
+                voteAverage = args.voteAverage,
+                releaseDate = args.releaseDate,
+                genres = args.genres,
+                tmdbId = args.mediaId,
+                profileId = args.profileId,
+                startInExtras = args.startInExtras,
                 recommendationsRepository = recommendationsRepository,
                 onMediaClick = { media ->
                     openMediaDetails(media)
@@ -291,6 +229,7 @@ fun MoviesDetailsScreenContent(
     budget: Long,
     genres: String?,
     tmdbId: Int,
+    profileId: Int,
     startInExtras: Boolean = false,
     recommendationsRepository: RecommendationsRepository,
     onMediaClick: (MediaItem) -> Unit
@@ -366,8 +305,7 @@ fun MoviesDetailsScreenContent(
     // Whichever button the user pressed last — restored when any overlay closes.
     var lastStreamFocusRequester by remember { mutableStateOf<FocusRequester?>(null) }
 
-    val activity = LocalActivity.current as? MoviesDetailsScreenCompose
-    val favoriteProfileId = activity?.profileId ?: -1
+    val favoriteProfileId = profileId
 
     // The anime flow: the DuB/SuB prompt and the server picker, the extraction
     // (backend first, the on-device extractor as the fallback) and the
