@@ -9,7 +9,6 @@ import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.annotation.OptIn
-import com.example.bluehive.utilities.WatchedCornerFold
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -24,9 +23,6 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
 import com.example.bluehive.utilities.*
-import coil.compose.AsyncImage
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -35,9 +31,6 @@ import com.example.bluehive.repository.RecommendationsRepository
 import kotlinx.coroutines.launch
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.LocalActivity
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.foundation.background
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -52,29 +45,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import com.example.bluehive.repository.EpisodesRepository
 import com.example.bluehive.models.Episode
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.border
-import androidx.compose.foundation.focusable
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.foundation.layout.requiredSize
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.ColorMatrix
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.core.tween
 import kotlinx.coroutines.delay
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import com.example.bluehive.api.SourceCatalog
 import com.example.bluehive.sidebarComponents.FavoritesScreenActivity
 import com.example.bluehive.sidebarComponents.HistoryScreenActivity
@@ -1111,27 +1086,6 @@ fun TVShowsDetailsScreenContent(
                     else -> {
                         val totalEpisodes = episodesState.episodes.size
 
-                        // ✅ "Exposure" style darkening using a color matrix (no alpha usage)
-                        val darkenFilter = remember {
-                            ColorFilter.colorMatrix(
-                                ColorMatrix().apply {
-                                    // Lower RGB scale = darker image
-                                    setToScale(0.40f, 0.40f, 0.40f, 1f)
-                                }
-                            )
-                        }
-
-                        // The border diapers whenever the still path is focused
-                        val episodeShape = remember { RoundedCornerShape(7.5.dp) }
-
-                        val baseStillModifier = remember(episodeShape) {
-                            Modifier
-                                .width(174.27.dp)
-                                .height(97.5.dp)
-                                .clip(episodeShape)
-                        }
-
-
                         LazyRow(
                             state = episodesState.rowState,
                             userScrollEnabled = episodesState.selectedEpisodeOverlayIndex == -1,
@@ -1150,417 +1104,128 @@ fun TVShowsDetailsScreenContent(
                                 key = { _, ep -> ep.tmdbEpisodeId }
                             ) { index, episode ->
 
-                                var isEpisodeFocused by remember { mutableStateOf(false) }
-
-                                val isEpisodeSelectOverlay = episodesState.selectedEpisodeOverlayIndex == index
-
                                 // Watched marker for THIS episode. watchedEpisodes changes only on
                                 // load and when the user starts a stream, so reading it per item
                                 // costs nothing during D-pad navigation.
                                 val isWatched = (episodesState.selectedSeason to episode.episodeNumber) in episodesState.watchedEpisodes
 
                                 // Still FOCUSABLE when unaired -- people want to read what is
-                                // coming -- but not pressable. See the scrim below and the
-                                // Enter branch above.
+                                // coming -- but not pressable. See the scrim in EpisodeCard and
+                                // the Enter branch below.
                                 val isUnaired = remember(episode.airDate, todayYmd) {
                                     isEpisodeUnaired(episode.airDate, todayYmd)
                                 }
 
-                                // Try the episode still first, fallback to show's backdropUrl
-                                val stillUrl = episode.stillImageUrl ?: backdropUrl
-
-                                val titleText = episode.title
-
-                                // ✅ If your Episode model uses a different field name, change this line.
-                                val episodeOverviewText = episode.overview ?: ""
-
-
-                                // 👇 true only when the whole item is within the viewport
-                                val isFullyVisible by remember(episodesState.rowState, index) {
-                                    derivedStateOf {
-                                        val layoutInfo = episodesState.rowState.layoutInfo
-                                        val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-                                            ?: return@derivedStateOf false
-
-                                        val itemStart = itemInfo.offset
-                                        val itemEnd   = itemInfo.offset + itemInfo.size
-
-                                        val viewportStart = layoutInfo.viewportStartOffset
-                                        val viewportEnd   = layoutInfo.viewportEndOffset
-
-                                        itemStart >= viewportStart && itemEnd <= viewportEnd
-                                    }
-                                }
-
-                                // ✅ This outer column is the "focus target"
-                                //    It gives the title real space UNDER the still image.
-                                Column(
-                                    modifier = Modifier
-                                        // keep item layout sized to the still image (prevents spacing weirdness)
-                                        .width(174.27.dp)
-                                        .focusRequester(episodesState.focusRequesters[index])
-                                        .onFocusChanged { state ->
-                                            // hasFocus stays true when any child (like provider buttons) is focused
-                                            isEpisodeFocused = state.hasFocus
-                                            if (state.hasFocus) {
-                                                episodesState.lastFocusedEpisodeIndex = index
-                                                episodesState.episodeFocusLanded = true  // confirms initial focus actually landed
-                                                // Arming belongs to ONE episode. Landing on a
-                                                // different one drops it, so a press here can
-                                                // never be the second half of a pair begun on a
-                                                // neighbour three cards away.
-                                                if (unairedGate.armedIndex != index) unairedGate.armedIndex = -1
-                                            }
-                                        }
-
-                                        .onKeyEvent { event ->
-                                            if (event.type == KeyEventType.KeyDown) {
-                                                when (event.key) {
-                                                    Key.Back -> {
-                                                        when {
-                                                            episodesState.selectedEpisodeOverlayIndex == index -> {
-                                                                episodesState.selectedEpisodeOverlayIndex = -1
-                                                                true
-                                                            }
-                                                            (listedSeasons ?: numberOfSeasons) > 1 && focusMap.seasons.isNotEmpty() -> {
-                                                                val seasonIdx = (episodesState.selectedSeason - 1)
-                                                                    .coerceIn(0, focusMap.seasons.lastIndex)
-                                                                BlueHiveApplication.playHoverSound()
-                                                                // Don't assume the season button is attached. On the
-                                                                // Continue Watching path the episode tile is focused
-                                                                // programmatically under load, before the season
-                                                                // LazyColumn has placed its buttons — a direct
-                                                                // requestFocus() no-ops and Back appears dead. Scroll
-                                                                // the season in, wait for layout, then focus.
-                                                                coroutineScope.launch {
-                                                                    focusMap.focusSeasonReliably(seasonIdx)
-                                                                }
-                                                                true
-                                                            }
-                                                            else -> false
+                                EpisodeCard(
+                                    episode                = episode,
+                                    index                  = index,
+                                    totalEpisodes          = totalEpisodes,
+                                    isWatched              = isWatched,
+                                    isUnaired              = isUnaired,
+                                    isEpisodeSelectOverlay = episodesState.selectedEpisodeOverlayIndex == index,
+                                    backdropUrl            = backdropUrl,
+                                    rowState               = episodesState.rowState,
+                                    focusRequester         = episodesState.focusRequesters[index],
+                                    passionFont            = passionFont,
+                                    dongleRegular          = dongleRegular,
+                                    onFocused = {
+                                        episodesState.lastFocusedEpisodeIndex = index
+                                        episodesState.episodeFocusLanded = true  // confirms initial focus actually landed
+                                        // Arming belongs to ONE episode. Landing on a
+                                        // different one drops it, so a press here can
+                                        // never be the second half of a pair begun on a
+                                        // neighbour three cards away.
+                                        if (unairedGate.armedIndex != index) unairedGate.armedIndex = -1
+                                    },
+                                    onKeyEvent = { event ->
+                                        if (event.type == KeyEventType.KeyDown) {
+                                            when (event.key) {
+                                                Key.Back -> {
+                                                    when {
+                                                        episodesState.selectedEpisodeOverlayIndex == index -> {
+                                                            episodesState.selectedEpisodeOverlayIndex = -1
+                                                            true
                                                         }
+                                                        (listedSeasons ?: numberOfSeasons) > 1 && focusMap.seasons.isNotEmpty() -> {
+                                                            val seasonIdx = (episodesState.selectedSeason - 1)
+                                                                .coerceIn(0, focusMap.seasons.lastIndex)
+                                                            BlueHiveApplication.playHoverSound()
+                                                            // Don't assume the season button is attached. On the
+                                                            // Continue Watching path the episode tile is focused
+                                                            // programmatically under load, before the season
+                                                            // LazyColumn has placed its buttons — a direct
+                                                            // requestFocus() no-ops and Back appears dead. Scroll
+                                                            // the season in, wait for layout, then focus.
+                                                            coroutineScope.launch {
+                                                                focusMap.focusSeasonReliably(seasonIdx)
+                                                            }
+                                                            true
+                                                        }
+                                                        else -> false
                                                     }
+                                                }
 
 
-                                                    Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
-                                                        if (isUnaired && unairedGate.armedIndex != index) {
-                                                            // REFUSED, NOT IGNORED. Silence here is
-                                                            // indistinguishable from a dropped press,
-                                                            // and the answer to that is to press again
-                                                            // harder. The sound says the box heard it
-                                                            // -- and the notice says what a second
-                                                            // press will do.
-                                                            BlueHiveApplication.playErrorSound()
-                                                            unairedGate.armedIndex = index
-                                                        } else {
-                                                            BlueHiveApplication.playClickSound()
-                                                            unairedGate.armedIndex = -1
-                                                            episodesState.selectedEpisodeOverlayIndex = index
-                                                        }
+                                                Key.Enter, Key.NumPadEnter, Key.DirectionCenter -> {
+                                                    if (isUnaired && unairedGate.armedIndex != index) {
+                                                        // REFUSED, NOT IGNORED. Silence here is
+                                                        // indistinguishable from a dropped press,
+                                                        // and the answer to that is to press again
+                                                        // harder. The sound says the box heard it
+                                                        // -- and the notice says what a second
+                                                        // press will do.
+                                                        BlueHiveApplication.playErrorSound()
+                                                        unairedGate.armedIndex = index
+                                                    } else {
+                                                        BlueHiveApplication.playClickSound()
+                                                        unairedGate.armedIndex = -1
+                                                        episodesState.selectedEpisodeOverlayIndex = index
+                                                    }
+                                                    true
+                                                }
+
+
+                                                Key.DirectionDown -> {
+                                                    if (episodesState.selectedEpisodeOverlayIndex == index) {
+                                                        // move focus into the provider grid
+                                                        focusMap.providers.firstOrNull()?.requestFocus()
+                                                        true
+                                                    } else {
+                                                        // Nothing below a tile now that the corner button is
+                                                        // gone. Consumed with no move, so the press is silent
+                                                        // rather than sending focus somewhere arbitrary.
                                                         true
                                                     }
-
-
-                                                    Key.DirectionDown -> {
-                                                        if (episodesState.selectedEpisodeOverlayIndex == index) {
-                                                            // move focus into the provider grid
-                                                            focusMap.providers.firstOrNull()?.requestFocus()
-                                                            true
+                                                }
+                                                Key.DirectionLeft, Key.DirectionRight -> {
+                                                    if (episodesState.selectedEpisodeOverlayIndex == index) {
+                                                        true
+                                                    } else if (event.key == Key.DirectionRight && index == episodesState.episodes.lastIndex) {
+                                                        // Dead-end: RIGHT on the last episode has nowhere to go —
+                                                        // consume it silently (no scroll sound, no no-op traversal).
+                                                        true
+                                                    } else {
+                                                        // Hold-to-repeat throttle (see EPISODE_NAV_REPEAT_MS): swallow
+                                                        // repeats that land sooner than the interval so holding L/R
+                                                        // scrolls at a controlled pace, like the Continue Watching list.
+                                                        val now = SystemClock.uptimeMillis()
+                                                        if (now - episodesState.navGate[0] < EPISODE_NAV_REPEAT_MS) {
+                                                            true   // too soon — consume, no move (and no sound)
                                                         } else {
-                                                            // Nothing below a tile now that the corner button is
-                                                            // gone. Consumed with no move, so the press is silent
-                                                            // rather than sending focus somewhere arbitrary.
-                                                            true
+                                                            episodesState.navGate[0] = now
+                                                            BlueHiveApplication.playTitleCardNavigation()
+                                                            false  // allow the move
                                                         }
                                                     }
-                                                    Key.DirectionLeft, Key.DirectionRight -> {
-                                                        if (episodesState.selectedEpisodeOverlayIndex == index) {
-                                                            true
-                                                        } else if (event.key == Key.DirectionRight && index == episodesState.episodes.lastIndex) {
-                                                            // Dead-end: RIGHT on the last episode has nowhere to go —
-                                                            // consume it silently (no scroll sound, no no-op traversal).
-                                                            true
-                                                        } else {
-                                                            // Hold-to-repeat throttle (see EPISODE_NAV_REPEAT_MS): swallow
-                                                            // repeats that land sooner than the interval so holding L/R
-                                                            // scrolls at a controlled pace, like the Continue Watching list.
-                                                            val now = SystemClock.uptimeMillis()
-                                                            if (now - episodesState.navGate[0] < EPISODE_NAV_REPEAT_MS) {
-                                                                true   // too soon — consume, no move (and no sound)
-                                                            } else {
-                                                                episodesState.navGate[0] = now
-                                                                BlueHiveApplication.playTitleCardNavigation()
-                                                                false  // allow the move
-                                                            }
-                                                        }
-                                                    }
-                                                    else -> false
                                                 }
-                                            } else {
-                                                false
-                                            }
-                                        }
-                                        .focusable()
-                                ) {
-
-                                    // ✅ Air date — above the still, right-aligned. Same font and
-                                    // focus colours as the episode title below it, two points smaller.
-                                    //
-                                    // Rendered UNCONDITIONALLY, unlike that title. The title sits
-                                    // UNDER the image, so it can come and go without disturbing
-                                    // anything; this sits ABOVE it, where appearing and disappearing
-                                    // would shove every thumbnail up and down as the row scrolls.
-                                    // So no isFullyVisible gate here — and a blank string still
-                                    // occupies its line, which keeps unaired episodes (null
-                                    // air_date) exactly the same height as aired ones.
-                                    // Measured at its NATURAL size, then reported as zero height and
-                                    // placed above the baseline — see ZeroHeightAbove.
-                                    ZeroHeightAbove {
-                                        Text(
-                                            text = formatEpisodeAirDate(episode.airDate),
-                                            fontFamily = dongleRegular,
-                                            fontSize = 11.sp,          // episode title is 13.sp
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = if (!isEpisodeFocused) Color(0xFF737373) else Color.White,
-                                            textAlign = TextAlign.End,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(end = 4.dp)
-                                        )
-                                    }
-
-                                    // ✅ Image/BADGE/GLOW stack stays inside this Box
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier
-                                            .width(174.27.dp)
-                                            .height(97.5.dp)
-                                            .onGloballyPositioned { coords ->
-                                                // Only care about the box for the *selected* episode’s overlay
-                                                if (isEpisodeSelectOverlay) {
-                                                    episodesState.overlayAnchor = coords.positionInRoot()
-                                                }
-                                            }
-                                    ) {
-
-                                        // ✅ Glow behind image when focused
-                                        if (isEpisodeFocused && !isEpisodeSelectOverlay) {
-                                            Image(
-                                                painter = painterResource(id = R.drawable.episode_focus_glow),
-                                                contentDescription = null,
-                                                modifier = Modifier
-                                                    .offset(x = (-0.25).dp, y = (-0.3).dp) // offset the position of the glow
-                                                    .wrapContentSize(unbounded = true) // allow the glow to exceed the layout bounds
-                                                    // force exact glow size even if parent is smaller
-                                                    .requiredSize(width = 206.3.dp, height = 129.dp),  // length and width of the focus glow
-                                                contentScale = ContentScale.FillBounds
-                                            )
-                                        }
-
-                                        // ✅ Still image centered over glow
-                                        if (!stillUrl.isNullOrBlank()) {
-
-                                            val stillModifier = baseStillModifier.then(
-                                                if (!isEpisodeFocused || isEpisodeSelectOverlay) {
-                                                    Modifier.border(
-                                                        width = 1.1.dp,
-                                                        color = Color(0xFF505050), // border color
-                                                        shape = episodeShape
-                                                    )
-                                                } else {
-                                                    Modifier
-                                                }
-                                            )
-
-                                            AsyncImage(
-                                                model = stillUrl,
-                                                contentDescription = episode.title,
-                                                modifier = stillModifier,
-                                                contentScale = ContentScale.Crop,
-                                                colorFilter = if (!isEpisodeFocused) darkenFilter else null
-                                            )
-
-                                            // ✅ Episode badge – bottom-left overlay, on top of still
-                                            EpisodeBadge(
-                                                current = episode.episodeNumber,
-                                                total = totalEpisodes,
-                                                isFocused = isEpisodeFocused,
-                                                modifier = Modifier
-                                                    .align(Alignment.BottomStart)
-                                                    .padding(start = 4.dp, bottom = 76.5.dp)
-                                            )
-
-                                            // ✅ Watched marker — corner fold + tick, TOP-RIGHT so it
-                                            // never collides with the episode-number badge. Drawn in a
-                                            // single Canvas (no Material-Icons dependency) and clipped
-                                            // to the card shape so it follows the rounded corner.
-                                            if (isWatched) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .matchParentSize()
-                                                        .clip(episodeShape)
-                                                ) {
-                                                    WatchedCornerFold(
-                                                        modifier = Modifier.align(Alignment.TopEnd)
-                                                    )
-                                                }
-                                            }
-                                        }
-
-
-                                        // ✅ UNAIRED — dark scrim over the still, saying why.
-                                        //
-                                        // Over the still rather than instead of it: the card still
-                                        // has to read as the episode it is, so the artwork stays
-                                        // visible underneath. Drawn after the badge and the watched
-                                        // fold so it covers both, and before the select overlay,
-                                        // which an unaired episode can never reach anyway -- the
-                                        // press that raises it is refused above.
-                                        if (isUnaired) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .matchParentSize()
-                                                    .clip(episodeShape)
-                                                    .background(Color(0xD9101014))
-                                                    // Border re-added ON TOP, same as the select
-                                                    // overlay does, or the scrim squares the corners.
-                                                    .border(
-                                                        width = 1.1.dp,
-                                                        color = Color(0xFF505050),
-                                                        shape = episodeShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = "EPISODE NOT AVAILABLE",
-                                                    fontFamily = passionFont,
-                                                    fontSize = 15.sp,
-                                                    lineHeight = 17.sp,
-                                                    color = Color(0xFFD6D6DB),
-                                                    maxLines = 2,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    textAlign = TextAlign.Center,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(horizontal = 12.dp)
-                                                )
-                                            }
-                                        }
-
-                                        if (isEpisodeSelectOverlay) {  // overlay for when a episode is selected
-                                            Box(
-                                                modifier = Modifier
-                                                    .matchParentSize()
-                                                    .clip(episodeShape)
-                                                    .background(Color.Black)
-                                                    // ✅ re-add border ON TOP of the overlay
-                                                    .border(
-                                                        width = 1.1.dp,
-                                                        color = Color(0xFF505050),
-                                                        shape = episodeShape
-                                                    ),
-                                                contentAlignment = Alignment.Center
-                                            ) {
-                                                Text(
-                                                    text = "SELECT A SITE BELOW TO WATCH EPISODE ON",
-                                                    fontFamily = passionFont,
-                                                    fontSize = 20.sp,
-                                                    color = Color.White,
-                                                    maxLines = 3,
-                                                    overflow = TextOverflow.Ellipsis,
-                                                    textAlign = TextAlign.Center,
-                                                    // ✅ add breathing room left/right like your Figma
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(horizontal = 14.dp)
-                                                )
-                                            }
-                                        }
-                                    }
-
-
-
-                                    // ✅ Episode title under each respective image
-                                    // Darken state whenever the episode isn't focused
-                                    val titleYOffset by animateDpAsState(
-                                        targetValue = if (isEpisodeFocused) 1.5.dp else (-1.5).dp,
-                                        label = "episodeTitleYOffset"
-                                    )
-
-                                    if (!isEpisodeSelectOverlay && isFullyVisible) {
-                                        Text(
-                                            text = titleText,
-                                            fontFamily = dongleRegular,
-                                            fontSize = 13.sp,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                            color = if (!isEpisodeFocused) Color(0xFF737373) else Color.White,
-                                            modifier = Modifier
-                                                .offset(x = 4.dp, y = titleYOffset)
-                                        )
-                                    }
-
-                                    // ✅ NEW: Overview appears only when focused, with 1.5s delayed fade-in
-                                    var showOverview by remember(index) { mutableStateOf(false) }
-
-                                    LaunchedEffect(isEpisodeFocused, episodeOverviewText, isEpisodeSelectOverlay) {
-                                        if (!isEpisodeSelectOverlay && isEpisodeFocused && episodeOverviewText.isNotBlank()) {
-                                            showOverview = false
-                                            delay(1500)
-                                            if (isEpisodeFocused) {
-                                                showOverview = true
+                                                else -> false
                                             }
                                         } else {
-                                            showOverview = false
+                                            false
                                         }
-                                    }
-
-                                    AnimatedVisibility(
-                                        visible = showOverview && !isEpisodeSelectOverlay,
-                                        enter = fadeIn(animationSpec = tween(durationMillis = 280)),
-                                        exit = fadeOut(animationSpec = tween(durationMillis = 160))
-                                    ) {
-                                        val overviewAlpha by animateFloatAsState(
-                                            targetValue = if (showOverview) 1f else 0f,
-                                            animationSpec = tween(
-                                                durationMillis = if (showOverview) 420 else 260,
-                                                easing = LinearOutSlowInEasing
-                                            ),
-                                            label = "overviewAlpha"
-                                        )
-
-                                        Box(
-                                            modifier = Modifier
-                                                .padding(start = 20.dp, top = 6.dp)
-                                                .offset(x = (-9.7).dp, y = (-2).dp) // position of the overview background
-                                                .wrapContentSize(unbounded = true)
-                                                .graphicsLayer { alpha = overviewAlpha }
-                                        ) {
-                                            Box(
-                                                modifier = Modifier
-                                                    .requiredWidth(196.dp)
-                                                    .heightIn(max = 98.5.dp)
-                                                    .background(
-                                                        color = Color(0xFF949494).copy(alpha = 0.20f), // opacity of the overview background
-                                                        shape = RoundedCornerShape(6.5.dp)
-                                                    )
-                                                    .padding(start = 6.dp, top = 2.dp, end = 5.dp, bottom = 0.dp)
-                                            ) {
-                                                Text(
-                                                    text = episodeOverviewText,
-                                                    fontFamily = dongleRegular,
-                                                    lineHeight = 11.sp,
-                                                    fontSize = 13.sp,
-                                                    color = Color(0xFFE7E3E3),
-                                                    maxLines = 8,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                }
+                                    },
+                                    onAnchored = { episodesState.overlayAnchor = it },
+                                )
                             }
 
                         }

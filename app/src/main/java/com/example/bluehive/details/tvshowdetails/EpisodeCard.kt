@@ -22,6 +22,35 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.KeyEvent
+import androidx.compose.ui.input.key.onKeyEvent
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.style.TextAlign
+import coil.compose.AsyncImage
+import com.example.bluehive.R
+import com.example.bluehive.models.Episode
+import kotlinx.coroutines.delay
 
 /**
  * Measures [content] at its natural size, reports ZERO height to the parent, and
@@ -113,6 +142,360 @@ fun EpisodeBadge(
 
 
 
+
+// ✅ "Exposure" style darkening using a color matrix (no alpha usage). Made
+// once, here: the row used to remember these per composition (P4).
+private val darkenFilter =
+    ColorFilter.colorMatrix(
+        ColorMatrix().apply {
+            // Lower RGB scale = darker image
+            setToScale(0.40f, 0.40f, 0.40f, 1f)
+        }
+    )
+
+// The border diapers whenever the still path is focused
+private val episodeShape = RoundedCornerShape(7.5.dp)
+
+private val baseStillModifier =
+    Modifier
+        .width(174.27.dp)
+        .height(97.5.dp)
+        .clip(episodeShape)
+
+/**
+ * One episode tile: the air date above the still, the still with its focus
+ * glow, badge and watched fold, the unaired and "select a site" scrims, the
+ * title under it and the overview that pops up after 1.5 s of focus.
+ *
+ * Takes plain values (architecture P3), so a tile whose values did not change
+ * is skipped when the row recomposes. What the row decides stays with the row
+ * and comes in as callbacks: [onFocused] when the tile gains focus, the
+ * D-pad rules as [onKeyEvent], and [onAnchored] with the still's position
+ * while its source overlay is open.
+ *
+ * Moved here from the screen in Stage 8 of the details redesign.
+ */
+@Composable
+internal fun EpisodeCard(
+    episode: Episode,
+    index: Int,
+    totalEpisodes: Int,
+    isWatched: Boolean,
+    isUnaired: Boolean,
+    isEpisodeSelectOverlay: Boolean,
+    backdropUrl: String?,
+    rowState: LazyListState,
+    focusRequester: FocusRequester,
+    passionFont: FontFamily,
+    dongleRegular: FontFamily,
+    onFocused: () -> Unit,
+    onKeyEvent: (KeyEvent) -> Boolean,
+    onAnchored: (Offset) -> Unit,
+) {
+    var isEpisodeFocused by remember { mutableStateOf(false) }
+
+    // Try the episode still first, fallback to show's backdropUrl
+    val stillUrl = episode.stillImageUrl ?: backdropUrl
+
+    val titleText = episode.title
+
+    // ✅ If your Episode model uses a different field name, change this line.
+    val episodeOverviewText = episode.overview ?: ""
+
+
+    // 👇 true only when the whole item is within the viewport
+    val isFullyVisible by remember(rowState, index) {
+        derivedStateOf {
+            val layoutInfo = rowState.layoutInfo
+            val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                ?: return@derivedStateOf false
+
+            val itemStart = itemInfo.offset
+            val itemEnd   = itemInfo.offset + itemInfo.size
+
+            val viewportStart = layoutInfo.viewportStartOffset
+            val viewportEnd   = layoutInfo.viewportEndOffset
+
+            itemStart >= viewportStart && itemEnd <= viewportEnd
+        }
+    }
+
+    // ✅ This outer column is the "focus target"
+    //    It gives the title real space UNDER the still image.
+    Column(
+        modifier = Modifier
+            // keep item layout sized to the still image (prevents spacing weirdness)
+            .width(174.27.dp)
+            .focusRequester(focusRequester)
+            .onFocusChanged { state ->
+                // hasFocus stays true when any child (like provider buttons) is focused
+                isEpisodeFocused = state.hasFocus
+                if (state.hasFocus) onFocused()
+            }
+
+            .onKeyEvent(onKeyEvent)
+            .focusable()
+    ) {
+
+        // ✅ Air date — above the still, right-aligned. Same font and
+        // focus colours as the episode title below it, two points smaller.
+        //
+        // Rendered UNCONDITIONALLY, unlike that title. The title sits
+        // UNDER the image, so it can come and go without disturbing
+        // anything; this sits ABOVE it, where appearing and disappearing
+        // would shove every thumbnail up and down as the row scrolls.
+        // So no isFullyVisible gate here — and a blank string still
+        // occupies its line, which keeps unaired episodes (null
+        // air_date) exactly the same height as aired ones.
+        // Measured at its NATURAL size, then reported as zero height and
+        // placed above the baseline — see ZeroHeightAbove.
+        ZeroHeightAbove {
+            Text(
+                text = formatEpisodeAirDate(episode.airDate),
+                fontFamily = dongleRegular,
+                fontSize = 11.sp,          // episode title is 13.sp
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = if (!isEpisodeFocused) Color(0xFF737373) else Color.White,
+                textAlign = TextAlign.End,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 4.dp)
+            )
+        }
+
+        // ✅ Image/BADGE/GLOW stack stays inside this Box
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .width(174.27.dp)
+                .height(97.5.dp)
+                .onGloballyPositioned { coords ->
+                    // Only care about the box for the *selected* episode’s overlay
+                    if (isEpisodeSelectOverlay) {
+                        onAnchored(coords.positionInRoot())
+                    }
+                }
+        ) {
+
+            // ✅ Glow behind image when focused
+            if (isEpisodeFocused && !isEpisodeSelectOverlay) {
+                Image(
+                    painter = painterResource(id = R.drawable.episode_focus_glow),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .offset(x = (-0.25).dp, y = (-0.3).dp) // offset the position of the glow
+                        .wrapContentSize(unbounded = true) // allow the glow to exceed the layout bounds
+                        // force exact glow size even if parent is smaller
+                        .requiredSize(width = 206.3.dp, height = 129.dp),  // length and width of the focus glow
+                    contentScale = ContentScale.FillBounds
+                )
+            }
+
+            // ✅ Still image centered over glow
+            if (!stillUrl.isNullOrBlank()) {
+
+                val stillModifier = baseStillModifier.then(
+                    if (!isEpisodeFocused || isEpisodeSelectOverlay) {
+                        Modifier.border(
+                            width = 1.1.dp,
+                            color = Color(0xFF505050), // border color
+                            shape = episodeShape
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
+
+                AsyncImage(
+                    model = stillUrl,
+                    contentDescription = episode.title,
+                    modifier = stillModifier,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = if (!isEpisodeFocused) darkenFilter else null
+                )
+
+                // ✅ Episode badge – bottom-left overlay, on top of still
+                EpisodeBadge(
+                    current = episode.episodeNumber,
+                    total = totalEpisodes,
+                    isFocused = isEpisodeFocused,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(start = 4.dp, bottom = 76.5.dp)
+                )
+
+                // ✅ Watched marker — corner fold + tick, TOP-RIGHT so it
+                // never collides with the episode-number badge. Drawn in a
+                // single Canvas (no Material-Icons dependency) and clipped
+                // to the card shape so it follows the rounded corner.
+                if (isWatched) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .clip(episodeShape)
+                    ) {
+                        WatchedCornerFold(
+                            modifier = Modifier.align(Alignment.TopEnd)
+                        )
+                    }
+                }
+            }
+
+
+            // ✅ UNAIRED — dark scrim over the still, saying why.
+            //
+            // Over the still rather than instead of it: the card still
+            // has to read as the episode it is, so the artwork stays
+            // visible underneath. Drawn after the badge and the watched
+            // fold so it covers both, and before the select overlay,
+            // which an unaired episode can never reach anyway -- the
+            // press that raises it is refused above.
+            if (isUnaired) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(episodeShape)
+                        .background(Color(0xD9101014))
+                        // Border re-added ON TOP, same as the select
+                        // overlay does, or the scrim squares the corners.
+                        .border(
+                            width = 1.1.dp,
+                            color = Color(0xFF505050),
+                            shape = episodeShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "EPISODE NOT AVAILABLE",
+                        fontFamily = passionFont,
+                        fontSize = 15.sp,
+                        lineHeight = 17.sp,
+                        color = Color(0xFFD6D6DB),
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp)
+                    )
+                }
+            }
+
+            if (isEpisodeSelectOverlay) {  // overlay for when a episode is selected
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .clip(episodeShape)
+                        .background(Color.Black)
+                        // ✅ re-add border ON TOP of the overlay
+                        .border(
+                            width = 1.1.dp,
+                            color = Color(0xFF505050),
+                            shape = episodeShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "SELECT A SITE BELOW TO WATCH EPISODE ON",
+                        fontFamily = passionFont,
+                        fontSize = 20.sp,
+                        color = Color.White,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        textAlign = TextAlign.Center,
+                        // ✅ add breathing room left/right like your Figma
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp)
+                    )
+                }
+            }
+        }
+
+
+
+        // ✅ Episode title under each respective image
+        // Darken state whenever the episode isn't focused
+        val titleYOffset by animateDpAsState(
+            targetValue = if (isEpisodeFocused) 1.5.dp else (-1.5).dp,
+            label = "episodeTitleYOffset"
+        )
+
+        if (!isEpisodeSelectOverlay && isFullyVisible) {
+            Text(
+                text = titleText,
+                fontFamily = dongleRegular,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = if (!isEpisodeFocused) Color(0xFF737373) else Color.White,
+                modifier = Modifier
+                    .offset(x = 4.dp, y = titleYOffset)
+            )
+        }
+
+        // ✅ NEW: Overview appears only when focused, with 1.5s delayed fade-in
+        var showOverview by remember(index) { mutableStateOf(false) }
+
+        LaunchedEffect(isEpisodeFocused, episodeOverviewText, isEpisodeSelectOverlay) {
+            if (!isEpisodeSelectOverlay && isEpisodeFocused && episodeOverviewText.isNotBlank()) {
+                showOverview = false
+                delay(1500)
+                if (isEpisodeFocused) {
+                    showOverview = true
+                }
+            } else {
+                showOverview = false
+            }
+        }
+
+        AnimatedVisibility(
+            visible = showOverview && !isEpisodeSelectOverlay,
+            enter = fadeIn(animationSpec = tween(durationMillis = 280)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 160))
+        ) {
+            val overviewAlpha by animateFloatAsState(
+                targetValue = if (showOverview) 1f else 0f,
+                animationSpec = tween(
+                    durationMillis = if (showOverview) 420 else 260,
+                    easing = LinearOutSlowInEasing
+                ),
+                label = "overviewAlpha"
+            )
+
+            Box(
+                modifier = Modifier
+                    .padding(start = 20.dp, top = 6.dp)
+                    .offset(x = (-9.7).dp, y = (-2).dp) // position of the overview background
+                    .wrapContentSize(unbounded = true)
+                    .graphicsLayer { alpha = overviewAlpha }
+            ) {
+                Box(
+                    modifier = Modifier
+                        .requiredWidth(196.dp)
+                        .heightIn(max = 98.5.dp)
+                        .background(
+                            color = Color(0xFF949494).copy(alpha = 0.20f), // opacity of the overview background
+                            shape = RoundedCornerShape(6.5.dp)
+                        )
+                        .padding(start = 6.dp, top = 2.dp, end = 5.dp, bottom = 0.dp)
+                ) {
+                    Text(
+                        text = episodeOverviewText,
+                        fontFamily = dongleRegular,
+                        lineHeight = 11.sp,
+                        fontSize = 13.sp,
+                        color = Color(0xFFE7E3E3),
+                        maxLines = 8,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+        }
+
+    }
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 //  @Preview — watched corner fold
