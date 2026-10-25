@@ -154,6 +154,28 @@ object ApiClient {
                 return null
             }
 
+            // NEVER FOR THE SIGN-IN ENDPOINTS THEMSELVES (/auth/refresh,
+            // /auth/host-provision, /auth/login, /auth/signup).
+            //
+            // TokenProvider calls /auth/refresh through THIS client while it holds
+            // refreshLock inside runBlocking. A 401 on that call landed back here on
+            // an OkHttp thread, which called fetchFreshToken() again and waited on
+            // the same lock forever: the outer call never returned, the dead session
+            // was never cleared, and every later authenticated call queued behind it.
+            // Seen 2026-10-25 on the Fire Stick after its TV was re-paired to another
+            // Off-Grid account: the server revoked the session, the app kept the dead
+            // refresh token across restarts and never reached host sign-in, so the
+            // profile picker sat empty with no Add Profile button.
+            //
+            // Returning null hands the 401 back to the caller. For a refresh that is
+            // TokenProvider, which reads code=revoked and reports Revoked, and the
+            // authenticator for the original request then clears the session. For a
+            // failed sign-in it is AuthActivity, which falls back to the email screen
+            // instead of being torn down by a session-expired event mid sign-in.
+            if (response.request.url.encodedPath.startsWith("/api/bluehive/auth/")) {
+                return null
+            }
+
             val result = com.example.bluehive.auth.TokenProvider.fetchFreshToken()
 
             return when (result) {
