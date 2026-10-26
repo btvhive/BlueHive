@@ -61,9 +61,6 @@ val PEEK_ROW_TOP: Dp = 453.25.dp
 /** The header buttons' label size in the peek layout, in Inter Bold. */
 const val PEEK_HEADER_LABEL_SP = 10f
 
-/** The outline that thickens those labels past synthetic bold. */
-val PEEK_HEADER_LABEL_STROKE: Dp = 0.6.dp
-
 /** How far the page slides up while the row has focus. */
 val PEEK_SLIDE: Dp = 110.dp
 

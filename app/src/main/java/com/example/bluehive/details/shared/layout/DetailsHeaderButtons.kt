@@ -19,7 +19,6 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.bluehive.BlueHiveApplication
@@ -89,10 +88,6 @@ fun BoxScope.DetailsHeaderButtons(
     onSearch: (() -> Unit)? = null,
     /** The labels' size in sp. The peek layout's lighter Inter runs smaller than Passion. */
     labelSize: Float = 12f,
-    /** The labels' weight; null draws the font as it is. See ModularButtonTextConfig.fontWeight. */
-    labelWeight: FontWeight? = null,
-    /** The labels' extra outline; null draws none. See ModularButtonTextConfig.strokeWidth. */
-    labelStroke: Dp? = null,
 ) {
     // Peek layout: Rewind at the metadata's left edge, then the trailer
     // button and Forward, PEEK_TRAILER_GAP apart.
@@ -111,8 +106,6 @@ fun BoxScope.DetailsHeaderButtons(
         isFavorited = favorite.isFavorited,
         goldAndBronze = !showExtras,
         labelSize = labelSize,
-        labelWeight = labelWeight,
-        labelStroke = labelStroke,
         onToggle = { favorite.toggle() }
     )
 
@@ -146,8 +139,6 @@ fun BoxScope.DetailsHeaderButtons(
         width = trailerWidth,
         glowWidth = trailerGlowWidth,
         labelSize = labelSize,
-        labelWeight = labelWeight,
-        labelStroke = labelStroke,
         enableFocus = enableFocus,
         onClick = { trailer.onButtonPressed() }
     )
@@ -206,8 +197,6 @@ private fun DetailsFavoriteButton(
      */
     goldAndBronze: Boolean = false,
     labelSize: Float = 12f,
-    labelWeight: FontWeight? = null,
-    labelStroke: Dp? = null,
     onToggle: () -> Unit = {}
 ) {
     ModularButton(
@@ -215,16 +204,12 @@ private fun DetailsFavoriteButton(
             ModularButtonTextConfig(
                 text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites",
                 fontSize = labelSize,
-                fontWeight = labelWeight,
-                strokeWidth = labelStroke,
             )
         } else {
             ModularButtonTextConfig(
                 text = "+ Add to Favorites",
                 toggledText = "- Remove from Favorites",
                 fontSize = labelSize,
-                fontWeight = labelWeight,
-                strokeWidth = labelStroke,
             )
         },
         isToggleable = !goldAndBronze,
@@ -444,8 +429,6 @@ private fun DetailsTrailerButton(
     /** Centred on the button. */
     glowWidth: Dp = width + 16.5.dp,
     labelSize: Float = 12f,
-    labelWeight: FontWeight? = null,
-    labelStroke: Dp? = null,
     enableFocus: Boolean = true,
     onClick: () -> Unit = {}
 ) {
@@ -454,8 +437,6 @@ private fun DetailsTrailerButton(
             text = if (isPlaying) "Pause Trailer" else "Play Trailer",
             toggledText = if (isPlaying) "Play Trailer" else "Pause Trailer",
             fontSize = labelSize,
-            fontWeight = labelWeight,
-            strokeWidth = labelStroke,
         ),
         isToggleable = false,
         fontFamily = fontFamily,
