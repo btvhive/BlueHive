@@ -86,7 +86,7 @@ fun BoxScope.DetailsHeaderButtons(
      * magnifying glass on Extras' forest green. Null shows none.
      */
     onSearch: (() -> Unit)? = null,
-    /** The labels' size in sp. The peek layout's lighter Inter runs smaller than Passion. */
+    /** The labels' size in sp. The peek layout's run smaller. */
     labelSize: Float = 12f,
 ) {
     // Peek layout: Rewind at the metadata's left edge, then the trailer
