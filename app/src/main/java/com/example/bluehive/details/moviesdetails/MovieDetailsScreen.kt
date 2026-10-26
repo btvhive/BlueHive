@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.repository.RecommendationsRepository
+import com.example.bluehive.searchBarComponent.openSearchScreen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -429,6 +430,11 @@ fun MovieDetailsScreen(
             favoriteFocusRequester = favoriteFocusRequester,
             extrasFocusRequester   = extrasFocusRequester,
             trailerFocusRequester  = trailerFocusRequester,
+            // Search: the trailer stops, as it does when a recommendation opens.
+            onSearch               = {
+                trailer.stop()
+                openSearchScreen(context, favoriteProfileId)
+            },
         ),
         releaseTrailerOnLeave = false,
         onOpenRecommendation = { media ->

@@ -79,6 +79,11 @@ fun BoxScope.DetailsHeaderButtons(
      * user's calls, 2026-10-26: 80 dp, then 88, 92 and 90 in the same glow).
      */
     showExtras: Boolean = true,
+    /**
+     * The peek layout's Search button, in Extras' old place and size: a
+     * magnifying glass on Extras' forest green. Null shows none.
+     */
+    onSearch: (() -> Unit)? = null,
 ) {
     // Peek layout: Rewind at the metadata's left edge, then the trailer
     // button and Forward, PEEK_TRAILER_GAP apart.
@@ -106,6 +111,13 @@ fun BoxScope.DetailsHeaderButtons(
             isToggled = extras.isOn,
             enableFocus = enableFocus,
             onClick = { extras.toggle() }
+        )
+    } else if (onSearch != null) {
+        DetailsSearchButton(
+            fontFamily = fontFamily,
+            pressTiming = pressTiming,
+            enableFocus = enableFocus,
+            onClick = onSearch,
         )
     }
 
@@ -287,6 +299,75 @@ private fun DetailsExtrasButton(
             secondCornerRadius = 6f,
         ),
         // Shared — see ExtrasButtonColors in utilities/ModularButton.kt.
+        colors = ExtrasButtonColors,
+        glowConfig = ModularButtonGlowConfig(
+            enabled = true,
+            defaultRes = R.drawable.button_focus_narrow_glow,
+            toggledRes = R.drawable.button_focus_narrow_nonglow,
+            offsetX = (49.5.dp - 71.6.dp) / 2,
+            offsetY = (-4).dp
+        ),
+        animationConfig = ModularButtonAnimationConfig(
+            pressOffset = 2.5.dp,
+            textOffsetDefault = 1.dp,
+            textOffsetPressed = 2.4.dp,
+            durationMillis = pressTiming.durationMillis,
+            bounceBackDelayMillis = pressTiming.bounceBackDelayMillis
+        ),
+        onClick = {
+            BlueHiveApplication.playClickSound()
+            onClick()
+        }
+    )
+}
+
+/** Search: the Extras button's size, place, glow and forest green, with a magnifying glass instead of a label. */
+@Composable
+private fun DetailsSearchButton(
+    fontFamily: FontFamily,
+    pressTiming: DetailsPressTiming,
+    offsetX: Dp = 182.dp,
+    offsetY: Dp = 139.dp,
+    enableFocus: Boolean = true,
+    onClick: () -> Unit,
+) {
+    ModularButton(
+        textConfig = ModularButtonTextConfig(
+            // Drawn as the icon; also its contentDescription.
+            text = "Search",
+            iconRes = R.drawable.ic_search_glass,
+            iconSize = 14.dp,
+        ),
+        isToggleable = false,
+        fontFamily = fontFamily,
+        focusRequester = remember { FocusRequester() },
+        modifier = Modifier
+            .offset(x = offsetX, y = offsetY)
+            .focusProperties { canFocus = enableFocus }
+            .onKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    (event.key == Key.DirectionLeft ||
+                            event.key == Key.DirectionRight ||
+                            event.key == Key.DirectionDown)
+                ) {
+                    BlueHiveApplication.playHoverSound()
+                }
+                false
+            },
+        dimensions = ModularButtonDimensions(
+            mainWidth = 49.5.dp,
+            mainHeight = 24.dp,
+            mainYOffset = 0.5.dp,
+            secondWidth = 49.5.dp,
+            secondHeight = 22.dp,
+            secondYOffset = 7.dp,
+            shadowHeight = 6.dp,
+            glowWidth = 71.6.dp,
+            glowHeight = 44.dp,
+            mainCornerRadius = 7f,
+            secondCornerRadius = 6f,
+        ),
+        // The Extras button's forest green -- see ExtrasButtonColors.
         colors = ExtrasButtonColors,
         glowConfig = ModularButtonGlowConfig(
             enabled = true,

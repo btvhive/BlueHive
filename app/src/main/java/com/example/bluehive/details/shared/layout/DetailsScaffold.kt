@@ -53,6 +53,8 @@ data class DetailsHeaderSpec(
     val favoriteFocusRequester: FocusRequester,
     val extrasFocusRequester: FocusRequester,
     val trailerFocusRequester: FocusRequester,
+    /** The peek layout's Search button press; null shows no Search button. */
+    val onSearch: (() -> Unit)? = null,
 )
 
 /**
@@ -190,6 +192,7 @@ private fun BoxScope.DetailsPage(
             extras = extras,
             trailer = trailer,
             showExtras = peek == null,
+            onSearch = header.onSearch,
         )
 
         if (peek != null) {
