@@ -108,7 +108,7 @@ internal fun BoxScope.RemoveConfirmOverlay(
             // ── Buttons row ───────────────────────────────────────
             androidx.compose.foundation.layout.Row(
                 horizontalArrangement = Arrangement.spacedBy(
-                    16.dp, Alignment.CenterHorizontally
+                    overlayButtonGap, Alignment.CenterHorizontally
                 ),
                 modifier = Modifier.fillMaxWidth(),
             ) {
@@ -156,7 +156,7 @@ internal fun BoxScope.RemoveConfirmOverlay(
                         },
                     dimensions = overlayButtonDimensions,
                     colors = acceptChangesColors,
-                    glowConfig      = buttonGlow,
+                    glowConfig      = overlayButtonGlow,
                     animationConfig = buttonAnimation,
                 )
 
@@ -204,7 +204,7 @@ internal fun BoxScope.RemoveConfirmOverlay(
                         },
                     dimensions = overlayButtonDimensions,
                     colors = undoChangesColors,
-                    glowConfig      = buttonGlow,
+                    glowConfig      = overlayButtonGlow,
                     animationConfig = buttonAnimation,
                 )
             }

@@ -127,9 +127,15 @@ internal val overlayButtonDimensions = ModularButtonDimensions(
     mainCornerRadius   = 8f,
     secondCornerRadius = 8f,
     shadowHeight       = 12.dp,
-    glowWidth          = overlayButtonWidth + 14.2.dp,
+    // Wider than the others' +14.2: the glow picture's bottom is rounded, and
+    // at the button's bottom edge it covers only ~5-95% of its width. At +14.2
+    // that ended ~3 dp inside a 200 dp button; at +25 it shows ~2.3 dp past each
+    // side, as on the 80 dp buttons. Its offsetX is in overlayButtonGlow.
+    glowWidth          = overlayButtonWidth + 25.dp,
     glowHeight         = 44.dp,
 )
+/** Space between Accept and Undo; with the wider glow box it leaves the buttons where they were. */
+internal val overlayButtonGap = 5.2.dp
 internal val acceptChangesColors = ModularButtonColors(
     mainDefault          = Color(0xFF192C6F),
     mainFocused          = Color(0xFF2A4BAA),
@@ -165,6 +171,8 @@ internal val buttonGlow = ModularButtonGlowConfig(
     fadeOutDurationMillis = 200,
     fadeInDurationMillis  = 400,
 )
+/** The glow centred on the wider glow box of Accept and Undo (overlayButtonDimensions). */
+internal val overlayButtonGlow = buttonGlow.copy(offsetX = (-12.5).dp)
 internal val buttonAnimation = ModularButtonAnimationConfig(
     pressOffset           = 3.5.dp,
     textOffsetDefault     = 7.9.dp,
