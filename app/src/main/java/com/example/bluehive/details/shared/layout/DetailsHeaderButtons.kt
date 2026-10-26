@@ -74,8 +74,8 @@ fun BoxScope.DetailsHeaderButtons(
     /**
      * False in the movie screen's peek layout: no Extras button, and the
      * trailer controls become Rewind | Play Trailer | Forward, with Rewind's
-     * left edge on the metadata's (258.25 dp) and the trailer button 20%
-     * narrower (the user's call, 2026-10-26).
+     * left edge on the metadata's (258.25 dp) and the trailer button 88 dp
+     * wide, not 100 (the user's calls, 2026-10-26: 80 dp, then a little wider).
      */
     showExtras: Boolean = true,
 ) {
@@ -83,7 +83,7 @@ fun BoxScope.DetailsHeaderButtons(
     // button and Forward, PEEK_TRAILER_GAP apart.
     val rewindX = if (showExtras) 367.25.dp else 258.25.dp
     val trailerX = if (showExtras) 256.25.dp else rewindX + SEEK_BUTTON_WIDTH + PEEK_TRAILER_GAP
-    val trailerWidth = if (showExtras) 100.dp else 80.dp
+    val trailerWidth = if (showExtras) 100.dp else 88.dp
     val forwardX = if (showExtras) 400.25.dp else trailerX + trailerWidth + PEEK_TRAILER_GAP
 
     // Favorite Button - Uses internal offset for positioning
