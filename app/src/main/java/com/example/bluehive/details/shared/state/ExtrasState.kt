@@ -10,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.repository.RecommendationsRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -68,6 +69,29 @@ class ExtrasState internal constructor(
                     val result = repository.getRecommendations(tmdbId, mediaType)
                     recommendations = result                       // safe: returns on Main
                 }
+            }
+        }
+    }
+
+    /**
+     * Load the row without switching Extras on: the movie screen's peek
+     * layout shows it under the play area from the start. Runs on
+     * Dispatchers.IO like the movie screen's toggle, and a failed fetch only
+     * leaves the row empty.
+     */
+    fun loadRow() {
+        if (recommendations.isNotEmpty()) return
+        scope.launch(Dispatchers.IO) {
+            try {
+                val result = repository.getRecommendations(tmdbId, mediaType)
+                withContext(Dispatchers.Main) {
+                    recommendations = result
+                    Log.d("Recommendations", "Loaded ${recommendations.size} recommendations for the row")
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("Recommendations", "Error loading recommendations for $tmdbId ($mediaType)", e)
             }
         }
     }

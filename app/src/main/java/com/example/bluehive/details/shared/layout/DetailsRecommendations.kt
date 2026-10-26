@@ -1,6 +1,7 @@
 package com.example.bluehive.details.shared.layout
 
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.unit.sp
 import com.example.bluehive.details.shared.state.ExtrasState
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.utilities.RecommendedMediaSection
@@ -28,6 +29,34 @@ fun DetailsRecommendations(
             recommendations = extras.recommendations,
             onMediaClick = onOpen,
             onNavigateUp = onNavigateUp
+        )
+    }
+}
+
+/**
+ * The movie screen's peek row (DetailsPeekState): always under the play
+ * area, from the moment its titles arrive. Its heading is smaller and grey
+ * until the row has focus; it does not take focus on load unless the page
+ * opened in Extras; and its focus slides the page.
+ */
+@Composable
+fun DetailsPeekRecommendations(
+    extras: ExtrasState,
+    peek: DetailsPeekState,
+    onOpen: (MediaItem) -> Unit,
+    onNavigateUp: () -> Unit,
+) {
+    if (extras.recommendations.isNotEmpty()) {
+        RecommendedMediaSection(
+            recommendations = extras.recommendations,
+            onMediaClick = onOpen,
+            onNavigateUp = onNavigateUp,
+            topOffset = peek.rowTop,
+            titleFontSize = 18.sp,
+            dimTitleUntilFocused = true,
+            autoFocusFirst = peek.startFocused,
+            entry = peek.rowEntry,
+            onRowFocusChanged = { peek.isScrolled = it },
         )
     }
 }

@@ -4,6 +4,7 @@ package com.example.bluehive.utilities
 import android.os.SystemClock
 import android.util.Log
 import androidx.activity.ComponentActivity
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -26,6 +27,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.activity.compose.LocalActivity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.BlueHiveApplication
@@ -44,12 +47,42 @@ private const val RECOMMENDED_NAV_REPEAT_MS = 105L
 private const val TITLE_REVEAL_DELAY_MS = 800L
 private const val TITLE_FADE_MS = 700
 
+/** The "Recommended Media" heading while the row lacks focus, in the movie screen's peek layout. */
+private val DIM_TITLE_COLOR = Color(0xFFA6A6A6)
+
+/**
+ * Lets a screen move focus into the row from outside it: the movie screen's
+ * play buttons, whose Down enters the row below them.
+ */
+class RecommendedRowEntry {
+    internal var enter: (() -> Unit)? = null
+
+    /** Focus the row's last focused card (the first, at the start); false while the row has no titles. */
+    fun focus(): Boolean {
+        val e = enter ?: return false
+        e()
+        return true
+    }
+}
+
+/**
+ * The recommended row. The defaults are the TV screen's Extras row. The movie
+ * screen's peek layout moves it down ([topOffset]), shrinks and dims its
+ * heading until it has focus, keeps it from taking focus on load, enters it
+ * through [entry], and slides the page on [onRowFocusChanged].
+ */
 @Composable
 fun RecommendedMediaSection(
     recommendations: List<MediaItem>,
     onMediaClick: (MediaItem) -> Unit,
     onNavigateUp: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    topOffset: Dp = 340.25.dp,
+    titleFontSize: TextUnit = 24.sp,
+    dimTitleUntilFocused: Boolean = false,
+    autoFocusFirst: Boolean = true,
+    entry: RecommendedRowEntry? = null,
+    onRowFocusChanged: (Boolean) -> Unit = {},
 ) {
     val backgroundPainter = painterResource(id = R.drawable.titlecard_base)
     val focusedPainter = painterResource(id = R.drawable.titlecard_focused)
@@ -75,17 +108,36 @@ fun RecommendedMediaSection(
         List(recommendations.size) { FocusRequester() }
     }
 
+    if (entry != null) {
+        DisposableEffect(entry, focusRequesters) {
+            entry.enter = {
+                if (focusRequesters.isNotEmpty()) {
+                    focusRequesters[focusedIndex.coerceIn(0, focusRequesters.lastIndex)].requestFocus()
+                }
+            }
+            onDispose { entry.enter = null }
+        }
+    }
+
+    val titleColor by animateColorAsState(
+        targetValue = if (dimTitleUntilFocused && !hasRowFocus) DIM_TITLE_COLOR else Color.White,
+        animationSpec = tween(durationMillis = 350),
+        label = "recHeadingColor"
+    )
+
     Column(
         modifier = modifier
-            .offset(x = 60.dp, y = 340.25.dp)
+            .offset(x = 60.dp, y = topOffset)
             .height(250.dp)
     ) {
         Text(
             text = "Recommended Media",
-            color = Color.White,
-            fontSize = 24.sp,
+            color = titleColor,
+            fontSize = titleFontSize,
             fontFamily = AppTypography.passionRegular,
-            modifier = Modifier.offset(x = (-29).dp, y = (-48).dp)
+            // A smaller heading moves down by its lost line height, so it keeps
+            // its gap to the cards.
+            modifier = Modifier.offset(x = (-29).dp, y = (-48).dp + ((24f - titleFontSize.value) * 1.2f).dp)
         )
 
         Box {
@@ -126,6 +178,7 @@ fun RecommendedMediaSection(
                         .fillMaxSize()
                         .onFocusChanged { focusState ->
                             hasRowFocus = focusState.hasFocus
+                            onRowFocusChanged(focusState.hasFocus)
 
                             if (focusState.hasFocus) {
                                 if (recommendations.isNotEmpty()) {
@@ -394,7 +447,7 @@ fun RecommendedMediaSection(
 
     // Auto-focus first item when section appears
     LaunchedEffect(recommendations.size) {
-        if (recommendations.isNotEmpty() && focusedIndex == -1) {
+        if (autoFocusFirst && recommendations.isNotEmpty() && focusedIndex == -1) {
             focusedIndex = 0
             focusRequesters[0].requestFocus()
         }

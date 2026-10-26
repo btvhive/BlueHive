@@ -48,14 +48,10 @@ fun BoxScope.DetailsBackdrop(
     /** The picture's accessibility label. The two screens word it differently. */
     backdropDescription: String,
     dongleRegular: FontFamily,
+    /** False in the movie screen's peek layout, which draws the background behind the sliding page. */
+    drawBackground: Boolean = true,
 ) {
-    // Background image layer
-    Image(
-        painter = painterResource(id = R.drawable.backdrop_details),
-        contentDescription = null,
-        modifier = Modifier.fillMaxSize(),
-        contentScale = ContentScale.Crop
-    )
+    if (drawBackground) DetailsPageBackground()
 
 
     // ========================================================================================================================================= > // Content Rating
@@ -117,6 +113,18 @@ fun BoxScope.DetailsBackdrop(
             onError = { e -> Log.e("BackdropDebug", "❌ Failed: ${e.result.throwable.message}") }
         )
     }
+}
+
+/** The page background image, under everything else. */
+@Composable
+fun BoxScope.DetailsPageBackground() {
+    // Background image layer
+    Image(
+        painter = painterResource(id = R.drawable.backdrop_details),
+        contentDescription = null,
+        modifier = Modifier.fillMaxSize(),
+        contentScale = ContentScale.Crop
+    )
 }
 
 /** The gradient over the top-right backdrop, drawn above the trailer player. */

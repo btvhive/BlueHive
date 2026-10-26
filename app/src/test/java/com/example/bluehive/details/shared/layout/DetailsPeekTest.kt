@@ -1,0 +1,29 @@
+package com.example.bluehive.details.shared.layout
+
+import androidx.compose.ui.unit.dp
+import org.junit.Assert.assertEquals
+import org.junit.Test
+
+/** The movie peek layout's geometry: extra play-button rows push the row and the slide down. */
+class DetailsPeekTest {
+
+    @Test
+    fun `up to four buttons fit in the two rows the layout is drawn for`() {
+        assertEquals(listOf(0, 0, 0, 0, 0), (0..4).map { peekExtraSourceRows(it) })
+    }
+
+    @Test
+    fun `each further row of two counts once`() {
+        assertEquals(listOf(1, 1, 2, 2), (5..8).map { peekExtraSourceRows(it) })
+    }
+
+    @Test
+    fun `an extra row moves the row and the slide down by one button row`() {
+        val peek = DetailsPeekState(startFocused = false)
+        assertEquals(PEEK_ROW_TOP, peek.rowTop)
+        assertEquals(PEEK_SLIDE, peek.slide)
+        peek.extraSourceRows = 1
+        assertEquals(PEEK_ROW_TOP + 55.5.dp, peek.rowTop)
+        assertEquals(PEEK_SLIDE + 55.5.dp, peek.slide)
+    }
+}

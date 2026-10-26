@@ -37,6 +37,10 @@ import com.example.bluehive.details.shared.playback.rememberPlaybackSession
 import com.example.bluehive.details.shared.playback.rememberSourcePlayback
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
+import com.example.bluehive.details.shared.layout.DetailsPeekState
+import com.example.bluehive.details.shared.layout.PEEK_PLAY_TOP
+import com.example.bluehive.details.shared.layout.PEEK_SOURCE_ROW_STEP
+import com.example.bluehive.details.shared.layout.peekExtraSourceRows
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
 import com.example.bluehive.details.shared.layout.DetailsScaffold
 import com.example.bluehive.details.shared.layout.DetailsToast
@@ -103,18 +107,26 @@ fun MovieDetailsScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // Extras: the switch and its recommendations row -- see ExtrasState. On
-    // this screen the row loads on a background thread, and opening in Extras
-    // always fetches (architecture §10, #5 and #13).
+    // The recommendations row -- see ExtrasState. This screen has no Extras
+    // switch any more: the peek layout (DetailsPeekState) shows the row under
+    // the play buttons from the start, so it loads on open, on a background
+    // thread. Extras itself never turns on here.
     val extras = rememberExtrasState(
         scope            = coroutineScope,
         repository       = recommendationsRepository,
         tmdbId           = args.mediaId,
         mediaType        = args.mediaType,
-        startInExtras    = args.startInExtras,
+        startInExtras    = false,
         loadInBackground = true,
         prefetched       = null,
     )
+    LaunchedEffect(extras) { extras.loadRow() }
+
+    // Opened from history in Extras: the row takes focus as it loads, so the
+    // page opens slid up on it.
+    val peek = remember(args.startInExtras) { DetailsPeekState(startFocused = args.startInExtras) }
+    // The play button Down entered the row from, for Up to return to.
+    var rowEnteredFrom by remember { mutableStateOf<FocusRequester?>(null) }
 
     var blockHeaderInitialFocus by remember(args.startInExtras) { mutableStateOf(args.startInExtras) }
 
@@ -324,6 +336,15 @@ fun MovieDetailsScreen(
         }
     }
 
+    // One requester per "Watch on ..." button, made here rather than in the
+    // play area so Up from the row can reach them.
+    val streamerFocus = remember(sources.size) {
+        List(sources.size) { FocusRequester() }
+    }
+    LaunchedEffect(sources.size, isAnime) {
+        peek.extraSourceRows = if (isAnime) 0 else peekExtraSourceRows(sources.size)
+    }
+
     LaunchedEffect(sources) {
         Log.d(
             "scraper",
@@ -416,10 +437,13 @@ fun MovieDetailsScreen(
             onMediaClick(media)
         },
         onUpFromRecommendations = {
+            // Back to the play button Down came from; after opening straight
+            // into the row, the bottom-left one.
             BlueHiveApplication.playHoverSound()
-            extrasFocusRequester.requestFocus()
-            extrasFocusRequester.requestFocus()
-            Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonGlow should be the extra button's focus glow")
+            val target = rowEnteredFrom
+                ?: if (isAnime) animeDubFocusRequester
+                else streamerFocus.getOrNull(((streamerFocus.size - 1) / 2) * 2)
+            try { target?.requestFocus() } catch (_: Exception) {}
         },
         labels = {
             MovieInfoLabels(
@@ -436,7 +460,10 @@ fun MovieDetailsScreen(
                 AnimeDubButton(
                     fontFamily = passionFont,
                     focusRequester = animeDubFocusRequester,
-                    offsetX = 27.75.dp, offsetY = 332.5.dp,
+                    offsetX = 27.75.dp, offsetY = PEEK_PLAY_TOP,
+                    onDown = {
+                        peek.rowEntry.focus().also { if (it) rowEnteredFrom = animeDubFocusRequester }
+                    },
                     onClick = {
                         // No stopTrailer() here: this only OPENS the DuB/SuB prompt.
                         // The trailer plays on until the prompt is answered, which
@@ -462,7 +489,10 @@ fun MovieDetailsScreen(
                 AnimeSubButton(
                     fontFamily = passionFont,
                     focusRequester = animeSubFocusRequester,
-                    offsetX = 228.dp, offsetY = 332.5.dp,
+                    offsetX = 228.dp, offsetY = PEEK_PLAY_TOP,
+                    onDown = {
+                        peek.rowEntry.focus().also { if (it) rowEnteredFrom = animeSubFocusRequester }
+                    },
                     onClick = {
                         // No stopTrailer() here — see the DuB button above.
                         if (sources.size > 2) {
@@ -484,13 +514,10 @@ fun MovieDetailsScreen(
                 // Adding/removing an entry in getStreamingSources() now "just
                 // works" — no per-index block to keep in sync (that mismatch is
                 // what silently dropped the 6th button). Column X and the first
-                // rows' Y are the exact legacy offsets, so nothing moves on screen;
-                // a 7th+ source simply continues the grid downward.
+                // rows keep the legacy spacing, starting just under the overview
+                // (peek layout); a 5th+ source continues the grid downward and
+                // pushes the recommended row down with it (DetailsPeekState).
                 val colX = listOf(27.75.dp, 228.dp)          // [left column, right column]
-                val rowY = listOf(332.5.dp, 388.dp, 443.dp)  // exact legacy row offsets
-                val streamerFocus = remember(sources.size) {
-                    List(sources.size) { FocusRequester() }
-                }
                 sources.forEachIndexed { i, source ->
                     val col = i % 2
                     val row = i / 2
@@ -502,11 +529,14 @@ fun MovieDetailsScreen(
                         fontFamily = passionFont,
                         focusRequester = streamerFocus[i],
                         offsetX = if (aloneInRow) (colX[0] + colX[1]) / 2f else colX[col],
-                        offsetY = if (row < rowY.size) rowY[row]
-                                  else rowY.last() + 55.dp * (row - rowY.lastIndex),
+                        offsetY = PEEK_PLAY_TOP + PEEK_SOURCE_ROW_STEP * row,
                         disableLeftSound  = aloneInRow || col == 0, // left column / lone centered → mute left edge
                         disableRightSound = aloneInRow || col == 1, // right column / lone centered → mute right edge
                         disableDownSound  = i + 2 >= sources.size,  // no button directly below → mute down
+                        // Bottom row: Down enters the recommended row.
+                        onDownFromBottom  = {
+                            peek.rowEntry.focus().also { if (it) rowEnteredFrom = streamerFocus[i] }
+                        },
                         onClick = {
                             // Remember which button launched this so focus comes back
                             // here when the player exits (THE RULE).
@@ -550,6 +580,7 @@ fun MovieDetailsScreen(
             // The trailer could not be loaded -- see TrailerFailedNotice.
             TrailerFailedNotice(trailer, dongleRegular)
         },
+        peek = peek,
     )
 }   // ← MovieDetailsScreen closes here
 
@@ -565,6 +596,8 @@ fun MoviesStreamerButton(
     disableRightSound: Boolean = false,
     disableUpSound: Boolean = false,
     disableDownSound: Boolean = false,
+    /** Down on a bottom-row button; true when it moved focus (into the recommended row). */
+    onDownFromBottom: (() -> Boolean)? = null,
     onClick: () -> Unit
 ) {
     ModularButton(
@@ -608,7 +641,11 @@ fun MoviesStreamerButton(
                         }
                         Key.DirectionDown -> {
                             if (disableDownSound) {
-                                false   // bottom row: nothing below, no sound
+                                // Bottom row: into the recommended row, with a
+                                // sound only when it moved; without a row,
+                                // nothing below and no sound.
+                                if (onDownFromBottom?.invoke() == true) BlueHiveApplication.playHoverSound()
+                                onDownFromBottom != null
                             } else {
                                 BlueHiveApplication.playHoverSound()
                                 false
@@ -655,12 +692,28 @@ fun MoviesStreamerButton(
 }
 
 
+/**
+ * Down on Watch in English / Japanese. Without [onDown], as before: a sound,
+ * and the focus system moves on. With it (the peek layout), Down enters the
+ * recommended row, sounding only when it moved.
+ */
+private fun animeDown(onDown: (() -> Boolean)?): Boolean {
+    if (onDown == null) {
+        BlueHiveApplication.playHoverSound()
+        return false
+    }
+    if (onDown()) BlueHiveApplication.playHoverSound()
+    return true
+}
+
 @Composable
 fun AnimeDubButton(
     fontFamily: FontFamily,
     focusRequester: FocusRequester,
     offsetX: Dp = 27.75.dp,
     offsetY: Dp = 332.5.dp,
+    /** Down; true when it moved focus (into the recommended row). */
+    onDown: (() -> Boolean)? = null,
     onClick: () -> Unit
 ) {
     ModularButton(
@@ -676,7 +729,8 @@ fun AnimeDubButton(
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
                         Key.DirectionLeft -> true   // left edge — block + no sound
-                        Key.DirectionRight, Key.DirectionUp, Key.DirectionDown -> {
+                        Key.DirectionDown -> animeDown(onDown)
+                        Key.DirectionRight, Key.DirectionUp -> {
                             BlueHiveApplication.playHoverSound(); false
                         }
                         else -> false
@@ -711,6 +765,8 @@ fun AnimeSubButton(
     focusRequester: FocusRequester,
     offsetX: Dp = 228.dp,
     offsetY: Dp = 332.5.dp,
+    /** Down; true when it moved focus (into the recommended row). */
+    onDown: (() -> Boolean)? = null,
     onClick: () -> Unit
 ) {
     ModularButton(
@@ -724,7 +780,8 @@ fun AnimeSubButton(
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
                         Key.DirectionRight -> true  // right edge — block + no sound
-                        Key.DirectionLeft, Key.DirectionUp, Key.DirectionDown -> {
+                        Key.DirectionDown -> animeDown(onDown)
+                        Key.DirectionLeft, Key.DirectionUp -> {
                             BlueHiveApplication.playHoverSound(); false
                         }
                         else -> false
