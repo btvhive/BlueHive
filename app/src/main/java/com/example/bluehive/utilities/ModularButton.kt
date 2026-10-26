@@ -181,6 +181,18 @@ val ButtonLabelShadow = Shadow(
     blurRadius = 5f,
 )
 
+/**
+ * Add to Favorites' label instead (the user's call, 2026-10-26): its text is
+ * dark on gold or bronze, where a dark shadow only smudged it, so it gets a
+ * pale-gold highlight just below the letters -- a slight emboss. In px: 2
+ * down, 2 of blur.
+ */
+val FavoriteLabelHighlight = Shadow(
+    color = Color(0x8CFFE6A3),
+    offset = androidx.compose.ui.geometry.Offset(0f, 2f),
+    blurRadius = 2f,
+)
+
 val StreamSourceButtonColors = ModularButtonColors(
     // 70% OF THE OLD SATURATION AT REST, THE OLD COLOURS ON FOCUS (the user's
     // picks, 2026-10-26): the pure 100% blue glared on four buttons at once, so

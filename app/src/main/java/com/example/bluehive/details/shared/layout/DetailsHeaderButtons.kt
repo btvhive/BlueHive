@@ -87,8 +87,10 @@ fun BoxScope.DetailsHeaderButtons(
      * magnifying glass on Extras' forest green. Null shows none.
      */
     onSearch: (() -> Unit)? = null,
-    /** A shadow behind the Favorites and trailer labels; null draws none. See ButtonLabelShadow. */
+    /** A shadow behind the trailer label; null draws none. See ButtonLabelShadow. */
     labelShadow: Shadow? = null,
+    /** The same for the Favorites label, which takes a highlight. See FavoriteLabelHighlight. */
+    favoriteLabelShadow: Shadow? = null,
 ) {
     // Peek layout: Rewind at the metadata's left edge, then the trailer
     // button and Forward, PEEK_TRAILER_GAP apart.
@@ -106,7 +108,7 @@ fun BoxScope.DetailsHeaderButtons(
         enableFocus = enableFocus,
         isFavorited = favorite.isFavorited,
         goldAndBronze = !showExtras,
-        labelShadow = labelShadow,
+        labelShadow = favoriteLabelShadow,
         onToggle = { favorite.toggle() }
     )
 
