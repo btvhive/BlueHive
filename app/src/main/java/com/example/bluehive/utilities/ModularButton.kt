@@ -170,14 +170,15 @@ val AnimeSubButtonColors = ModularButtonColors(
  * copies is how two of them drift.
  */
 /**
- * The shadow behind the "Watch on ..." labels (the user's call, 2026-10-26):
- * soft and dark, a little below the text, so the light label lifts off the
- * blue face. In px: 2 down, 4 of blur (1 dp and 2 dp on the onn box).
+ * The shadow behind the movie page's button labels -- "Watch on ...", Play
+ * Trailer and Add to Favorites (the user's calls, 2026-10-26): dark, a little
+ * below the text, so the label lifts off the face. In px: 3 down, 5 of blur
+ * (1.5 dp and 2.5 dp on the onn box); v440 had 60% black, 2 down, 4 of blur.
  */
-val StreamSourceLabelShadow = Shadow(
-    color = Color(0x99000000),
-    offset = androidx.compose.ui.geometry.Offset(0f, 2f),
-    blurRadius = 4f,
+val ButtonLabelShadow = Shadow(
+    color = Color(0xCC000000),
+    offset = androidx.compose.ui.geometry.Offset(0f, 3f),
+    blurRadius = 5f,
 )
 
 val StreamSourceButtonColors = ModularButtonColors(

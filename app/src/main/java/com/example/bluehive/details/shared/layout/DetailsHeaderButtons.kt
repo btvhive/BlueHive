@@ -13,6 +13,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -86,6 +87,8 @@ fun BoxScope.DetailsHeaderButtons(
      * magnifying glass on Extras' forest green. Null shows none.
      */
     onSearch: (() -> Unit)? = null,
+    /** A shadow behind the Favorites and trailer labels; null draws none. See ButtonLabelShadow. */
+    labelShadow: Shadow? = null,
 ) {
     // Peek layout: Rewind at the metadata's left edge, then the trailer
     // button and Forward, PEEK_TRAILER_GAP apart.
@@ -103,6 +106,7 @@ fun BoxScope.DetailsHeaderButtons(
         enableFocus = enableFocus,
         isFavorited = favorite.isFavorited,
         goldAndBronze = !showExtras,
+        labelShadow = labelShadow,
         onToggle = { favorite.toggle() }
     )
 
@@ -135,6 +139,7 @@ fun BoxScope.DetailsHeaderButtons(
         offsetX = trailerX,
         width = trailerWidth,
         glowWidth = trailerGlowWidth,
+        labelShadow = labelShadow,
         enableFocus = enableFocus,
         onClick = { trailer.onButtonPressed() }
     )
@@ -192,15 +197,20 @@ private fun DetailsFavoriteButton(
      * "toggled" look. False: the steel-blue toggle the TV screen keeps.
      */
     goldAndBronze: Boolean = false,
+    labelShadow: Shadow? = null,
     onToggle: () -> Unit = {}
 ) {
     ModularButton(
         textConfig = if (goldAndBronze) {
-            ModularButtonTextConfig(text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites")
+            ModularButtonTextConfig(
+                text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites",
+                shadow = labelShadow,
+            )
         } else {
             ModularButtonTextConfig(
                 text = "+ Add to Favorites",
-                toggledText = "- Remove from Favorites"
+                toggledText = "- Remove from Favorites",
+                shadow = labelShadow,
             )
         },
         isToggleable = !goldAndBronze,
@@ -419,13 +429,15 @@ private fun DetailsTrailerButton(
     width: Dp = 100.dp,
     /** Centred on the button. */
     glowWidth: Dp = width + 16.5.dp,
+    labelShadow: Shadow? = null,
     enableFocus: Boolean = true,
     onClick: () -> Unit = {}
 ) {
     ModularButton(
         textConfig = ModularButtonTextConfig(
             text = if (isPlaying) "Pause Trailer" else "Play Trailer",
-            toggledText = if (isPlaying) "Play Trailer" else "Pause Trailer"
+            toggledText = if (isPlaying) "Play Trailer" else "Pause Trailer",
+            shadow = labelShadow,
         ),
         isToggleable = false,
         fontFamily = fontFamily,

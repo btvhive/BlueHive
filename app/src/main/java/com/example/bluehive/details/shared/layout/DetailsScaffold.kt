@@ -24,6 +24,7 @@ import com.example.bluehive.details.shared.state.FavoriteState
 import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.utilities.AppTypography
+import com.example.bluehive.utilities.ButtonLabelShadow
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 
@@ -195,6 +196,8 @@ private fun BoxScope.DetailsPage(
             trailer = trailer,
             showExtras = peek == null,
             onSearch = header.onSearch,
+            // The movie page's labels carry a shadow, like its Watch buttons.
+            labelShadow = if (peek != null) ButtonLabelShadow else null,
         )
 
         if (peek != null) {
