@@ -72,12 +72,20 @@ fun BoxScope.DetailsHeaderButtons(
     extras: ExtrasState,
     trailer: TrailerState,
     /**
-     * False in the movie screen's peek layout: no Extras button. The trailer
-     * button and the seek pair stay where they were (the user's call,
-     * 2026-10-26), leaving Extras' place empty.
+     * False in the movie screen's peek layout: no Extras button, and the
+     * trailer controls become Rewind | Play Trailer | Forward, with Rewind's
+     * left edge on the metadata's (258.25 dp) and the trailer button 20%
+     * narrower (the user's call, 2026-10-26).
      */
     showExtras: Boolean = true,
 ) {
+    // Peek layout: Rewind at the metadata's left edge, then the trailer
+    // button and Forward, PEEK_TRAILER_GAP apart.
+    val rewindX = if (showExtras) 367.25.dp else 258.25.dp
+    val trailerX = if (showExtras) 256.25.dp else rewindX + SEEK_BUTTON_WIDTH + PEEK_TRAILER_GAP
+    val trailerWidth = if (showExtras) 100.dp else 80.dp
+    val forwardX = if (showExtras) 400.25.dp else trailerX + trailerWidth + PEEK_TRAILER_GAP
+
     // Favorite Button - Uses internal offset for positioning
     DetailsFavoriteButton(
         fontFamily = fontFamily,
@@ -107,6 +115,8 @@ fun BoxScope.DetailsHeaderButtons(
         pressTiming = pressTiming,
         isPlaying = trailer.isPlaying,
         trailerAvailable = trailer.isAvailable,
+        offsetX = trailerX,
+        width = trailerWidth,
         enableFocus = enableFocus,
         onClick = { trailer.onButtonPressed() }
     )
@@ -127,6 +137,7 @@ fun BoxScope.DetailsHeaderButtons(
         fontFamily = fontFamily,
         focusRequester = remember { FocusRequester() },
         pressTiming = pressTiming,
+        offsetX = rewindX,
         enableFocus = enableFocus,
         onClick = { trailer.rewind() }
     )
@@ -135,11 +146,18 @@ fun BoxScope.DetailsHeaderButtons(
         fontFamily = fontFamily,
         focusRequester = remember { FocusRequester() },
         pressTiming = pressTiming,
+        offsetX = forwardX,
         enableFocus = enableFocus,
         onClick = { trailer.fastForward() }
     )
 }
 
+
+/** The rewind and fast-forward buttons' width. */
+private val SEEK_BUTTON_WIDTH = 26.5.dp
+
+/** The space between the three trailer controls in the peek layout. */
+private val PEEK_TRAILER_GAP = 8.dp
 
 @Composable
 private fun DetailsFavoriteButton(
@@ -297,6 +315,8 @@ private fun DetailsTrailerButton(
     trailerAvailable: Boolean = true,
     offsetX: Dp =  256.25.dp,
     offsetY: Dp = 139.dp,
+    /** The glow stays 16.5 dp wider than the button, centred. */
+    width: Dp = 100.dp,
     enableFocus: Boolean = true,
     onClick: () -> Unit = {}
 ) {
@@ -323,14 +343,14 @@ private fun DetailsTrailerButton(
                 false
             },
         dimensions = ModularButtonDimensions(
-            mainWidth = 100.dp,
+            mainWidth = width,
             mainHeight = 24.dp,
             mainYOffset = 0.5.dp,
-            secondWidth = 100.dp,
+            secondWidth = width,
             secondHeight = 22.dp,
             secondYOffset = 7.dp,
             shadowHeight = 6.dp,
-            glowWidth = 116.5.dp,
+            glowWidth = width + 16.5.dp,
             glowHeight = 44.dp,
             mainCornerRadius = 7f,
             secondCornerRadius = 6f,
@@ -341,7 +361,7 @@ private fun DetailsTrailerButton(
             enabled = true,
             defaultRes = R.drawable.button_focus_wide_glow,
             toggledRes = R.drawable.button_focus_wide_nonglow,
-            offsetX = (100.dp - 116.5.dp) / 2,
+            offsetX = (-16.5).dp / 2,
             offsetY = (-4).dp
         ),
         animationConfig = ModularButtonAnimationConfig(
