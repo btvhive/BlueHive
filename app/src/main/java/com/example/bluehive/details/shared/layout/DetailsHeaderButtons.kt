@@ -72,9 +72,9 @@ fun BoxScope.DetailsHeaderButtons(
     extras: ExtrasState,
     trailer: TrailerState,
     /**
-     * False in the movie screen's peek layout: no Extras button, and the
-     * trailer button and the seek pair move left into its place, keeping the
-     * gaps between them.
+     * False in the movie screen's peek layout: no Extras button. The trailer
+     * button and the seek pair stay where they were (the user's call,
+     * 2026-10-26), leaving Extras' place empty.
      */
     showExtras: Boolean = true,
 ) {
@@ -107,7 +107,6 @@ fun BoxScope.DetailsHeaderButtons(
         pressTiming = pressTiming,
         isPlaying = trailer.isPlaying,
         trailerAvailable = trailer.isAvailable,
-        offsetX = if (showExtras) 256.25.dp else 184.dp,
         enableFocus = enableFocus,
         onClick = { trailer.onButtonPressed() }
     )
@@ -128,7 +127,6 @@ fun BoxScope.DetailsHeaderButtons(
         fontFamily = fontFamily,
         focusRequester = remember { FocusRequester() },
         pressTiming = pressTiming,
-        offsetX = if (showExtras) 367.25.dp else 295.dp,
         enableFocus = enableFocus,
         onClick = { trailer.rewind() }
     )
@@ -137,7 +135,6 @@ fun BoxScope.DetailsHeaderButtons(
         fontFamily = fontFamily,
         focusRequester = remember { FocusRequester() },
         pressTiming = pressTiming,
-        offsetX = if (showExtras) 400.25.dp else 328.dp,
         enableFocus = enableFocus,
         onClick = { trailer.fastForward() }
     )
