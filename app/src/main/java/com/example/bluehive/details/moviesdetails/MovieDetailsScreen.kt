@@ -46,6 +46,7 @@ import com.example.bluehive.details.shared.playback.rememberSourcePlayback
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPeekState
+import com.example.bluehive.details.shared.layout.PEEK_RIGHT_COLUMN_X
 import com.example.bluehive.details.shared.layout.PEEK_SOURCE_ROW_STEP
 import com.example.bluehive.details.shared.layout.peekExtraSourceRows
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
@@ -505,7 +506,7 @@ fun MovieDetailsScreen(
                 AnimeSubButton(
                     fontFamily = passionFont,
                     focusRequester = animeSubFocusRequester,
-                    offsetX = 228.dp, offsetY = peek.playTop,
+                    offsetX = PEEK_RIGHT_COLUMN_X, offsetY = peek.playTop,
                     onDown = {
                         peek.rowEntry.focus().also { if (it) rowEnteredFrom = animeSubFocusRequester }
                     },
@@ -533,7 +534,7 @@ fun MovieDetailsScreen(
                 // rows keep the legacy spacing, starting just under the overview's
                 // last line (peek layout); a 5th+ source continues the grid downward and
                 // pushes the recommended row down with it (DetailsPeekState).
-                val colX = listOf(27.75.dp, 228.dp)          // [left column, right column]
+                val colX = listOf(27.75.dp, PEEK_RIGHT_COLUMN_X)  // [left column, right column]
                 sources.forEachIndexed { i, source ->
                     val col = i % 2
                     val row = i / 2

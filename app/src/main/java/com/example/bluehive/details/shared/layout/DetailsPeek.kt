@@ -52,6 +52,12 @@ val PEEK_PLAY_GAP: Dp = 12.dp
 /** The Recommended Media heading's offset in the peek layout, clear of the row's frame. */
 val PEEK_TITLE_OFFSET_Y: Dp = (-50).dp
 
+/**
+ * The right column of play buttons (162 dp wide): its right edge on Play
+ * Trailer's, 292.75 + 90 = 382.75 dp (the user's call, 2026-10-26; it was 228).
+ */
+val PEEK_RIGHT_COLUMN_X: Dp = 220.75.dp
+
 /** One row of play buttons, as the grid has always spaced them. */
 val PEEK_SOURCE_ROW_STEP: Dp = 55.5.dp
 
