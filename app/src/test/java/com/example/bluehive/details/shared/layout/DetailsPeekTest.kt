@@ -18,6 +18,14 @@ class DetailsPeekTest {
     }
 
     @Test
+    fun `the play buttons sit just under the overview's last line, never below its full box`() {
+        assertEquals(PEEK_PLAY_TOP, peekPlayTop(null))
+        assertEquals(237.dp + PEEK_PLAY_GAP, peekPlayTop(237.dp))
+        assertEquals(PEEK_PLAY_TOP, peekPlayTop(PEEK_PLAY_TOP - PEEK_PLAY_GAP))
+        assertEquals(PEEK_PLAY_TOP, peekPlayTop(300.dp))
+    }
+
+    @Test
     fun `an extra row moves the row and the slide down by one button row`() {
         val peek = DetailsPeekState(startFocused = false)
         assertEquals(PEEK_ROW_TOP, peek.rowTop)

@@ -79,6 +79,8 @@ fun RecommendedMediaSection(
     modifier: Modifier = Modifier,
     topOffset: Dp = 340.25.dp,
     titleFontSize: TextUnit = 24.sp,
+    /** The heading's offset above the cards; null keeps it where a 24 sp heading sat. */
+    titleOffsetY: Dp? = null,
     dimTitleUntilFocused: Boolean = false,
     autoFocusFirst: Boolean = true,
     entry: RecommendedRowEntry? = null,
@@ -137,7 +139,10 @@ fun RecommendedMediaSection(
             fontFamily = AppTypography.passionRegular,
             // A smaller heading moves down by its lost line height, so it keeps
             // its gap to the cards.
-            modifier = Modifier.offset(x = (-29).dp, y = (-48).dp + ((24f - titleFontSize.value) * 1.2f).dp)
+            modifier = Modifier.offset(
+                x = (-29).dp,
+                y = titleOffsetY ?: ((-48).dp + ((24f - titleFontSize.value) * 1.2f).dp)
+            )
         )
 
         Box {

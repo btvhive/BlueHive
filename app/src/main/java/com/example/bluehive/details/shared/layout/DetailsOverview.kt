@@ -15,9 +15,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -33,6 +35,12 @@ fun BoxScope.DetailsOverview(
     genres: String?,
     overview: String?,
     dongleRegular: FontFamily,
+    /**
+     * Where the overview's last shown line ends, in the screen's dp, each time
+     * it is laid out. The movie screen's peek layout puts its play buttons
+     * there.
+     */
+    onTextBottom: ((Dp) -> Unit)? = null,
 ) {
     // ========================================================================================================================================= > // Genres
     if (!genres.isNullOrBlank() && genres != "N/A") {
@@ -61,6 +69,7 @@ fun BoxScope.DetailsOverview(
 
         // Measure text to determine if we need smaller font
         val textMeasurer = rememberTextMeasurer()
+        val density = LocalDensity.current
 
         LaunchedEffect(overview) {
             val textLayoutResult = textMeasurer.measure(
@@ -97,7 +106,13 @@ fun BoxScope.DetailsOverview(
                 //.background(Color.Red.copy(alpha = 0.5f))  // Debug background
                 .height(108.25.dp)
                 .width(400.dp),
-            overflow = TextOverflow.Ellipsis
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { layout ->
+                if (onTextBottom != null && layout.lineCount > 0) {
+                    val bottomPx = minOf(layout.getLineBottom(layout.lineCount - 1), layout.size.height.toFloat())
+                    onTextBottom(175.dp + with(density) { bottomPx.toDp() })
+                }
+            },
         )
     }
     // ========================================================================================================================================= >

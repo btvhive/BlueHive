@@ -170,7 +170,12 @@ private fun BoxScope.DetailsPage(
         // Logo or title, the screen's labels, then genres and the overview.
         DetailsLogoOrTitle(logoUrl = info.logoUrl, mediaTitle = info.mediaTitle)
         labels()
-        DetailsOverview(genres = info.genres, overview = info.overview, dongleRegular = dongleRegular)
+        DetailsOverview(
+            genres = info.genres,
+            overview = info.overview,
+            dongleRegular = dongleRegular,
+            onTextBottom = peek?.let { p -> { bottom -> p.overviewBottom = bottom } },
+        )
 
         // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:
         // see DetailsHeaderButtons. Each press runs a state holder's method.

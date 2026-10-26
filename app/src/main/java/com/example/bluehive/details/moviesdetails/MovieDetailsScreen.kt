@@ -38,7 +38,6 @@ import com.example.bluehive.details.shared.playback.rememberSourcePlayback
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPeekState
-import com.example.bluehive.details.shared.layout.PEEK_PLAY_TOP
 import com.example.bluehive.details.shared.layout.PEEK_SOURCE_ROW_STEP
 import com.example.bluehive.details.shared.layout.peekExtraSourceRows
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
@@ -460,7 +459,7 @@ fun MovieDetailsScreen(
                 AnimeDubButton(
                     fontFamily = passionFont,
                     focusRequester = animeDubFocusRequester,
-                    offsetX = 27.75.dp, offsetY = PEEK_PLAY_TOP,
+                    offsetX = 27.75.dp, offsetY = peek.playTop,
                     onDown = {
                         peek.rowEntry.focus().also { if (it) rowEnteredFrom = animeDubFocusRequester }
                     },
@@ -489,7 +488,7 @@ fun MovieDetailsScreen(
                 AnimeSubButton(
                     fontFamily = passionFont,
                     focusRequester = animeSubFocusRequester,
-                    offsetX = 228.dp, offsetY = PEEK_PLAY_TOP,
+                    offsetX = 228.dp, offsetY = peek.playTop,
                     onDown = {
                         peek.rowEntry.focus().also { if (it) rowEnteredFrom = animeSubFocusRequester }
                     },
@@ -514,8 +513,8 @@ fun MovieDetailsScreen(
                 // Adding/removing an entry in getStreamingSources() now "just
                 // works" — no per-index block to keep in sync (that mismatch is
                 // what silently dropped the 6th button). Column X and the first
-                // rows keep the legacy spacing, starting just under the overview
-                // (peek layout); a 5th+ source continues the grid downward and
+                // rows keep the legacy spacing, starting just under the overview's
+                // last line (peek layout); a 5th+ source continues the grid downward and
                 // pushes the recommended row down with it (DetailsPeekState).
                 val colX = listOf(27.75.dp, 228.dp)          // [left column, right column]
                 sources.forEachIndexed { i, source ->
@@ -529,7 +528,7 @@ fun MovieDetailsScreen(
                         fontFamily = passionFont,
                         focusRequester = streamerFocus[i],
                         offsetX = if (aloneInRow) (colX[0] + colX[1]) / 2f else colX[col],
-                        offsetY = PEEK_PLAY_TOP + PEEK_SOURCE_ROW_STEP * row,
+                        offsetY = peek.playTop + PEEK_SOURCE_ROW_STEP * row,
                         disableLeftSound  = aloneInRow || col == 0, // left column / lone centered → mute left edge
                         disableRightSound = aloneInRow || col == 1, // right column / lone centered → mute right edge
                         disableDownSound  = i + 2 >= sources.size,  // no button directly below → mute down

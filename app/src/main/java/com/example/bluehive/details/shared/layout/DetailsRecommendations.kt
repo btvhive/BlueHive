@@ -53,6 +53,7 @@ fun DetailsPeekRecommendations(
             onNavigateUp = onNavigateUp,
             topOffset = peek.rowTop,
             titleFontSize = 18.sp,
+            titleOffsetY = PEEK_TITLE_OFFSET_Y,
             dimTitleUntilFocused = true,
             autoFocusFirst = peek.startFocused,
             entry = peek.rowEntry,
