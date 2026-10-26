@@ -168,22 +168,22 @@ val AnimeSubButtonColors = ModularButtonColors(
  * copies is how two of them drift.
  */
 val StreamSourceButtonColors = ModularButtonColors(
-    // 60% OF THE OLD SATURATION AT REST, THE OLD COLOURS ON FOCUS (the user's
+    // 70% OF THE OLD SATURATION AT REST, THE OLD COLOURS ON FOCUS (the user's
     // picks, 2026-10-26): the pure 100% blue glared on four buttons at once, so
     // they rest muted and only the one under the cursor wears it.
-    // Idle face: muted blue.                     HSL 241°, 60%, 50%
-    mainDefault   = Color(0xFF3633CC),
+    // Idle face: muted blue.                     HSL 241°, 70%, 50%
+    mainDefault   = Color(0xFF2926D9),
     // Focused face: the original pure blue.      HSL 241°, 100%, 50%
     mainFocused   = Color(0xFF0004FF),
-    mainToggled   = Color(0xFF0F0D27),
-    // Idle strip: muted violet.                  HSL 262°, 41%, 35%
-    secondDefault = Color(0xFF4F347E),
+    mainToggled   = Color(0xFF0D0B29),
+    // Idle strip: muted violet.                  HSL 262°, 48%, 35%
+    secondDefault = Color(0xFF4E2E84),
     // Focused strip: the original deep violet.   HSL 262°, 69%, 35%
     secondFocused = Color(0xFF471C98),
     // Deep violet rather than the shared default: this palette is the one
     // place a purple strip was ever in-family, but it should be ITS violet.
-    secondToggled = Color(0xFF302050),
-    textUnfocusedToggled = Color(0xFF3F3D5E),
+    secondToggled = Color(0xFF2F1C54),
+    textUnfocusedToggled = Color(0xFF3C3A61),
     shadowColor   = Color(0x60000000),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFD6D6D6),
@@ -272,8 +272,8 @@ val ExtrasButtonColors = ModularButtonColors(
 /**
  * Add to Favorites — steel blue.
  *
- * A DIFFERENT BLUE FROM THE WATCH BUTTONS, on purpose. Those are hue 241 at 60-100%
- * saturation (0xFF3633CC / 0xFF0004FF) -- the loudest colour in the app, because starting
+ * A DIFFERENT BLUE FROM THE WATCH BUTTONS, on purpose. Those are hue 241 at 70-100%
+ * saturation (0xFF2926D9 / 0xFF0004FF) -- the loudest colour in the app, because starting
  * playback is the loudest action. This is hue 210 at 55%: recognisably the same
  * family, clearly not the same job. Putting the vivid blue here would make
  * "favourite this" look like "play this".
