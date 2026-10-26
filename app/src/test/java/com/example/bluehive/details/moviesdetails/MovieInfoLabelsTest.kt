@@ -43,6 +43,21 @@ class MovieInfoLabelsTest {
     }
 
     @Test
+    fun `the count the screen places the genres with always matches the lines`() {
+        val cases = listOf(
+            listOf<Any?>(1_000L, 2_000L, "1985-12-21", "Japanese"),
+            listOf<Any?>(0L, 0L, "1985-12-21", "Japanese"),
+            listOf<Any?>(5L, 0L, "N/A", ""),
+            listOf<Any?>(0L, 9L, null, "English"),
+            listOf<Any?>(0L, 0L, null, null),
+        )
+        for (c in cases) {
+            val rev = c[0] as Long; val bud = c[1] as Long; val date = c[2] as String?; val lang = c[3] as String?
+            assertEquals(movieInfoRows(rev, bud, date, lang).size, movieInfoRowCount(rev, bud, date, lang))
+        }
+    }
+
+    @Test
     fun `money keeps its grouping and the release date its 16 sp`() {
         val rows = movieInfoRows(75_634_409, 0, "1993-10-09", null)
         assertEquals("Revenue:          $75,634,409.00", rows[0].text)

@@ -419,11 +419,9 @@ fun MovieDetailsScreen(
 
 
 
-    // The metadata lines this title has, stacked with no gaps; the genres line
-    // follows the last one -- see MovieInfoLabels.
-    val infoRows = remember(displayRevenue, displayBudget, args.releaseDate, args.originalLanguage) {
-        movieInfoRows(displayRevenue, displayBudget, args.releaseDate, args.originalLanguage)
-    }
+    // How many metadata lines this title has: the genres line follows the
+    // last one. The lines themselves are built in MovieInfoLabels.
+    val infoRowCount = movieInfoRowCount(displayRevenue, displayBudget, args.releaseDate, args.originalLanguage)
 
     // Main container with background: the frame both screens share, with this
     // screen's labels, play area and overlays plugged in -- see DetailsScaffold.
@@ -437,7 +435,7 @@ fun MovieDetailsScreen(
             voteAverage         = args.voteAverage,
             genres              = args.genres,
             overview            = args.overview,
-            genresTop           = movieGenresTop(infoRows.size),
+            genresTop           = movieGenresTop(infoRowCount),
         ),
         trailer = trailer,
         favorite = favorite,
@@ -471,106 +469,59 @@ fun MovieDetailsScreen(
         },
         labels = {
             MovieInfoLabels(
-                rows          = infoRows,
-                dongleRegular = dongleRegular,
+                displayRevenue   = displayRevenue,
+                displayBudget    = displayBudget,
+                releaseDate      = args.releaseDate,
+                originalLanguage = args.originalLanguage,
+                dongleRegular    = dongleRegular,
             )
         },
         playArea = {
-            if (isAnime) {
-                // ── Anime: DuB / SuB ────────────────────────────────────
-                AnimeDubButton(
-                    fontFamily = passionFont,
-                    focusRequester = animeDubFocusRequester,
-                    offsetX = 27.75.dp, offsetY = peek.playTop,
-                    onDown = {
-                        peek.rowEntry.focus().also { if (it) rowEnteredFrom = animeDubFocusRequester }
-                    },
-                    onClick = {
-                        // No stopTrailer() here: this only OPENS the DuB/SuB prompt.
-                        // The trailer plays on until the prompt is answered, which
-                        // is where a launch actually happens.
-                        if (sources.size > 2) {
-                            Log.d("scraper", "DuB pressed → prompt: ${sources[2].url}")
-                            lastStreamFocusRequester = animeDubFocusRequester
-                            anime.pendingUrl = sources[2].url
-                            anime.pendingDub = true
-                            anime.showDefaultPrompt = true
-                        } else if (sources.isEmpty()) {
-                            // Still resolving — honour the press when it lands.
-                            queuedAnimePress = true
-                        } else {
-                            // Resolved, and still no Miruro/M Extract source: this
-                            // title genuinely has no AniList mapping yet. Say so
-                            // instead of silently doing nothing.
-                            Log.w("scraper", "DuB pressed but no Miruro source (tmdb=${args.mediaId}) — unmapped")
-                            showNotYetAvailable = true
-                        }
+            // The Watch buttons -- see MovieSourceGrid.
+            MovieSourceGrid(
+                isAnime                = isAnime,
+                sources                = sources,
+                fontFamily             = passionFont,
+                playTop                = peek.playTop,
+                animeDubFocusRequester = animeDubFocusRequester,
+                animeSubFocusRequester = animeSubFocusRequester,
+                streamerFocus          = streamerFocus,
+                onDownIntoRow          = { from ->
+                    peek.rowEntry.focus().also { if (it) rowEnteredFrom = from }
+                },
+                onAnimePress           = { dub ->
+                    // No stopTrailer() here: this only OPENS the DuB/SuB prompt.
+                    // The trailer plays on until the prompt is answered, which
+                    // is where a launch actually happens.
+                    val name = if (dub) "DuB" else "SuB"
+                    if (sources.size > 2) {
+                        Log.d("scraper", "$name pressed → prompt: ${sources[2].url}")
+                        lastStreamFocusRequester = if (dub) animeDubFocusRequester else animeSubFocusRequester
+                        anime.pendingUrl = sources[2].url
+                        anime.pendingDub = dub
+                        anime.showDefaultPrompt = true
+                    } else if (sources.isEmpty()) {
+                        // Still resolving — honour the press when it lands.
+                        queuedAnimePress = dub
+                    } else {
+                        // Resolved, and still no Miruro/M Extract source: this
+                        // title genuinely has no AniList mapping yet. Say so
+                        // instead of silently doing nothing.
+                        Log.w("scraper", "$name pressed but no Miruro source (tmdb=${args.mediaId}) — unmapped")
+                        showNotYetAvailable = true
                     }
-                )
-                AnimeSubButton(
-                    fontFamily = passionFont,
-                    focusRequester = animeSubFocusRequester,
-                    offsetX = PEEK_RIGHT_COLUMN_X, offsetY = peek.playTop,
-                    onDown = {
-                        peek.rowEntry.focus().also { if (it) rowEnteredFrom = animeSubFocusRequester }
-                    },
-                    onClick = {
-                        // No stopTrailer() here — see the DuB button above.
-                        if (sources.size > 2) {
-                            Log.d("scraper", "SuB pressed → prompt: ${sources[2].url}")
-                            lastStreamFocusRequester = animeSubFocusRequester
-                            anime.pendingUrl = sources[2].url
-                            anime.pendingDub = false
-                            anime.showDefaultPrompt = true
-                        } else if (sources.isEmpty()) {
-                            queuedAnimePress = false
-                        } else {
-                            Log.w("scraper", "SuB pressed but no Miruro source (tmdb=${args.mediaId}) — unmapped")
-                            showNotYetAvailable = true
-                        }
-                    }
-                )
-            } else {
-                // ── Non-anime: 2-column grid laid out FROM the sources list ──
-                // Adding/removing an entry in getStreamingSources() now "just
-                // works" — no per-index block to keep in sync (that mismatch is
-                // what silently dropped the 6th button). Column X and the first
-                // rows keep the legacy spacing, starting just under the overview's
-                // last line (peek layout); a 5th+ source continues the grid downward and
-                // pushes the recommended row down with it (DetailsPeekState).
-                val colX = listOf(27.75.dp, PEEK_RIGHT_COLUMN_X)  // [left column, right column]
-                sources.forEachIndexed { i, source ->
-                    val col = i % 2
-                    val row = i / 2
-                    // A trailing odd button (alone on its row) is centered between the two
-                    // columns instead of hugging the left column.
-                    val aloneInRow = i % 2 == 0 && i == sources.lastIndex
-                    MoviesStreamerButton(
-                        source = source,
-                        fontFamily = passionFont,
-                        focusRequester = streamerFocus[i],
-                        offsetX = if (aloneInRow) (colX[0] + colX[1]) / 2f else colX[col],
-                        offsetY = peek.playTop + PEEK_SOURCE_ROW_STEP * row,
-                        disableLeftSound  = aloneInRow || col == 0, // left column / lone centered → mute left edge
-                        disableRightSound = aloneInRow || col == 1, // right column / lone centered → mute right edge
-                        disableDownSound  = i + 2 >= sources.size,  // no button directly below → mute down
-                        // Bottom row: Down enters the recommended row.
-                        onDownFromBottom  = {
-                            peek.rowEntry.focus().also { if (it) rowEnteredFrom = streamerFocus[i] }
-                        },
-                        onClick = {
-                            // Remember which button launched this so focus comes back
-                            // here when the player exits (THE RULE).
-                            lastStreamFocusRequester = streamerFocus[i]
-                            // Every source: server-side m3u8 extraction, then our own
-                            // player (the overlay shows progress). The server reports
-                            // every source as extractable; one it could not extract
-                            // fails into the same chain as a dead one.
-                            sourcePlayback.start(source)
-                        }
-                    )
-                }
-            }
+                },
+                onSourcePress          = { from, source ->
+                    // Remember which button launched this so focus comes back
+                    // here when the player exits (THE RULE).
+                    lastStreamFocusRequester = from
+                    // Every source: server-side m3u8 extraction, then our own
+                    // player (the overlay shows progress). The server reports
+                    // every source as extractable; one it could not extract
+                    // fails into the same chain as a dead one.
+                    sourcePlayback.start(source)
+                },
+            )
         },
         overlays = {
             // Instant extraction overlay — last in Box so it renders on top of everything
@@ -648,234 +599,6 @@ private fun BoxScope.MovieSearchKeyboard(
         HoneycombKeyboardPopup(onSearch = onSearch, onDismiss = onDismiss)
     }
 }
-
-@Composable
-fun MoviesStreamerButton(
-    source: StreamSource,
-    fontFamily: FontFamily,
-    focusRequester: FocusRequester,
-    offsetX: Dp,
-    offsetY: Dp,
-    disableLeftSound: Boolean = false,
-    disableRightSound: Boolean = false,
-    disableUpSound: Boolean = false,
-    disableDownSound: Boolean = false,
-    /** Down on a bottom-row button; true when it moved focus (into the recommended row). */
-    onDownFromBottom: (() -> Boolean)? = null,
-    onClick: () -> Unit
-) {
-    ModularButton(
-        textConfig = ModularButtonTextConfig(
-            text = if (source.name == "M Extract") "M Extract" else "Watch on ${source.name}",
-            fontSize = 14f,
-            // A shadow under the label -- see ButtonLabelShadow.
-            shadow = ButtonLabelShadow,
-        ),
-        isToggleable = false,
-        fontFamily = fontFamily,
-        focusRequester = focusRequester,
-        modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown) {
-                    when (event.key) {
-                        Key.DirectionLeft -> {
-                            if (disableLeftSound) {
-                                // edge: no sound, no navigation
-                                true
-                            } else {
-                                BlueHiveApplication.playHoverSound()
-                                false   // let focus move normally
-                            }
-                        }
-                        Key.DirectionRight -> {
-                            if (disableRightSound) {
-                                // Right edge: a plain dead end, no sound, no move.
-                                true
-                            } else {
-                                BlueHiveApplication.playHoverSound()
-                                false
-                            }
-                        }
-                        Key.DirectionUp -> {
-                            if (disableUpSound) {
-                                true
-                            } else {
-                                BlueHiveApplication.playHoverSound()
-                                false
-                            }
-                        }
-                        Key.DirectionDown -> {
-                            if (disableDownSound) {
-                                // Bottom row: into the recommended row, with a
-                                // sound only when it moved; without a row,
-                                // nothing below and no sound.
-                                if (onDownFromBottom?.invoke() == true) BlueHiveApplication.playHoverSound()
-                                onDownFromBottom != null
-                            } else {
-                                BlueHiveApplication.playHoverSound()
-                                false
-                            }
-                        }
-                        else -> false
-                    }
-                } else {
-                    false
-                }
-            },
-        dimensions = ModularButtonDimensions(
-            mainWidth = 162.dp,
-            mainHeight = 33.dp,
-            mainYOffset = 0.7.dp,
-            secondWidth = 162.dp,
-            secondHeight = 22.dp,
-            secondYOffset = 18.dp,
-            shadowHeight = (12).dp,
-            glowWidth = 185.8.dp,
-            glowHeight = 55.8.dp,
-            mainCornerRadius = 7f,
-            secondCornerRadius = 8f,
-        ),
-        // Shared with the TV screen — see StreamSourceButtonColors in
-        // utilities/ModularButton.kt. Change the blues there, not here.
-        colors = StreamSourceButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_wide_glow,
-            toggledRes = R.drawable.button_focus_wide_nonglow,
-            offsetX = (-11.8).dp,
-            offsetY = (-2.5).dp
-        ),
-        // Timing shared with the TV screen — see WatchButtonAnimation in
-        // utilities/ModularButton.kt. Change the press feel there, not here.
-        animationConfig = WatchButtonAnimation,
-        // No playClickSound() here: ModularButton already plays it, immediately,
-        // and this second call fired a duplicate. Harmless while the two landed
-        // on the same frame — audible as a real double-click once onClick became
-        // deferred by clickDelayMillis.
-        onClick = onClick
-    )
-}
-
-
-/**
- * Down on Watch in English / Japanese. Without [onDown], as before: a sound,
- * and the focus system moves on. With it (the peek layout), Down enters the
- * recommended row, sounding only when it moved.
- */
-private fun animeDown(onDown: (() -> Boolean)?): Boolean {
-    if (onDown == null) {
-        BlueHiveApplication.playHoverSound()
-        return false
-    }
-    if (onDown()) BlueHiveApplication.playHoverSound()
-    return true
-}
-
-@Composable
-fun AnimeDubButton(
-    fontFamily: FontFamily,
-    focusRequester: FocusRequester,
-    offsetX: Dp = 27.75.dp,
-    offsetY: Dp = 332.5.dp,
-    /** Down; true when it moved focus (into the recommended row). */
-    onDown: (() -> Boolean)? = null,
-    onClick: () -> Unit
-) {
-    ModularButton(
-        // "English" / "Japanese" rather than "DuB" / "SuB". Dub and sub are
-        // fan shorthand; the language is what a viewer is actually choosing.
-        textConfig = ModularButtonTextConfig(text = "Watch in English", fontSize = 14f),
-        isToggleable = false,
-        fontFamily = fontFamily,
-        focusRequester = focusRequester,
-        modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown) {
-                    when (event.key) {
-                        Key.DirectionLeft -> true   // left edge — block + no sound
-                        Key.DirectionDown -> animeDown(onDown)
-                        Key.DirectionRight, Key.DirectionUp -> {
-                            BlueHiveApplication.playHoverSound(); false
-                        }
-                        else -> false
-                    }
-                } else false
-            },
-        dimensions = ModularButtonDimensions(
-            mainWidth = 162.dp, mainHeight = 33.dp, mainYOffset = 0.7.dp,
-            secondWidth = 162.dp, secondHeight = 22.dp, secondYOffset = 18.dp,
-            shadowHeight = 12.dp, glowWidth = 185.8.dp, glowHeight = 55.8.dp,
-            mainCornerRadius = 7f, secondCornerRadius = 8f,
-        ),
-        // Palette and press feel are shared with the TV screen — see
-        // AnimeDubButtonColors / WatchButtonAnimation in utilities/ModularButton.kt.
-        colors = AnimeDubButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_wide_glow,
-            toggledRes = R.drawable.button_focus_wide_nonglow,
-            offsetX = (-11.8).dp, offsetY = (-2.5).dp
-        ),
-        animationConfig = WatchButtonAnimation,
-        // ModularButton already plays the click, immediately. This second call
-        // was a duplicate, inaudible only because both landed on one frame.
-        onClick = onClick
-    )
-}
-
-@Composable
-fun AnimeSubButton(
-    fontFamily: FontFamily,
-    focusRequester: FocusRequester,
-    offsetX: Dp = 228.dp,
-    offsetY: Dp = 332.5.dp,
-    /** Down; true when it moved focus (into the recommended row). */
-    onDown: (() -> Boolean)? = null,
-    onClick: () -> Unit
-) {
-    ModularButton(
-        textConfig = ModularButtonTextConfig(text = "Watch in Japanese", fontSize = 14f),
-        isToggleable = false,
-        fontFamily = fontFamily,
-        focusRequester = focusRequester,
-        modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown) {
-                    when (event.key) {
-                        Key.DirectionRight -> true  // right edge — block + no sound
-                        Key.DirectionDown -> animeDown(onDown)
-                        Key.DirectionLeft, Key.DirectionUp -> {
-                            BlueHiveApplication.playHoverSound(); false
-                        }
-                        else -> false
-                    }
-                } else false
-            },
-        dimensions = ModularButtonDimensions(
-            mainWidth = 162.dp, mainHeight = 33.dp, mainYOffset = 0.7.dp,
-            secondWidth = 162.dp, secondHeight = 22.dp, secondYOffset = 18.dp,
-            shadowHeight = 12.dp, glowWidth = 185.8.dp, glowHeight = 55.8.dp,
-            mainCornerRadius = 7f, secondCornerRadius = 8f,
-        ),
-        // Palette and press feel are shared with the TV screen — see
-        // AnimeSubButtonColors / WatchButtonAnimation in utilities/ModularButton.kt.
-        colors = AnimeSubButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_wide_glow,
-            toggledRes = R.drawable.button_focus_wide_nonglow,
-            offsetX = (-11.8).dp, offsetY = (-2.5).dp
-        ),
-        animationConfig = WatchButtonAnimation,
-        // ModularButton already plays the click, immediately. This second call
-        // was a duplicate, inaudible only because both landed on one frame.
-        onClick = onClick
-    )
-}
-
 
 //0x33000000 = 20% opacity (very light)
 //0x50000000 = 31% opacity (your current - too light)

@@ -8,12 +8,13 @@ The plan is in `docs/details-redesign-architecture.md`, and the sizes after each
 |---|---|
 | MoviesDetailsScreenCompose.kt | the Activity (same class name, new package) |
 | MovieDetailsArgs.kt | typed intent extras |
-| MovieDetailsScreen.kt | root: creates the state, plugs into `shared/layout/DetailsScaffold`; also the 2-column "Watch on …" buttons and Watch in English / Japanese |
-| MovieInfoLabels.kt | revenue, budget, release date, language |
+| MovieDetailsScreen.kt | root: creates the state, plugs into `shared/layout/DetailsScaffold`, and says what each press does |
+| MovieSourceGrid.kt | the play area: the 2-column "Watch on …" grid and Watch in English / Japanese, with their four button composables (split out 2026-10-26) |
+| MovieInfoLabels.kt | revenue, budget, release date, language: only the lines a title has, stacked with no gaps (`movieInfoRows`), built inside the composable so R8 keeps them out of the screen function |
 
 **Peek layout (v417, 2026-10-26):** this screen has no Extras button. The play buttons sit under the overview, and the recommended row peeks up from the bottom; Down from the bottom play buttons enters the row and slides the page (everything but the background) up 110 dp, and Up goes back. It is `shared/layout/DetailsPeek.kt`, passed to `DetailsScaffold` as `peek`; the TV screen passes none and keeps Extras.
 
-The plan also had `MovieSourceGrid.kt` and `MovieAnimeButtons.kt`. They were not split out: the movie screen function is well under the budget without them.
+The plan also had `MovieSourceGrid.kt` and `MovieAnimeButtons.kt`. `MovieSourceGrid.kt` was split out on 2026-10-26 (both live in it). It did not shrink `MovieDetailsScreen`'s measured size: the play area is a composable lambda, which already compiles to a method of its own. Moving the metadata strings into `MovieInfoLabels` did (2,233 -> 2,033 units).
 
 Rules, checked on every build:
 

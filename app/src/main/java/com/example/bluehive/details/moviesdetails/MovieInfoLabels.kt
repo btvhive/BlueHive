@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,7 +33,7 @@ internal fun movieInfoRows(
 ): List<MovieInfoRow> = buildList {
     if (displayRevenue > 0) add(MovieInfoRow("Revenue:          $${"%,d".format(displayRevenue)}.00", 17))
     if (displayBudget > 0) add(MovieInfoRow("Budget:            $${"%,d".format(displayBudget)}.00", 17))
-    if (!releaseDate.isNullOrBlank() && releaseDate != "N/A") {
+    if (releaseDate != null && hasReleaseDate(releaseDate)) {
         val dateParts = releaseDate.split("-")
         val text = if (dateParts.size == 3) {
             "Release Date:      ${dateParts[1]}/${dateParts[2]}/${dateParts[0]}"  // Format as MM/DD/YYYY
@@ -41,10 +42,27 @@ internal fun movieInfoRows(
         }
         add(MovieInfoRow(text, 16))
     }
-    if (!originalLanguage.isNullOrBlank() && originalLanguage != "N/A") {
+    if (hasLanguage(originalLanguage)) {
         add(MovieInfoRow("Language:         $originalLanguage", 17))
     }
 }
+
+private fun hasReleaseDate(releaseDate: String?) = !releaseDate.isNullOrBlank() && releaseDate != "N/A"
+private fun hasLanguage(originalLanguage: String?) = !originalLanguage.isNullOrBlank() && originalLanguage != "N/A"
+
+/**
+ * How many lines [movieInfoRows] makes, without building them. The screen
+ * places the genres line with it; the strings themselves are built inside
+ * MovieInfoLabels, a restartable composable R8 keeps out of the screen
+ * function (v445 built them in the screen and it grew 328 units).
+ */
+internal fun movieInfoRowCount(
+    displayRevenue: Long,
+    displayBudget: Long,
+    releaseDate: String?,
+    originalLanguage: String?,
+): Int = (if (displayRevenue > 0) 1 else 0) + (if (displayBudget > 0) 1 else 0) +
+    (if (hasReleaseDate(releaseDate)) 1 else 0) + (if (hasLanguage(originalLanguage)) 1 else 0)
 
 /** The four slots the lines always sat in when all were present, from the top. */
 private val INFO_ROW_TOPS = listOf(34.dp, 48.dp, 63.dp, 75.dp)
@@ -68,9 +86,15 @@ internal fun movieGenresTop(rowCount: Int): Dp =
  */
 @Composable
 internal fun BoxScope.MovieInfoLabels(
-    rows: List<MovieInfoRow>,
+    displayRevenue: Long,
+    displayBudget: Long,
+    releaseDate: String?,
+    originalLanguage: String?,
     dongleRegular: FontFamily,
 ) {
+    val rows = remember(displayRevenue, displayBudget, releaseDate, originalLanguage) {
+        movieInfoRows(displayRevenue, displayBudget, releaseDate, originalLanguage)
+    }
     rows.forEachIndexed { index, row ->
         Text(
             text = row.text,
