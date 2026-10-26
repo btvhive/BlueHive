@@ -279,6 +279,45 @@ val ExtrasButtonColors = ModularButtonColors(
  * this replaced was the worst — white on a bright gold face is thin, and it got
  * thinner as focus lifted it.
  */
+/**
+ * The movie page's Add to Favorites (peek layout, 2026-10-26): gold while the
+ * title is not a favourite, bronze once it is. Not a toggle -- the colour says
+ * which, and a press only dips.
+ *
+ * DARK TEXT ON THE GOLD. White on gold is what retired the old gold palette
+ * (see FavoriteButtonColors), so this takes the honeycomb keyboard's gold
+ * Search key's answer instead: a near-black brown label, about 6:1 on the idle
+ * face. The bronze is dark enough for white (about 6:1).
+ */
+val FavoriteGoldButtonColors = ModularButtonColors(
+    // Idle face: deep gold.                      HSL 41°, 83%, 41%
+    mainDefault   = Color(0xFFC08A12),
+    // Focused face: same hue, lifted.            HSL 40°, 73%, 53%
+    mainFocused   = Color(0xFFE0A82E),
+    mainToggled   = Color(0xFF6E4F0A),
+    secondDefault = Color(0xFF6E4F0A),
+    secondFocused = Color(0xFF9A6F10),
+    secondToggled = Color(0xFF4A3507),
+    shadowColor   = Color(0x50000000),
+    textFocused   = Color(0xFF2A1C00),
+    textUnfocused = Color(0xFF3A2905),
+)
+
+/** Add to Favorites once the title is a favourite: bronze, white label. See FavoriteGoldButtonColors. */
+val FavoriteBronzeButtonColors = ModularButtonColors(
+    // Idle face: bronze.                         HSL 29°, 59%, 34%
+    mainDefault   = Color(0xFF8A5524),
+    // Focused face: same hue, lifted.            HSL 28°, 50%, 46%
+    mainFocused   = Color(0xFFB0703A),
+    mainToggled   = Color(0xFF4A2C12),
+    secondDefault = Color(0xFF4A2C12),
+    secondFocused = Color(0xFF6B4220),
+    secondToggled = Color(0xFF331E0C),
+    shadowColor   = Color(0x50000000),
+    textFocused   = Color.White,
+    textUnfocused = Color(0xFFE8D3BF),
+)
+
 val FavoriteButtonColors = ModularButtonColors(
     // Idle face: steel blue.                     HSL 210°, 55%, 40%
     mainDefault   = Color(0xFF2E669E),

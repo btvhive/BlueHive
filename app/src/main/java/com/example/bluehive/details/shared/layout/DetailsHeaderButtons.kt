@@ -27,7 +27,9 @@ import com.example.bluehive.details.shared.state.ExtrasState
 import com.example.bluehive.details.shared.state.FavoriteState
 import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.utilities.ExtrasButtonColors
+import com.example.bluehive.utilities.FavoriteBronzeButtonColors
 import com.example.bluehive.utilities.FavoriteButtonColors
+import com.example.bluehive.utilities.FavoriteGoldButtonColors
 import com.example.bluehive.utilities.ModularButton
 import com.example.bluehive.utilities.ModularButtonAnimationConfig
 import com.example.bluehive.utilities.ModularButtonDimensions
@@ -100,6 +102,7 @@ fun BoxScope.DetailsHeaderButtons(
         pressTiming = pressTiming,
         enableFocus = enableFocus,
         isFavorited = favorite.isFavorited,
+        goldAndBronze = !showExtras,
         onToggle = { favorite.toggle() }
     )
 
@@ -183,14 +186,24 @@ private fun DetailsFavoriteButton(
     offsetY: Dp = 139.dp,
     enableFocus: Boolean = true,
     isFavorited: Boolean = false,
+    /**
+     * The peek layout: a plain button, gold until the title is a favourite and
+     * bronze after, with the label set from outside (as Extras did) -- no held
+     * "toggled" look. False: the steel-blue toggle the TV screen keeps.
+     */
+    goldAndBronze: Boolean = false,
     onToggle: () -> Unit = {}
 ) {
     ModularButton(
-        textConfig = ModularButtonTextConfig(
-            text = "+ Add to Favorites",
-            toggledText = "- Remove from Favorites"
-        ),
-        isToggleable = true,
+        textConfig = if (goldAndBronze) {
+            ModularButtonTextConfig(text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites")
+        } else {
+            ModularButtonTextConfig(
+                text = "+ Add to Favorites",
+                toggledText = "- Remove from Favorites"
+            )
+        },
+        isToggleable = !goldAndBronze,
         fontFamily = fontFamily,
         focusRequester = focusRequester,
         modifier = Modifier
@@ -223,7 +236,11 @@ private fun DetailsFavoriteButton(
             secondCornerRadius = 8f,
         ),
         // Shared — see FavoriteButtonColors in utilities/ModularButton.kt.
-        colors = FavoriteButtonColors,
+        colors = when {
+            !goldAndBronze -> FavoriteButtonColors
+            isFavorited    -> FavoriteBronzeButtonColors
+            else           -> FavoriteGoldButtonColors
+        },
         glowConfig = ModularButtonGlowConfig(
             enabled = true,
             defaultRes = R.drawable.button_focus_wide_glow,
