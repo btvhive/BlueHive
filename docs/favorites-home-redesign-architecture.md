@@ -1,6 +1,6 @@
 # Favorites and Home redesign: architecture plan
 
-**Status:** approved 2026-10-25; **done 2026-10-26**: all stages built, Rounds A, B and C passed on the onn box (v414). Nothing published. The §9 items stay as they are until you pick them.
+**Status:** approved 2026-10-25; **done 2026-10-26**: all stages built, Rounds A, B and C passed on the onn box (v414). Nothing published. §9 #7 and #8 fixed afterwards in v415 (on the onn box, for you to test); the other §9 items stay as they are until you pick them.
 - Stage 0 is done: the two launch records, the two ratchets, and the size and speed baselines in `docs/favorites-home-redesign-baseline.md`.
 - F1 is done (v406, verified on the onn box): Favorites is in `favorites/`.
 - F2 is done (v408, verified on the onn box): the three state holders and the seven effects as child composables.
@@ -292,8 +292,8 @@ Speed is measured before and after (needs your OK to drive the boxes):
 | 4 | The TV Shows and Anime shelves log a line on every recomposition | kept (HomeShelfTab.renderLog); since H1 the screen no longer recomposes on every tick, so most of those lines are gone |
 | 5 | Favorites and Home build their own details-launch extras, with `""` and `"N/A"` defaults (Home adds budget and revenue), unlike `DetailsIntents` | kept per screen, pinned by tests |
 | 6 | Found in F1. In Favorites' press-and-prefetch, a failed details request fails its `async`, which cancels the pressing coroutine. The `try`/`catch` logs that and clears the navigating flag, but the request's exception still travels up to the screen's coroutine scope. What that does on a box (a crash, or a scope that stops launching) is untested | kept: `prefetchDetailsLaunch` starts the requests in the same scope as before; candidate fix after the split |
-| 7 | Found in F2. Undo's focus restore asks the card requesters that existed before the undo. The restored cards make the list longer, so the grid gets new requesters, and the old ones are attached to nothing: focus is probably not put back on a card. Untested | kept: the screen still hands each click and effect the requesters of its own composition; candidate fix after the split |
-| 8 | Found in F2. In remove mode, two OK presses on one card within 150 ms record it twice in the removed list. Accept then toggles it twice, which puts it back in the favourites on the server. Undo adds it twice, and two cards with one key can crash the grid. Untested | kept; candidate fix after the split |
+| 7 | Found in F2. Undo's focus restore asks the card requesters that existed before the undo. The restored cards make the list longer, so the grid gets new requesters, and the old ones are attached to nothing: focus is probably not put back on a card. Untested | **fixed in v415** (2026-10-26): Undo restores focus through the grid's latest requesters (`FavoritesGridFocus.requestCardFocus`) |
+| 8 | Found in F2. In remove mode, two OK presses on one card within 150 ms record it twice in the removed list. Accept then toggles it twice, which puts it back in the favourites on the server. Undo adds it twice, and two cards with one key can crash the grid. Untested | **fixed in v415** (2026-10-26): `FavoritesData.startRemoval` ignores a second OK on a card that is already leaving; 3 JVM tests |
 
 ---
 
