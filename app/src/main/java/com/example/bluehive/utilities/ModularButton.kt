@@ -287,7 +287,8 @@ val ExtrasButtonColors = ModularButtonColors(
  * DARK TEXT ON THE GOLD. White on gold is what retired the old gold palette
  * (see FavoriteButtonColors), so this takes the honeycomb keyboard's gold
  * Search key's answer instead: a near-black brown label, about 6:1 on the idle
- * face. The bronze is dark enough for white (about 6:1).
+ * face. The bronze wears the same label (the user's pick, 2026-10-26): about
+ * 4.4:1 on its focused face, 2.7:1 on the idle one.
  */
 val FavoriteGoldButtonColors = ModularButtonColors(
     // Idle face: deep gold.                      HSL 41°, 83%, 41%
@@ -303,7 +304,7 @@ val FavoriteGoldButtonColors = ModularButtonColors(
     textUnfocused = Color(0xFF3A2905),
 )
 
-/** Add to Favorites once the title is a favourite: bronze, white label. See FavoriteGoldButtonColors. */
+/** Add to Favorites once the title is a favourite: bronze, the gold's dark label. See FavoriteGoldButtonColors. */
 val FavoriteBronzeButtonColors = ModularButtonColors(
     // Idle face: bronze.                         HSL 29°, 59%, 34%
     mainDefault   = Color(0xFF8A5524),
@@ -314,8 +315,8 @@ val FavoriteBronzeButtonColors = ModularButtonColors(
     secondFocused = Color(0xFF6B4220),
     secondToggled = Color(0xFF331E0C),
     shadowColor   = Color(0x50000000),
-    textFocused   = Color.White,
-    textUnfocused = Color(0xFFE8D3BF),
+    textFocused   = FavoriteGoldButtonColors.textFocused,
+    textUnfocused = FavoriteGoldButtonColors.textUnfocused,
 )
 
 val FavoriteButtonColors = ModularButtonColors(
