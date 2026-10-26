@@ -74,8 +74,9 @@ fun BoxScope.DetailsHeaderButtons(
     /**
      * False in the movie screen's peek layout: no Extras button, and the
      * trailer controls become Rewind | Play Trailer | Forward, with Rewind's
-     * left edge on the metadata's (258.25 dp) and the trailer button 88 dp
-     * wide, not 100 (the user's calls, 2026-10-26: 80 dp, then a little wider).
+     * left edge on the metadata's (258.25 dp) and the trailer button 92 dp
+     * wide, not 100, in a 104.5 dp glow so less of it shows at the sides (the
+     * user's calls, 2026-10-26: 80 dp, then 88, then wider in the same glow).
      */
     showExtras: Boolean = true,
 ) {
@@ -83,7 +84,8 @@ fun BoxScope.DetailsHeaderButtons(
     // button and Forward, PEEK_TRAILER_GAP apart.
     val rewindX = if (showExtras) 367.25.dp else 258.25.dp
     val trailerX = if (showExtras) 256.25.dp else rewindX + SEEK_BUTTON_WIDTH + PEEK_TRAILER_GAP
-    val trailerWidth = if (showExtras) 100.dp else 88.dp
+    val trailerWidth = if (showExtras) 100.dp else 92.dp
+    val trailerGlowWidth = if (showExtras) 116.5.dp else 104.5.dp
     val forwardX = if (showExtras) 400.25.dp else trailerX + trailerWidth + PEEK_TRAILER_GAP
 
     // Favorite Button - Uses internal offset for positioning
@@ -117,6 +119,7 @@ fun BoxScope.DetailsHeaderButtons(
         trailerAvailable = trailer.isAvailable,
         offsetX = trailerX,
         width = trailerWidth,
+        glowWidth = trailerGlowWidth,
         enableFocus = enableFocus,
         onClick = { trailer.onButtonPressed() }
     )
@@ -315,8 +318,9 @@ private fun DetailsTrailerButton(
     trailerAvailable: Boolean = true,
     offsetX: Dp =  256.25.dp,
     offsetY: Dp = 139.dp,
-    /** The glow stays 16.5 dp wider than the button, centred. */
     width: Dp = 100.dp,
+    /** Centred on the button. */
+    glowWidth: Dp = width + 16.5.dp,
     enableFocus: Boolean = true,
     onClick: () -> Unit = {}
 ) {
@@ -350,7 +354,7 @@ private fun DetailsTrailerButton(
             secondHeight = 22.dp,
             secondYOffset = 7.dp,
             shadowHeight = 6.dp,
-            glowWidth = width + 16.5.dp,
+            glowWidth = glowWidth,
             glowHeight = 44.dp,
             mainCornerRadius = 7f,
             secondCornerRadius = 6f,
@@ -361,7 +365,7 @@ private fun DetailsTrailerButton(
             enabled = true,
             defaultRes = R.drawable.button_focus_wide_glow,
             toggledRes = R.drawable.button_focus_wide_nonglow,
-            offsetX = (-16.5).dp / 2,
+            offsetX = (width - glowWidth) / 2,
             offsetY = (-4).dp
         ),
         animationConfig = ModularButtonAnimationConfig(
