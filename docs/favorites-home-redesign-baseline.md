@@ -114,7 +114,7 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 | H1 | v410 | 1,131 units, 45 registers | 4,153 units, 99 registers (ceiling now 4,190 / 101) | not yet: the box is in Round A |
 | H2 | v412 | 1,131 units, 45 registers | 3,012 units, 67 registers (ceiling now 3,040 / 69) | v412: 12,748 classes, 0 failures (00:47 UTC 2026-10-26); not installed |
 | H3 | v413 | 1,131 units, 45 registers | 1,076 units, 34 registers: under the budget, off the ratchet | v413: 12,749 classes, 0 failures (00:54 UTC 2026-10-26); installed on the Fire Stick 00:57 UTC, which showed its account lockout; installed on the onn box for Round B instead, about 01:05 UTC (home screen reached, no crash) |
-| L | v414 | 1,131 units, 45 registers | 1,076 units, 34 registers | not yet: the box is in Round B (built with -PskipDeviceVerify; no redesign code changed since v413) |
+| L | v414 | 1,131 units, 45 registers | 1,076 units, 34 registers | v414: 12,749 classes, 0 failures (after Round B, 2026-10-26); installed on the onn box |
 
 ### F3 (v409)
 
@@ -215,4 +215,34 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 | `ModularButton` | 2,683 | 94 |
 
 - **Boundary rules:** unchanged since H1 (all live); the gate's header now names Home too.
-- **Gates:** 233 JVM tests pass; `checkMethodSizes` and `checkDetailsBoundaries` pass; the on-device check waits for the onn box.
+- **Gates:** 233 JVM tests pass; `checkMethodSizes` and `checkDetailsBoundaries` pass; on the onn box after Round B: 12,749 classes, 0 failures.
+
+## Speed after the redesign (v414, onn box)
+
+Measured 2026-10-26 after Round B, at the user's word, the same way as the baseline (profile marlan, same scripts and presses). v414 also carries the other session's changes since v405 (shelf, badge and player files), so this is v405 against v414 as a whole, not the redesign alone.
+
+**The Fire Stick was not measured.** BlueHive there opens on "Connection trouble" (ServiceLockoutActivity): the server's last verdict for that account is `inactive` (`HostEntitlementRelay.isLockedOut`), a fresh start shows it again within 0.6 s, and Retry got the same answer on 2026-10-26. That is the account's standing, not app code. The box was put back on Amazon's home screen and asleep.
+
+| onn box | v405 (baseline) | v414 |
+|---|---|---|
+| **Idle home, 30 s** (3 runs each) | | |
+| Frames | 600, 598, 684 | 725, 678, 731 |
+| Janky | 9.3%, 9.4%, 11.8% | 4.8%, 4.6%, 4.8% |
+| Median / 90th / 99th percentile | 34–38 / 53 / 89–97 ms | 27 / 40–46 / 89–97 ms |
+| Slow UI-thread frames | 45, 38, 45 | 34, 31, 34 |
+| Rhythm | a burst of ~58 frames every 3 s | a burst of ~62 frames every 3 s (unchanged: the two carousels change out of step) |
+| UI time of each burst's first frame | 31–59 ms, median 47 | 35–86 ms, median 55 |
+| Heaviest UI frame of each burst | 47–65 ms, median 55 | 46–86 ms, median 62 |
+| **Home shelf, 10 presses** | Right / Left | Right / Left |
+| Janky | 19.2% / 16.6% | 7.9% / 6.1% |
+| Median / 90th / 95th / 99th percentile | 38/53/69/81 · 36/57/65/97 ms | 27/42/61/81 · 26/40/61/93 ms |
+| Slow UI-thread frames | 43 / 30 | 20 / 18 |
+| **Favorites grid** (8 favourites) | row / rows | row / rows |
+| Janky | 50% / 50% | 50% / 50% |
+| Median / 90th / 99th percentile | 40/61/73 · 38/53/57 ms | 32/38/46 · 32/46/53 ms |
+| UI time per press (first frame) | 19–40 ms | 16–40 ms |
+
+**What it shows:**
+- Typical frames are faster everywhere: the median frame drops from 34–40 ms to 26–32 ms, and janky frames on Home roughly halve.
+- The carousel change itself did not get cheaper. Each 3 s burst still starts with a slow frame (median 55 ms against 47). Taking the home function's re-run out of each tick (H1) did not shorten that frame, so the re-run was not the expensive part; the frame is the carousel's own change. The baseline and these runs also showed different carousel pictures.
+- Favorites still draws two frames per press, one of them slow, but the slow ones are shorter (99th percentile 73 → 46 ms along a row).
