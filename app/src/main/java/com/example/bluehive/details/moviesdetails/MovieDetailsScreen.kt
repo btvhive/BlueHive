@@ -662,7 +662,9 @@ fun MoviesStreamerButton(
     ModularButton(
         textConfig = ModularButtonTextConfig(
             text = if (source.name == "M Extract") "M Extract" else "Watch on ${source.name}",
-            fontSize = 14f
+            fontSize = 14f,
+            // A soft shadow under the label -- see StreamSourceLabelShadow.
+            shadow = StreamSourceLabelShadow,
         ),
         isToggleable = false,
         fontFamily = fontFamily,

@@ -33,6 +33,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.material3.LocalTextStyle
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -167,6 +169,17 @@ val AnimeSubButtonColors = ModularButtonColors(
  * carrying its own copy of the missing-mainFocused bug. Fixing that in three
  * copies is how two of them drift.
  */
+/**
+ * The shadow behind the "Watch on ..." labels (the user's call, 2026-10-26):
+ * soft and dark, a little below the text, so the light label lifts off the
+ * blue face. In px: 2 down, 4 of blur (1 dp and 2 dp on the onn box).
+ */
+val StreamSourceLabelShadow = Shadow(
+    color = Color(0x99000000),
+    offset = androidx.compose.ui.geometry.Offset(0f, 2f),
+    blurRadius = 4f,
+)
+
 val StreamSourceButtonColors = ModularButtonColors(
     // 70% OF THE OLD SATURATION AT REST, THE OLD COLOURS ON FOCUS (the user's
     // picks, 2026-10-26): the pure 100% blue glared on four buttons at once, so
@@ -352,6 +365,9 @@ data class ModularButtonTextConfig(
     val toggledText: String? = null,
     val fontSize: Float = 12f,
     val offsetX: Dp = 0.dp,
+
+    /** A shadow behind the label; null draws none, as every button did before. */
+    val shadow: Shadow? = null,
 
     /**
      * Draw this drawable instead of [text].
@@ -800,6 +816,7 @@ fun ModularButton(
                         fontSize = textConfig.fontSize.sp,
                         fontFamily = fontFamily,
                         textAlign = TextAlign.Center,
+                        style = LocalTextStyle.current.let { base -> if (textConfig.shadow != null) base.copy(shadow = textConfig.shadow) else base },
                         modifier = Modifier
                             .offset(y = textYOffset, x = textConfig.offsetX)
                             .semantics { contentDescription = labelText }
