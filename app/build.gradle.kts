@@ -471,12 +471,12 @@ val verifyReleaseOnDevice by tasks.registering {
 // limit, above which ART never compiles a method and runs it interpreted.
 //
 // The Favorites and Home redesign (docs/favorites-home-redesign-architecture.md)
-// brings the ratchet back for the app's last two giants, FavoritesScreen and
-// HomeScreenComposeContent: they may not grow, and each ceiling drops after
-// every stage until the function is under the budget and leaves the list. The
-// ceilings sit about 1% (code units) and 2.5% (registers) above the size
-// measured at the last stage, for the reason below. Since Stage F1 the budget
-// also holds for everything else written in favorites/.
+// split the app's last two giants the same way, with ratchet ceilings while it
+// ran: FavoritesScreen (5,660 / 209 at Stage 0, v405) and HomeScreenComposeContent
+// (5,030 / 118). Since Stage L one budget holds for details/, favorites/ and
+// home/, and the rest of the app is reported from 2,500 units, to show the next
+// candidates; the sizes after each stage are in
+// docs/favorites-home-redesign-baseline.md.
 //
 // R8 re-decides inlining across the whole app on every build, so a function
 // can grow a little with its source unchanged (Stage 1: +42 units when five
@@ -498,17 +498,8 @@ val checkMethodSizes by tasks.registering {
     doLast {
         val maxUnits = 2_500
         val maxRegisters = 100
-        // App methods at least this big carry the same R8 risk: reported, not enforced.
-        val warnUnits = 5_000
-        // Being split by the Favorites and Home redesign (units to registers).
-        // At Stage 0 (v405): FavoritesScreen 5,660 / 209, HomeScreenComposeContent
-        // 5,030 / 118. FavoritesScreen shrank to 4,977 / 141 at F1 (v406) and
-        // 3,837 / 95 at F2 (v408); since F3 (v409) it is under the budget and
-        // off this list.
-        // HomeScreen (HomeScreenComposeContent until H1) shrank to 4,153 / 99 at H1
-        // (v410) and 3,012 / 67 at H2 (v412); since H3 (v413) it is off this list too.
-        // Empty since H3: every function the redesign split is under the budget.
-        val shrinking = mapOf<String, Pair<Int, Int>>()
+        // Other app methods over the budget: reported, not enforced.
+        val warnUnits = maxUnits
 
         val apkFile = apk.get().asFile
         if (!apkFile.exists()) {
@@ -606,7 +597,10 @@ val checkMethodSizes by tasks.registering {
         }
 
         if (methods.none { inDetails(it.origin) }) throw GradleException("checkMethodSizes: found no details-screen methods - the dex parse is broken")
-        val budgeted = methods.filter { inBudget(it.origin) && it.key !in shrinking }
+        if (methods.none { it.origin.startsWith("com.example.bluehive.favorites.") } ||
+            methods.none { it.origin.startsWith("com.example.bluehive.home.") }
+        ) throw GradleException("checkMethodSizes: found no Favorites or Home methods - the R8 mapping match is broken")
+        val budgeted = methods.filter { inBudget(it.origin) }
         val problems = mutableListOf<String>()
         for (m in budgeted) {
             if (m.units > maxUnits || m.registers > maxRegisters) {
@@ -614,35 +608,15 @@ val checkMethodSizes by tasks.registering {
                     "(budget $maxUnits / $maxRegisters). Split it -- see the note above checkMethodSizes."
             }
         }
-        val split = methods.filter { it.key in shrinking }
-        for (m in split) {
-            val (units, registers) = shrinking.getValue(m.key)
-            if (m.units > units || m.registers > registers) {
-                problems += "${m.key} grew to ${m.units} units / ${m.registers} registers " +
-                    "(ceiling $units / $registers). It is being split: put new code in a new composable."
-            }
-        }
-        val gone = shrinking.keys - split.map { it.key }.toSet()
-        if (gone.isNotEmpty()) {
-            logger.lifecycle("checkMethodSizes: no longer in the APK, take off the shrinking list: ${gone.joinToString()}")
-        }
-        logger.lifecycle("checkMethodSizes: largest methods in details/ and favorites/ (budget $maxUnits units / $maxRegisters registers):")
+        logger.lifecycle("checkMethodSizes: largest methods in details/, favorites/ and home/ (budget $maxUnits units / $maxRegisters registers):")
         budgeted.sortedByDescending { it.units }.take(5).forEach { m ->
             logger.lifecycle("  %6d units %4d regs  %s".format(m.units, m.registers, m.key))
         }
-        if (split.isNotEmpty()) {
-            logger.lifecycle("checkMethodSizes: being split (docs/favorites-home-redesign-architecture.md):")
-            split.sortedByDescending { it.units }.forEach { m ->
-                val (units, registers) = shrinking.getValue(m.key)
-                logger.lifecycle("  %6d units %4d regs  %s  [ceiling %d / %d]".format(m.units, m.registers, m.key, units, registers))
-            }
-        }
         val giants = methods.filter {
-            !inBudget(it.origin) && it.key !in shrinking &&
-                it.origin.startsWith("com.example.bluehive.") && it.units >= warnUnits
+            !inBudget(it.origin) && it.origin.startsWith("com.example.bluehive.") && it.units > warnUnits
         }
         if (giants.isNotEmpty()) {
-            logger.warn("checkMethodSizes: other app methods over $warnUnits units (same R8 risk, not enforced):")
+            logger.warn("checkMethodSizes: other app methods over $warnUnits units (reported, not enforced):")
             giants.sortedByDescending { it.units }.forEach {
                 logger.warn("  %6d units %4d regs  %s".format(it.units, it.registers, it.key))
             }
@@ -660,7 +634,7 @@ tasks.matching { it.name == "assembleRelease" }.configureEach {
     finalizedBy(checkMethodSizes, verifyReleaseOnDevice)
 }
 
-// ── Details and Favorites screens: who may use whom ──────────────────────────
+// ── Details, Favorites and Home screens: who may use whom ────────────────────
 //
 // The details redesign (docs/details-redesign-architecture.md §5) splits the
 // two screens into details/moviesdetails, details/tvshowdetails and

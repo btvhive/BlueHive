@@ -114,6 +114,7 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 | H1 | v410 | 1,131 units, 45 registers | 4,153 units, 99 registers (ceiling now 4,190 / 101) | not yet: the box is in Round A |
 | H2 | v412 | 1,131 units, 45 registers | 3,012 units, 67 registers (ceiling now 3,040 / 69) | v412: 12,748 classes, 0 failures (00:47 UTC 2026-10-26); not installed |
 | H3 | v413 | 1,131 units, 45 registers | 1,076 units, 34 registers: under the budget, off the ratchet | v413: 12,749 classes, 0 failures (00:54 UTC 2026-10-26); installed on the Fire Stick 00:57 UTC, which showed its account lockout; installed on the onn box for Round B instead, about 01:05 UTC (home screen reached, no crash) |
+| L | v414 | 1,131 units, 45 registers | 1,076 units, 34 registers | not yet: the box is in Round B (built with -PskipDeviceVerify; no redesign code changed since v413) |
 
 ### F3 (v409)
 
@@ -196,3 +197,22 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 - **The ratchet list is empty:** every function the two redesigns split is under 2,500 / 100.
 - **Gates:** 233 JVM tests pass; `checkMethodSizes` and `checkDetailsBoundaries` pass.
 
+### L (v414)
+
+- **One budget:** `checkMethodSizes` holds every method in `details/`, `favorites/` and `home/` to 2,500 units / 100 registers. The ratchet list and its code are gone. The gate now also fails if it finds no Favorites or Home methods, so a broken mapping match cannot pass silently.
+- **Largest budgeted methods:** `TvShowDetailsScreen` 2,018 / 56, `EpisodeCard` 2,000 / 67, `SourcePlaybackController.extractAndPlay` 1,833 / 44, `AnimeEpisodeProviderButtons` (coroutine) 1,540 / 26, `MovieDetailsScreen` 1,507 / 55.
+- **The rest of the app, reported from 2,500 units (next candidates, not enforced):**
+
+| Method | Code units | Registers |
+|---|---|---|
+| `ProfileManageScreen` | 5,009 | 133 |
+| `SubtitleFixSeqOverlay` | 3,882 | 100 |
+| `HistoryScreen` | 3,839 | 125 |
+| `TvWideLazyRow` | 3,670 | 140 |
+| `MediaCatalogScreen` | 3,505 | 140 |
+| `ProfileScreen` | 3,038 | 129 |
+| `SearchBarContent` | 2,858 | 93 |
+| `ModularButton` | 2,683 | 94 |
+
+- **Boundary rules:** unchanged since H1 (all live); the gate's header now names Home too.
+- **Gates:** 233 JVM tests pass; `checkMethodSizes` and `checkDetailsBoundaries` pass; the on-device check waits for the onn box.

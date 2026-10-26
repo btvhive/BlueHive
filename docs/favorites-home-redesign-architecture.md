@@ -9,7 +9,8 @@
 - H1 is done (v410, started at your word while Round A runs; not installed): the home screen is in `home/`, the carousel tick no longer re-runs it, and the three shelf calls are one. `HomeScreen` is down to 4,153 units / 99 registers. The on-device check of v410 is still to run.
 - H2 is done (v412, verified on the onn box; not installed): five state holders, and effects 2 to 11 as three child composables. `HomeScreen` is down to 3,012 units / 67 registers. Effects 12 and 13 (offline) move with the OfflineRetry section in H3.
 - H3 is done (v413, verified on the onn box; not installed): six sections, called where their code was. `HomeScreen` is down to 1,076 units / 34 registers, under the budget and off the ratchet, which is now empty.
-- Round B is open: v413 is on the onn box since about 01:05 UTC 2026-10-26, for the Home checklist (§11). It went on the Fire Stick first (00:57 UTC), but BlueHive opened its account-standing lockout there ("Connection trouble": Off Grid Drive reports that account inactive), a gate before the home screen and not part of this redesign. Then L. Nothing is published unless you say so.
+- Round B is open: v413 is on the onn box since about 01:05 UTC 2026-10-26, for the Home checklist (§11). It went on the Fire Stick first (00:57 UTC), but BlueHive opened its account-standing lockout there ("Connection trouble": Off Grid Drive reports that account inactive), a gate before the home screen and not part of this redesign. Nothing is published unless you say so.
+- L is done (v414, built while Round B runs; not installed, device check still to run): the ratchet code is gone, one 2,500 / 100 budget holds for `details/`, `favorites/` and `home/`, and the rest of the app is reported from 2,500 units (eight functions, led by `ProfileManageScreen` at 5,009 / 133). Left: the final speed measurements (your OK to drive the boxes), then Round C.
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
 
@@ -255,8 +256,8 @@ Speed is measured before and after (needs your OK to drive the boxes):
 **Build gates:**
 - **`checkMethodSizes`** extends to `favorites/` and `home/`:
   - While the split runs, each function has a ratchet ceiling about 1% / 2.5% above its size: `FavoritesScreen` 5,720 / 214, `HomeScreenComposeContent` 5,080 / 121. A ceiling drops at each stage and goes once the function is under budget.
-  - Then one budget holds for `details/`, `favorites/` and `home/`.
-  - The report on the rest of the app drops to 2,500 units, to show the next candidates.
+  - Then one budget holds for `details/`, `favorites/` and `home/` (since L).
+  - The report on the rest of the app drops to 2,500 units, to show the next candidates (done in L; the ratchet code went with it).
 - **The boundary gate** gains rules:
   - Outside code reaches Favorites only through `FavoritesScreenActivity` and `openFavoritesScreen` (live since F1).
   - `favorites/` uses no details code but the two details Activities and `DetailsExtra` / `putDetailsExtras`, and nothing in `home/` (live since F1).
