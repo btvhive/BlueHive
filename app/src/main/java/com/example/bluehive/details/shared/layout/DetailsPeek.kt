@@ -58,6 +58,9 @@ val PEEK_SOURCE_ROW_STEP: Dp = 55.5.dp
 /** RecommendedMediaSection's offset that puts the cards' tops at ~444 dp, so about 60% shows (measured on the onn box). */
 val PEEK_ROW_TOP: Dp = 453.25.dp
 
+/** The header buttons' label size in the peek layout, in Inter SemiBold. */
+const val PEEK_HEADER_LABEL_SP = 11f
+
 /** How far the page slides up while the row has focus. */
 val PEEK_SLIDE: Dp = 110.dp
 

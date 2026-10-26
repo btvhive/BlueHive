@@ -184,7 +184,10 @@ private fun BoxScope.DetailsPage(
         // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:
         // see DetailsHeaderButtons. Each press runs a state holder's method.
         DetailsHeaderButtons(
-            fontFamily = AppTypography.passionRegular,
+            // The peek layout's labels are lighter: Inter SemiBold, not the
+            // heavy Passion One (the user's call, 2026-10-26).
+            fontFamily = if (peek != null) AppTypography.interSemiBold else AppTypography.passionRegular,
+            labelSize = if (peek != null) PEEK_HEADER_LABEL_SP else 12f,
             pressTiming = header.pressTiming,
             enableFocus = header.enableFocus,
             favoriteFocusRequester = header.favoriteFocusRequester,

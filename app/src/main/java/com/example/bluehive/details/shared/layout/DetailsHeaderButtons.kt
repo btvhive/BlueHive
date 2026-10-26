@@ -86,6 +86,8 @@ fun BoxScope.DetailsHeaderButtons(
      * magnifying glass on Extras' forest green. Null shows none.
      */
     onSearch: (() -> Unit)? = null,
+    /** The labels' size in sp. The peek layout's lighter Inter runs smaller than Passion. */
+    labelSize: Float = 12f,
 ) {
     // Peek layout: Rewind at the metadata's left edge, then the trailer
     // button and Forward, PEEK_TRAILER_GAP apart.
@@ -103,6 +105,7 @@ fun BoxScope.DetailsHeaderButtons(
         enableFocus = enableFocus,
         isFavorited = favorite.isFavorited,
         goldAndBronze = !showExtras,
+        labelSize = labelSize,
         onToggle = { favorite.toggle() }
     )
 
@@ -135,6 +138,7 @@ fun BoxScope.DetailsHeaderButtons(
         offsetX = trailerX,
         width = trailerWidth,
         glowWidth = trailerGlowWidth,
+        labelSize = labelSize,
         enableFocus = enableFocus,
         onClick = { trailer.onButtonPressed() }
     )
@@ -192,15 +196,20 @@ private fun DetailsFavoriteButton(
      * "toggled" look. False: the steel-blue toggle the TV screen keeps.
      */
     goldAndBronze: Boolean = false,
+    labelSize: Float = 12f,
     onToggle: () -> Unit = {}
 ) {
     ModularButton(
         textConfig = if (goldAndBronze) {
-            ModularButtonTextConfig(text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites")
+            ModularButtonTextConfig(
+                text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites",
+                fontSize = labelSize,
+            )
         } else {
             ModularButtonTextConfig(
                 text = "+ Add to Favorites",
-                toggledText = "- Remove from Favorites"
+                toggledText = "- Remove from Favorites",
+                fontSize = labelSize,
             )
         },
         isToggleable = !goldAndBronze,
@@ -419,13 +428,15 @@ private fun DetailsTrailerButton(
     width: Dp = 100.dp,
     /** Centred on the button. */
     glowWidth: Dp = width + 16.5.dp,
+    labelSize: Float = 12f,
     enableFocus: Boolean = true,
     onClick: () -> Unit = {}
 ) {
     ModularButton(
         textConfig = ModularButtonTextConfig(
             text = if (isPlaying) "Pause Trailer" else "Play Trailer",
-            toggledText = if (isPlaying) "Play Trailer" else "Pause Trailer"
+            toggledText = if (isPlaying) "Play Trailer" else "Pause Trailer",
+            fontSize = labelSize,
         ),
         isToggleable = false,
         fontFamily = fontFamily,
