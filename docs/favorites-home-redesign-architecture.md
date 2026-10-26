@@ -1,6 +1,6 @@
 # Favorites and Home redesign: architecture plan
 
-**Status:** approved 2026-10-25.
+**Status:** approved 2026-10-25; **done 2026-10-26**: all stages built, Rounds A, B and C passed on the onn box (v414). Nothing published. The §9 items stay as they are until you pick them.
 - Stage 0 is done: the two launch records, the two ratchets, and the size and speed baselines in `docs/favorites-home-redesign-baseline.md`.
 - F1 is done (v406, verified on the onn box): Favorites is in `favorites/`.
 - F2 is done (v408, verified on the onn box): the three state holders and the seven effects as child composables.
@@ -10,7 +10,7 @@
 - H2 is done (v412, verified on the onn box; not installed): five state holders, and effects 2 to 11 as three child composables. `HomeScreen` is down to 3,012 units / 67 registers. Effects 12 and 13 (offline) move with the OfflineRetry section in H3.
 - H3 is done (v413, verified on the onn box; not installed): six sections, called where their code was. `HomeScreen` is down to 1,076 units / 34 registers, under the budget and off the ratchet, which is now empty.
 - Round B is open: v413 is on the onn box since about 01:05 UTC 2026-10-26, for the Home checklist (§11). It went on the Fire Stick first (00:57 UTC), but BlueHive opened its account-standing lockout there ("Connection trouble": Off Grid Drive reports that account inactive), a gate before the home screen and not part of this redesign. Nothing is published unless you say so.
-- L is done (v414; device check 12,749 classes, 0 failures after Round B; installed on the onn box): the ratchet code is gone, one 2,500 / 100 budget holds for `details/`, `favorites/` and `home/`, and the rest of the app is reported from 2,500 units (eight functions, led by `ProfileManageScreen` at 5,009 / 133). Final speed measured on the onn box (baseline doc, "Speed after the redesign"): typical frames faster, janky frames on Home about halved, the carousel-change frame unchanged. The Fire Stick could not be measured: its account is locked out. Left: Round C.
+- L is done (v414; device check 12,749 classes, 0 failures after Round B; installed on the onn box): the ratchet code is gone, one 2,500 / 100 budget holds for `details/`, `favorites/` and `home/`, and the rest of the app is reported from 2,500 units (eight functions, led by `ProfileManageScreen` at 5,009 / 133). Final speed measured on the onn box (baseline doc, "Speed after the redesign"): typical frames faster, janky frames on Home about halved, the carousel-change frame unchanged. The Fire Stick could not be measured: its account is locked out. Round C passed on the onn box (2026-10-26).
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
 
