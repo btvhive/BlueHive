@@ -14,6 +14,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -379,7 +382,11 @@ data class ModularButtonTextConfig(
     val fontSize: Float = 12f,
     val offsetX: Dp = 0.dp,
 
-    /** A shadow behind the label; null draws none, as every button did before. */
+    /**
+     * A shadow behind the label; null draws none, as every button did before.
+     * An icon gets it too: a copy in the shadow's colour, offset and blurred
+     * (the blur needs API 31; older boxes get a sharp copy).
+     */
     val shadow: Shadow? = null,
 
     /**
@@ -814,6 +821,22 @@ fun ModularButton(
                     }
             ) {
                 if (textConfig.iconRes != null) {
+                    val iconShadow = textConfig.shadow
+                    if (iconShadow != null) {
+                        val density = LocalDensity.current
+                        val dx = with(density) { iconShadow.offset.x.toDp() }
+                        val dy = with(density) { iconShadow.offset.y.toDp() }
+                        val blur = with(density) { (iconShadow.blurRadius / 2f).toDp() }
+                        Image(
+                            painter = painterResource(id = textConfig.iconRes),
+                            contentDescription = null,
+                            colorFilter = ColorFilter.tint(iconShadow.color),
+                            modifier = Modifier
+                                .size(textConfig.iconSize)
+                                .offset(y = textYOffset + dy, x = textConfig.offsetX + dx)
+                                .blur(blur, BlurredEdgeTreatment.Unbounded)
+                        )
+                    }
                     Image(
                         painter = painterResource(id = textConfig.iconRes),
                         contentDescription = labelText,

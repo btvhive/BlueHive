@@ -87,7 +87,7 @@ fun BoxScope.DetailsHeaderButtons(
      * magnifying glass on Extras' forest green. Null shows none.
      */
     onSearch: (() -> Unit)? = null,
-    /** A shadow behind the trailer label; null draws none. See ButtonLabelShadow. */
+    /** A shadow behind the trailer label and the Search and seek icons; null draws none. See ButtonLabelShadow. */
     labelShadow: Shadow? = null,
     /** The same for the Favorites label, which takes a highlight. See FavoriteLabelHighlight. */
     favoriteLabelShadow: Shadow? = null,
@@ -126,6 +126,7 @@ fun BoxScope.DetailsHeaderButtons(
             fontFamily = fontFamily,
             pressTiming = pressTiming,
             enableFocus = enableFocus,
+            iconShadow = labelShadow,
             onClick = onSearch,
         )
     }
@@ -164,6 +165,7 @@ fun BoxScope.DetailsHeaderButtons(
         pressTiming = pressTiming,
         offsetX = rewindX,
         enableFocus = enableFocus,
+        iconShadow = labelShadow,
         onClick = { trailer.rewind() }
     )
 
@@ -173,6 +175,7 @@ fun BoxScope.DetailsHeaderButtons(
         pressTiming = pressTiming,
         offsetX = forwardX,
         enableFocus = enableFocus,
+        iconShadow = labelShadow,
         onClick = { trailer.fastForward() }
     )
 }
@@ -358,6 +361,7 @@ private fun DetailsSearchButton(
     offsetX: Dp = 182.dp,
     offsetY: Dp = 139.dp,
     enableFocus: Boolean = true,
+    iconShadow: Shadow? = null,
     onClick: () -> Unit,
 ) {
     ModularButton(
@@ -366,6 +370,7 @@ private fun DetailsSearchButton(
             text = "Search",
             iconRes = R.drawable.ic_search_glass,
             iconSize = 14.dp,
+            shadow = iconShadow,
         ),
         isToggleable = false,
         fontFamily = fontFamily,
@@ -502,6 +507,7 @@ private fun DetailsRewindButton(
     offsetX: Dp = 367.25.dp,
     offsetY: Dp = 139.dp,
     enableFocus: Boolean = true,
+    iconShadow: Shadow? = null,
     onClick: () -> Unit = {}
 ) {
     ModularButton(
@@ -523,6 +529,7 @@ private fun DetailsRewindButton(
             text = "Rewind 10 seconds",
             iconRes = R.drawable.ic_seek_rewind,
             iconSize = 14.dp,
+            shadow = iconShadow,
         ),
         isToggleable = false,
         fontFamily = fontFamily,
@@ -584,6 +591,7 @@ private fun DetailsFastForwardButton(
     offsetX: Dp = 400.25.dp,
     offsetY: Dp = 139.dp,
     enableFocus: Boolean = true,
+    iconShadow: Shadow? = null,
     onClick: () -> Unit = {}
 ) {
     ModularButton(
@@ -605,6 +613,7 @@ private fun DetailsFastForwardButton(
             text = "Forward 10 seconds",
             iconRes = R.drawable.ic_seek_forward,
             iconSize = 14.dp,
+            shadow = iconShadow,
         ),
         isToggleable = false,
         fontFamily = fontFamily,
