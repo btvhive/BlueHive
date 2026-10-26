@@ -505,11 +505,10 @@ val checkMethodSizes by tasks.registering {
         // 5,030 / 118. FavoritesScreen shrank to 4,977 / 141 at F1 (v406) and
         // 3,837 / 95 at F2 (v408); since F3 (v409) it is under the budget and
         // off this list.
-        val shrinking = mapOf(
-            // HomeScreenComposeContent until H1 moved it into home/ as HomeScreen;
-            // 4,153 / 99 at H1 (v410), 3,012 / 67 at H2 (v412).
-            "HomeScreenKt.HomeScreen" to (3_040 to 69),
-        )
+        // HomeScreen (HomeScreenComposeContent until H1) shrank to 4,153 / 99 at H1
+        // (v410) and 3,012 / 67 at H2 (v412); since H3 (v413) it is off this list too.
+        // Empty since H3: every function the redesign split is under the budget.
+        val shrinking = mapOf<String, Pair<Int, Int>>()
 
         val apkFile = apk.get().asFile
         if (!apkFile.exists()) {

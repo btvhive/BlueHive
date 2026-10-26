@@ -1,6 +1,5 @@
 package com.example.bluehive.home
 
-import android.content.Intent
 import android.os.Build
 import android.util.Log
 import androidx.compose.animation.AnimatedVisibility
@@ -11,26 +10,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -41,37 +30,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.currentStateAsState
-import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
-import com.example.bluehive.catalog.openMediaCatalogScreen
-import com.example.bluehive.continueWatchingComponents.HomeScreenContinueWatchingCompose
-import com.example.bluehive.favorites.openFavoritesScreen
-import com.example.bluehive.latestTrailersComponents.HomeScreenTrailerSectionCompose
-import com.example.bluehive.latestTrailersComponents.TrailerFrameState
 import com.example.bluehive.models.MediaItem
-import com.example.bluehive.searchBarComponent.openSearchScreen
-import com.example.bluehive.sidebarComponents.HomeScreenSidebarCompose
-import com.example.bluehive.sidebarComponents.openHistoryScreen
-import com.example.bluehive.sidebarComponents.openLiveTvScreen
-import com.example.bluehive.sidebarComponents.openProfileScreen
-import com.example.bluehive.singleShelfComponents.ShelfStack
-import com.example.bluehive.trendingComponents.HomeScreenTrendingCompose
-import com.example.bluehive.trendingComponents.TrendingFrameState
 import com.example.bluehive.utilities.CloseApplicationHandler
-import com.example.bluehive.utilities.NetworkMonitor
-import com.example.bluehive.utilities.RetryOverlay
 import com.example.bluehive.utilities.overlayScrimColor
-import kotlinx.coroutines.launch
 
 
 internal enum class CatalogTab { MOVIES, TV_SHOWS, ANIME }
-
-/**
- * Longest the navigation tick stays muted while focus returns from the
- * sidebar. The restore ends the mute itself the moment focus lands (~100 ms,
- * measured); this cap only matters if it never does.
- */
-private const val SIDEBAR_RETURN_MUTE_CAP_MS = 1_000L
 
 
 internal enum class SidebarReturnTarget {
@@ -105,7 +70,9 @@ internal enum class SidebarReturnTarget {
  * Moved here from HomeScreenCompose.kt in Stage H1 of the Favorites and Home
  * redesign (docs/favorites-home-redesign-architecture.md), where it was
  * HomeScreenComposeContent. Since Stage H2 its state is in five holders and
- * effects 2 to 11 are child composables, called where they were.
+ * effects 2 to 11 are child composables, called where they were. Since Stage
+ * H3 its sections are too: HomeTopFrames, HomeContinueWatchingPanel,
+ * HomeCatalogTabs, HomeShelves, HomeSidebar and OfflineRetry.
  */
 @Composable
 internal fun HomeScreen(
@@ -135,24 +102,15 @@ internal fun HomeScreen(
     val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
     val isHomeInForeground = lifecycleState.isAtLeast(Lifecycle.State.RESUMED)
 
-    var trailerSectionState by remember { mutableStateOf<TrailerFrameState>(TrailerFrameState.UnFocused) }
-    var trendingState by remember { mutableStateOf<TrendingFrameState>(TrendingFrameState.UnFocused) }
 
 
 
 
 
 
-    // Item 6 — offline retry banner state.
-    var showRetryBanner by remember { mutableStateOf(false) }
-    val retryScope = rememberCoroutineScope()
 
 
 
-    val radioNavSound: () -> Unit = {
-        if (tabs.radioSoundArmed) BlueHiveApplication.playNavClickSound()
-        else tabs.radioSoundArmed = true
-    }
 
 
 
@@ -207,8 +165,6 @@ internal fun HomeScreen(
         HomeFocusEffects(focusMap, sidebar, shelves, tabs)
 
 
-        // IS THE CONTINUE WATCHING PANEL ON SCREEN? (HomeShelfState.continueWatchingShown)
-        fun continueWatchingShown(): Boolean = shelves.continueWatchingShown(entry)
 
 
 
@@ -282,300 +238,47 @@ internal fun HomeScreen(
             )
 
 
-            // ====================================================================================> Trailer Section (extracted)
-            CarouselTickProvider(carouselClock) {
-                if (entry.startContent) Box(
-                    modifier = Modifier
-                        .offset(y = (-18).dp)
-                        .focusRequester(focusMap.trailerFrameFocusRequester)
-                        .onFocusChanged { if (it.hasFocus) sidebar.lastFocusedTarget = SidebarReturnTarget.TRAILER }
-                        .focusProperties {
-                            right = focusMap.trendingFrameFocusRequester
-                            down = focusMap.requesterFor(neighborOf(tabs.selectedTab))
-                            left = focusMap.sidebarFocusRequester
-                        }
-                        .onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown) {
-                                when (event.key) {
-                                    Key.DirectionLeft -> {
-                                        if (trailerSectionState !is TrailerFrameState.Selected) {
-                                            BlueHiveApplication.playHoverSound()
-                                            sidebar.openSidebar(SidebarReturnTarget.TRAILER)
-                                            true
-                                        } else {
-                                            false  // Let carousel handle it
-                                        }
-                                    }
-
-                                    else -> false
-                                }
-                            } else false
-                        }
-                ) {
-                    HomeScreenTrailerSectionCompose(
-                        // Pause if sidebar is focused OR if the home activity is not the
-                        // foreground activity (user is in catalog, search, details, etc.)
-                        isPaused = sidebar.isSidebarFocused || !isHomeInForeground,
-                        onStateChanged = { newState ->
-                            trailerSectionState = newState
-                        }
-                    )
-                }
-
-                // ====================================================================================>
-
-                // ====================================================================================> trending Section (extracted)
-                if (entry.startContent) Box(
-                    modifier = Modifier
-                        // 458 dp before the panel narrowed by 35 dp to 16:9
-                        // (2026-10-19); moved right by the same 35 so its right
-                        // edge still lines up with Continue Watching below.
-                        .offset(x = 493.dp, y = (-3.6).dp)
-                        .focusRequester(focusMap.trendingFrameFocusRequester)
-                        .onFocusChanged { if (it.hasFocus) sidebar.lastFocusedTarget = SidebarReturnTarget.TRENDING }
-                        .focusProperties {
-                            left = focusMap.trailerFrameFocusRequester
-                            // Straight down to the shelf when there is no panel --
-                            // the first shelf then runs underneath this frame.
-                            down = if (continueWatchingShown()) focusMap.continueWatchingRequester
-                                   else focusMap.tvLazyRowsSingleShelfFocusRequester
-                        }
-                        .onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown) {
-                                when (event.key) {
-                                    Key.DirectionLeft -> {
-                                        if (trendingState !is TrendingFrameState.Selected) {
-                                            BlueHiveApplication.playHoverSound()
-                                            focusMap.trailerFrameFocusRequester.requestFocus()
-                                            true
-                                        } else {
-                                            false
-                                        }
-                                    }
-
-                                    else -> false
-                                }
-                            } else false
-                        }
-                ) {
-                    HomeScreenTrendingCompose(
-                        trendType = "day",
-                        isPaused = sidebar.isSidebarFocused || !isHomeInForeground,
-                        onItemClick = onMediaClick,
-                        onStateChanged = { newState -> trendingState = newState }
-                    )
-                }
-            }
-            // ====================================================================================>
-
-
-            // ====================================================================================> Continue Watching Section (extracted)
-            // ✅ Shows Continue Watching for ALL media types on first shelf
-            if (entry.startContent && shelves.isOnFirstShelf) {
-                Box(
-                    modifier = Modifier
-                        .offset(x = 690.dp, y = 290.dp)
-                        .focusRequester(focusMap.continueWatchingRequester)
-                        .onFocusChanged { if (it.hasFocus) sidebar.lastFocusedTarget = SidebarReturnTarget.CONTINUE_WATCHING }
-                        .focusProperties {
-                            up   = focusMap.trendingFrameFocusRequester
-                            left = focusMap.animeToggleButtonFocusRequester
-                        }
-                ) {
-                    HomeScreenContinueWatchingCompose(
-                        profileId = profileId,
-                        focusRequester = focusMap.continueWatchingRequester,
-                        upNeighbor = focusMap.trendingFrameFocusRequester,
-                        // DOWN SKIPS THE FIRST ROW ON PURPOSE.
-                        //
-                        // This panel sits BESIDE row 0, not above it -- the row
-                        // runs underneath it and stops short of it. So "down"
-                        // onto row 0 would be a sideways move dressed as a
-                        // downward one, landing on a row that is already on
-                        // screen and already reachable with LEFT. Row 1 is the
-                        // first thing genuinely below the panel.
-                        //
-                        // Deliberately ONE WAY. Coming back UP from row 1 goes
-                        // to row 0, not here, because that is the stack's own
-                        // vertical order and the panel is not part of it.
-                        //
-                        // The sound is made here because nothing downstream
-                        // will: requestNavigation is called directly rather
-                        // than through the stack's key handler, which is where
-                        // its own DOWN sound lives.
-                        onNavigateDown = {
-                            BlueHiveApplication.playHoverSound()
-                            shelves.enterShelfAt = 1
-                        },
-                        onNavigateLeft = {
-                            focusMap.tvLazyRowsSingleShelfFocusRequester.requestFocus()
-                        },
-                        // Composed even when the profile has no history, so it keeps
-                        // loading (and refreshing on every return here) -- it just
-                        // draws nothing, and this is how the screen finds out.
-                        onHistoryKnown = { hasHistory -> shelves.continueWatchingHasHistory = hasHistory },
-                        knownHasHistory = shelves.continueWatchingHasHistory,
-                    )
-                }
-            }
-            // ====================================================================================>
-
-
-
-
-
-
-
-            // ====================================================================================> Radio Buttons
-
-            // Radio-tab parking node — invisible, 1dp. Clicking a radio button
-            // makes that button unfocusable (selected → isFocusable=false),
-            // leaving a one-frame gap before pendingFocusRequester re-homes
-            // focus. Without a holder, Compose fills that gap by flashing focus
-            // onto the trailer section. We park focus here synchronously the
-            // instant a tab is clicked, so focus never escapes the radio area.
-            Box(
-                modifier = Modifier
-                    .size(1.dp)
-                    .graphicsLayer { alpha = 0f }
-                    .focusRequester(focusMap.radioParkingRequester)
-                    .focusProperties { canFocus = tabs.radioParkingEnabled }
-                    .onPreviewKeyEvent { event ->
-                        // While parked, swallow keys so a stray press during the
-                        // swap frame can't move focus before the target lands.
-                        tabs.radioParkingEnabled && event.type == KeyEventType.KeyDown
-                    }
-                    .focusable()
+            // ── Trailer and trending frames (HomeTopFrames.kt) ──
+            HomeTopFrames(
+                entry              = entry,
+                sidebar            = sidebar,
+                shelves            = shelves,
+                tabs               = tabs,
+                focusMap           = focusMap,
+                carouselClock      = carouselClock,
+                isHomeInForeground = isHomeInForeground,
+                onMediaClick       = onMediaClick,
             )
 
-            MoviesRadioButton(
-                fontFamily = passionFont,
-                focusRequester = focusMap.moviesToggleButtonFocusRequester,
-                selected = (tabs.selectedTab == CatalogTab.MOVIES),
-                downNeighbor = focusMap.tvLazyRowsSingleShelfFocusRequester,
-                upNeighbor = focusMap.trailerFrameFocusRequester,
-                onOpenSidebar = { sidebar.openSidebar(SidebarReturnTarget.MOVIES) },
-                onFocused = { sidebar.lastFocusedTarget = SidebarReturnTarget.MOVIES },
-                onNavSound = radioNavSound,
-                rightNeighbor = if (tabs.selectedTab == CatalogTab.TV_SHOWS) {
-                    focusMap.animeToggleButtonFocusRequester
-                } else {
-                    focusMap.tvShowsToggleButtonFocusRequester
-                },
-                onSelect = {
-                    tabs.radioParkingEnabled = true
-                    focusMap.radioParkingRequester.requestFocus()
-                    tabs.selectedTab = CatalogTab.MOVIES
-                    Log.d("FOCUS_DEBUG", "🔄 Tab switched to: ${tabs.selectedTab}")
-                    tabs.pendingFocusRequester = focusMap.tvShowsToggleButtonFocusRequester
-                }
+            // ── Continue Watching (HomeContinueWatchingPanel.kt) ──
+            HomeContinueWatchingPanel(
+                entry     = entry,
+                sidebar   = sidebar,
+                shelves   = shelves,
+                focusMap  = focusMap,
+                profileId = profileId,
             )
 
-            TvShowsRadioButton(
-                fontFamily = passionFont,
-                focusRequester = focusMap.tvShowsToggleButtonFocusRequester,
-                selected = (tabs.selectedTab == CatalogTab.TV_SHOWS),
-                upNeighbor = focusMap.trailerFrameFocusRequester,
-                downNeighbor = focusMap.tvLazyRowsSingleShelfFocusRequester,
-                shouldOpenSidebar = (tabs.selectedTab == CatalogTab.MOVIES),
-                onOpenSidebar = {
-                    sidebar.openSidebar(SidebarReturnTarget.TV_SHOWS)
-                },
-                onFocused = { sidebar.lastFocusedTarget = SidebarReturnTarget.TV_SHOWS },
-                onNavSound = radioNavSound,
-                leftNeighbor = focusMap.moviesToggleButtonFocusRequester,
-                // When ANIME is the selected tab its radio button is toggled and
-                // unfocusable, so RIGHT from TV SHOWS must skip it and land on
-                // Continue Watching instead.
-                rightNeighbor = if (tabs.selectedTab == CatalogTab.ANIME) {
-                    // With no panel there is nothing to the right; stay put.
-                    if (continueWatchingShown()) focusMap.continueWatchingRequester else FocusRequester.Cancel
-                } else {
-                    focusMap.animeToggleButtonFocusRequester
-                },
-                onSelect = {
-                    tabs.radioParkingEnabled = true
-                    focusMap.radioParkingRequester.requestFocus()
-                    tabs.selectedTab = CatalogTab.TV_SHOWS
-                    Log.d("FOCUS_DEBUG", "🔄 Tab switched to: ${tabs.selectedTab}")
-                    tabs.pendingFocusRequester = focusMap.animeToggleButtonFocusRequester
-                }
+            // ── Movies, TV Shows and Anime tabs (CatalogTabs.kt) ──
+            HomeCatalogTabs(
+                entry    = entry,
+                sidebar  = sidebar,
+                shelves  = shelves,
+                tabs     = tabs,
+                focusMap = focusMap,
             )
 
-            AnimeRadioButton(
-                fontFamily = passionFont,
-                focusRequester = focusMap.animeToggleButtonFocusRequester,
-                selected = (tabs.selectedTab == CatalogTab.ANIME),
-                upNeighbor = focusMap.trailerFrameFocusRequester,
-                downNeighbor = focusMap.tvLazyRowsSingleShelfFocusRequester,
-                onFocused = { sidebar.lastFocusedTarget = SidebarReturnTarget.ANIME },
-                onNavSound = radioNavSound,
-                leftNeighbor = if (tabs.selectedTab == CatalogTab.TV_SHOWS) {
-                    focusMap.moviesToggleButtonFocusRequester
-                } else {
-                    focusMap.tvShowsToggleButtonFocusRequester
-                },
-                // With no panel there is nothing to the right; stay put.
-                rightNeighbor = if (continueWatchingShown()) focusMap.continueWatchingRequester
-                                else FocusRequester.Cancel,
-                onSelect = {
-                    tabs.radioParkingEnabled = true
-                    focusMap.radioParkingRequester.requestFocus()
-                    tabs.selectedTab = CatalogTab.ANIME
-                    tabs.pendingFocusRequester = focusMap.moviesToggleButtonFocusRequester
-                }
+            // ── The shelves (HomeShelves.kt) ──
+            HomeShelves(
+                entry        = entry,
+                sidebar      = sidebar,
+                shelves      = shelves,
+                tabs         = tabs,
+                focusMap     = focusMap,
+                onMediaClick = onMediaClick,
+                profileId    = profileId,
             )
 
-
-            // ====================================================================================>
-
-
-            // ====================================================================================> Tv Lazy Column implementation (TV is class type not media type)
-
-            // The shelves: ONE ShelfStack, inside key(selectedTab), which disposes
-            // and creates it on a tab switch exactly as the three if blocks it
-            // replaced did. What differs by tab is in HomeShelfTab (HomeShelves.kt).
-            if (entry.startContent) key(tabs.selectedTab) {
-                val shelf = HomeShelfTab.of(tabs.selectedTab)
-                shelf.renderLog?.let { (tag, message) -> Log.d(tag, message) }
-                val backToTabsRequester = focusMap.requesterFor(neighborOf(tabs.selectedTab))
-
-                ShelfStack(
-                    mediaType = shelf.mediaType,
-                    // LEFT on the first card of any shelf opens the sidebar,
-                    // identical to BACK. lastFocusedTarget is what lets RIGHT
-                    // on the sidebar come back to this row and card.
-                    onExitLeft = { sidebar.openSidebar(sidebar.lastFocusedTarget) },
-                    modifier = Modifier
-                        .focusRequester(focusMap.tvLazyRowsSingleShelfFocusRequester)
-                        .offset(x = 90.dp, y = SHELF_STACK_Y)
-                        .width(880.dp)
-                        .onFocusChanged { focusState ->
-                            if (focusState.hasFocus) sidebar.lastFocusedTarget = shelf.returnTarget
-                            shelves.isShelfFocused = focusState.hasFocus
-                            shelf.focusLog?.let { Log.d("FOCUS_DEBUG", "$it ${focusState.hasFocus}") }
-                        },
-                    onMediaClick = onMediaClick,
-                    onNavigateBackToTabs = { backToTabsRequester.requestFocus() },
-                    onShelfChanged = { newShelf ->
-                        Log.d("HOME", "${shelf.shelfChangedLog} $newShelf")
-                    },
-                    showContinueWatching = shelves.isOnFirstShelf,
-                    onFirstShelfChanged = { isFirst ->
-                        shelves.isOnFirstShelf = isFirst
-                        Log.d("HOME", "${shelf.firstShelfLog} $isFirst")
-                    },
-                    profileId = profileId,
-                    // Only the Movies stack reports it; the others did not pass this.
-                    onFirstPageReady = { if (shelf.reportsFirstPage) entry.firstShelfDataReady = true },
-                    reserveContinueWatching = shelves.continueWatchingHasHistory != false,
-                    enterAtShelf = shelves.enterShelfAt,
-                    onEnterAtShelfHandled = { shelves.enterShelfAt = null },
-                    scrollToShelf = shelves.scrollShelfTo,
-                    onScrollToShelfHandled = { shelves.scrollShelfTo = null },
-                )
-            }
-            // ====================================================================================>
         }
 
 
@@ -592,105 +295,21 @@ internal fun HomeScreen(
         }
 
 
-        // ====================================================================================> SIDEBAR HERE
-        HomeScreenSidebarCompose(
-            focusRequester   = focusMap.sidebarFocusRequester,
-            canFocus         = sidebar.sidebarCanFocus,
+        // ── Sidebar (HomeSidebar.kt) ──
+        HomeSidebar(
+            sidebar          = sidebar,
+            focusMap         = focusMap,
+            context          = context,
+            profileId        = profileId,
             profileAvatarRes = profileAvatarRes,
-            onFocusChanged = { focused ->
-                sidebar.isSidebarFocused = focused
-            },
-            onExitToRight = {
-                BlueHiveApplication.coilImageLoader.memoryCache?.clear()
-                Log.d("CACHE", "🧹 Cleared Coil memory + disk caches on sidebar exit")
-
-                // ONE PRESS, ONE TICK. The sidebar has just played the tick for
-                // this RIGHT. Everything from here to the end of the restore
-                // below moves focus on its own, and a radio button announces
-                // every arrival -- so the press used to tick twice, ~100 ms
-                // apart (measured 2026-10-16). Muted until the restore lands;
-                // the cap only matters if that never happens.
-                BlueHiveApplication.muteHoverSounds(SIDEBAR_RETURN_MUTE_CAP_MS)
-
-                sidebar.sidebarParkingEnabled = true
-                sidebar.sidebarCanFocus = false
-                sidebar.requestSidebarReturnFocus = true
-            },
-            onProfileClick = {
-                openProfileScreen(context)
-            },
-            onSearchSubmit = { query ->
-                openSearchScreen(context, profileId, query)
-            },
-            onMediaCatalogClick = {
-                openMediaCatalogScreen(context, profileId)
-            },
-            onSettingsClick = {
-                Log.d("SIDEBAR", "Settings clicked")
-                context.startActivity(
-                    Intent(context, com.example.bluehive.settings.SettingsActivity::class.java)
-                )
-            },
-            onFavoritesClick = { openFavoritesScreen(context, profileId) },
-            onLiveTvClick = {
-                Log.d("SIDEBAR", "Live TV clicked")
-                openLiveTvScreen(context, profileId)
-            },
-            onChangelogClick = {
-                Log.d("SIDEBAR", "Changelog clicked")
-            },
-            onHistoryClick = { openHistoryScreen(context, profileId) },
         )
-        // ====================================================================================>
 
-        // ── Item 6: offline / retry banner ──────────────────────────────────────
-        // Toggling startContent off→on remounts every content child, which
-        // re-runs their fetch effects. That's our "reload" with zero child
-        // changes. The connectivity check is the failure signal because the
-        // repositories swallow errors and return empty lists.
-        val reloadContent: () -> Unit = {
-            retryScope.launch {
-                entry.startContent = false
-                kotlinx.coroutines.android.awaitFrame()
-                kotlinx.coroutines.android.awaitFrame()
-                entry.startContent = true
-                kotlinx.coroutines.android.awaitFrame()
-                focusMap.trailerFrameFocusRequester.requestFocus()
-            }
-            Unit
-        }
-
-        // Initial check: if we mounted offline, surface the banner immediately.
-        LaunchedEffect(Unit) {
-            if (!NetworkMonitor.isOnline(context)) showRetryBanner = true
-        }
-
-        // Auto-recovery: when the network returns on its own, hide the banner
-        // and reload. The callback fires on a binder thread, so hop to the
-        // composition's main-dispatcher scope before touching state.
-        DisposableEffect(Unit) {
-            val cb = NetworkMonitor.registerOnlineCallback(context) {
-                retryScope.launch {
-                    if (showRetryBanner) {
-                        showRetryBanner = false
-                        reloadContent()
-                    }
-                }
-            }
-            onDispose { NetworkMonitor.unregister(context, cb) }
-        }
-
-        if (showRetryBanner) {
-            RetryOverlay(
-                onRetry = {
-                    if (NetworkMonitor.isOnline(context)) {
-                        showRetryBanner = false
-                        reloadContent()
-                    }
-                    // Still offline → banner stays up, user can press again.
-                }
-            )
-        }
+        // ── Offline / retry banner (effects 12 and 13) (OfflineRetry.kt) ──
+        OfflineRetry(
+            entry    = entry,
+            focusMap = focusMap,
+            context  = context,
+        )
 
         // ── Profile-entry transition overlay ────────────────────────────────────
         // Topmost layer. Fades out once content is ready + min time elapsed.

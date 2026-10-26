@@ -18,6 +18,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.utilities.ModularButton
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.graphics.graphicsLayer
 
 
 /*
@@ -333,3 +338,127 @@ internal fun AnimeRadioButton(
     )
 }
 // =================================================================================> Radio buttons
+
+/**
+ * The tab row: the parking node and the Movies, TV Shows and Anime buttons.
+ *
+ * Moved here from HomeScreen in Stage H3 of the Favorites and Home redesign
+ * (docs/favorites-home-redesign-architecture.md); the code is the code it
+ * replaces.
+ */
+@Composable
+internal fun BoxScope.HomeCatalogTabs(
+    entry: HomeEntryTransition,
+    sidebar: HomeSidebarState,
+    shelves: HomeShelfState,
+    tabs: CatalogTabsState,
+    focusMap: HomeFocusMap,
+) {
+    val radioNavSound: () -> Unit = {
+        if (tabs.radioSoundArmed) BlueHiveApplication.playNavClickSound()
+        else tabs.radioSoundArmed = true
+    }
+
+    // ====================================================================================> Radio Buttons
+
+    // Radio-tab parking node — invisible, 1dp. Clicking a radio button
+    // makes that button unfocusable (selected → isFocusable=false),
+    // leaving a one-frame gap before pendingFocusRequester re-homes
+    // focus. Without a holder, Compose fills that gap by flashing focus
+    // onto the trailer section. We park focus here synchronously the
+    // instant a tab is clicked, so focus never escapes the radio area.
+    Box(
+        modifier = Modifier
+            .size(1.dp)
+            .graphicsLayer { alpha = 0f }
+            .focusRequester(focusMap.radioParkingRequester)
+            .focusProperties { canFocus = tabs.radioParkingEnabled }
+            .onPreviewKeyEvent { event ->
+                // While parked, swallow keys so a stray press during the
+                // swap frame can't move focus before the target lands.
+                tabs.radioParkingEnabled && event.type == KeyEventType.KeyDown
+            }
+            .focusable()
+    )
+
+    MoviesRadioButton(
+        fontFamily = passionFont,
+        focusRequester = focusMap.moviesToggleButtonFocusRequester,
+        selected = (tabs.selectedTab == CatalogTab.MOVIES),
+        downNeighbor = focusMap.tvLazyRowsSingleShelfFocusRequester,
+        upNeighbor = focusMap.trailerFrameFocusRequester,
+        onOpenSidebar = { sidebar.openSidebar(SidebarReturnTarget.MOVIES) },
+        onFocused = { sidebar.lastFocusedTarget = SidebarReturnTarget.MOVIES },
+        onNavSound = radioNavSound,
+        rightNeighbor = if (tabs.selectedTab == CatalogTab.TV_SHOWS) {
+            focusMap.animeToggleButtonFocusRequester
+        } else {
+            focusMap.tvShowsToggleButtonFocusRequester
+        },
+        onSelect = {
+            tabs.radioParkingEnabled = true
+            focusMap.radioParkingRequester.requestFocus()
+            tabs.selectedTab = CatalogTab.MOVIES
+            Log.d("FOCUS_DEBUG", "🔄 Tab switched to: ${tabs.selectedTab}")
+            tabs.pendingFocusRequester = focusMap.tvShowsToggleButtonFocusRequester
+        }
+    )
+
+    TvShowsRadioButton(
+        fontFamily = passionFont,
+        focusRequester = focusMap.tvShowsToggleButtonFocusRequester,
+        selected = (tabs.selectedTab == CatalogTab.TV_SHOWS),
+        upNeighbor = focusMap.trailerFrameFocusRequester,
+        downNeighbor = focusMap.tvLazyRowsSingleShelfFocusRequester,
+        shouldOpenSidebar = (tabs.selectedTab == CatalogTab.MOVIES),
+        onOpenSidebar = {
+            sidebar.openSidebar(SidebarReturnTarget.TV_SHOWS)
+        },
+        onFocused = { sidebar.lastFocusedTarget = SidebarReturnTarget.TV_SHOWS },
+        onNavSound = radioNavSound,
+        leftNeighbor = focusMap.moviesToggleButtonFocusRequester,
+        // When ANIME is the selected tab its radio button is toggled and
+        // unfocusable, so RIGHT from TV SHOWS must skip it and land on
+        // Continue Watching instead.
+        rightNeighbor = if (tabs.selectedTab == CatalogTab.ANIME) {
+            // With no panel there is nothing to the right; stay put.
+            if (shelves.continueWatchingShown(entry)) focusMap.continueWatchingRequester else FocusRequester.Cancel
+        } else {
+            focusMap.animeToggleButtonFocusRequester
+        },
+        onSelect = {
+            tabs.radioParkingEnabled = true
+            focusMap.radioParkingRequester.requestFocus()
+            tabs.selectedTab = CatalogTab.TV_SHOWS
+            Log.d("FOCUS_DEBUG", "🔄 Tab switched to: ${tabs.selectedTab}")
+            tabs.pendingFocusRequester = focusMap.animeToggleButtonFocusRequester
+        }
+    )
+
+    AnimeRadioButton(
+        fontFamily = passionFont,
+        focusRequester = focusMap.animeToggleButtonFocusRequester,
+        selected = (tabs.selectedTab == CatalogTab.ANIME),
+        upNeighbor = focusMap.trailerFrameFocusRequester,
+        downNeighbor = focusMap.tvLazyRowsSingleShelfFocusRequester,
+        onFocused = { sidebar.lastFocusedTarget = SidebarReturnTarget.ANIME },
+        onNavSound = radioNavSound,
+        leftNeighbor = if (tabs.selectedTab == CatalogTab.TV_SHOWS) {
+            focusMap.moviesToggleButtonFocusRequester
+        } else {
+            focusMap.tvShowsToggleButtonFocusRequester
+        },
+        // With no panel there is nothing to the right; stay put.
+        rightNeighbor = if (shelves.continueWatchingShown(entry)) focusMap.continueWatchingRequester
+                        else FocusRequester.Cancel,
+        onSelect = {
+            tabs.radioParkingEnabled = true
+            focusMap.radioParkingRequester.requestFocus()
+            tabs.selectedTab = CatalogTab.ANIME
+            tabs.pendingFocusRequester = focusMap.moviesToggleButtonFocusRequester
+        }
+    )
+
+
+    // ====================================================================================>
+}
