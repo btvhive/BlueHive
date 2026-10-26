@@ -7,7 +7,8 @@
 - F3 is done (v409, verified): the seven section composables. `FavoritesScreen` is down to 1,131 units / 45 registers, under the budget and off the ratchet.
 - Round A is open: v409 is on the onn box since 18:50 UTC, for the Favorites checklist (§11). Nothing is published (ground rule 7).
 - H1 is done (v410, started at your word while Round A runs; not installed): the home screen is in `home/`, the carousel tick no longer re-runs it, and the three shelf calls are one. `HomeScreen` is down to 4,153 units / 99 registers. The on-device check of v410 is still to run.
-- Next is H2.
+- H2 is done (v412, verified on the onn box; not installed): five state holders, and effects 2 to 11 as three child composables. `HomeScreen` is down to 3,012 units / 67 registers. Effects 12 and 13 (offline) move with the OfflineRetry section in H3.
+- Next is H3.
 
 The same treatment the details screens got (`docs/details-redesign-architecture.md`): split the app's last two giant composables into folders of small, focused files, with no change in behaviour, and lock the result in with the build gates.
 

@@ -507,8 +507,8 @@ val checkMethodSizes by tasks.registering {
         // off this list.
         val shrinking = mapOf(
             // HomeScreenComposeContent until H1 moved it into home/ as HomeScreen;
-            // 4,153 / 99 at H1 (v410).
-            "HomeScreenKt.HomeScreen" to (4_190 to 101),
+            // 4,153 / 99 at H1 (v410), 3,012 / 67 at H2 (v412).
+            "HomeScreenKt.HomeScreen" to (3_040 to 69),
         )
 
         val apkFile = apk.get().asFile

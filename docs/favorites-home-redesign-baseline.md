@@ -112,6 +112,7 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 | F2 | v408 | 3,837 units, 95 registers (ceiling now 3,880 / 97) | 5,030 units, 118 registers | v408: 12,733 classes, 0 failures (checked at 18:33 UTC, after the build: the box was in use at build time) |
 | F3 | v409 | 1,131 units, 45 registers: under the budget, off the ratchet | 5,030 units, 118 registers | v409: 12,737 classes, 0 failures (18:49 UTC), then installed on the onn box for Round A (18:50 UTC) |
 | H1 | v410 | 1,131 units, 45 registers | 4,153 units, 99 registers (ceiling now 4,190 / 101) | not yet: the box is in Round A |
+| H2 | v412 | 1,131 units, 45 registers | 3,012 units, 67 registers (ceiling now 3,040 / 69) | v412: 12,748 classes, 0 failures (00:47 UTC 2026-10-26); not installed |
 
 ### F3 (v409)
 
@@ -180,4 +181,10 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
   - `checkMethodSizes` now covers `home/`. `HomeScreen` keeps a ratchet until H3.
   - `checkDetailsBoundaries`: outside `home/`, only `HomeScreenCompose.kt` may use it, and only `HomeScreen`. Proven to fail with a throwaway file (it flagged `HomeScreen` and `HomeShelfTab`, and let `homeScreenSectionRules` through).
 - Seen in the report of methods outside the budget: `ProfileManageScreen` at 5,009 units (reported only; not part of this plan).
+
+### H2 (v412)
+
+- **HomeScreen: 4,153 → 3,012 units, 99 → 67 registers.** Its 31 pieces of state are now five holders: `HomeEntryTransition`, `HomeSidebarState`, `HomeShelfState`, `CatalogTabsState` and `HomeFocusMap`. Their properties keep the old variable names, so every read is the old read with a holder in front.
+- **Effects:** 2 to 6 are `HomeFocusEffects` (440 units), 7 to 10 are `HomeEntryEffects` (322), and 11 is `SidebarReturnEffect` (251), called where the effects were. Effect 1 is still `CarouselClockTicker`; 12 and 13 stay in the screen until H3.
+- **Gates:** JVM unit tests 233 pass, 5 new in `HomeStateTest` (tab neighbours, when Continue Watching counts as shown, start values, `openSidebar`). `checkMethodSizes` and `checkDetailsBoundaries` pass.
 
