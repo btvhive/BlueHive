@@ -100,11 +100,13 @@ fun DetailsScaffold(
     playArea: @Composable BoxScope.() -> Unit,
     overlays: @Composable BoxScope.() -> Unit,
     peek: DetailsPeekState? = null,
+    /** On the whole page: the movie screen blurs it behind its search keyboard. */
+    modifier: Modifier = Modifier,
 ) {
     val dongleRegular = AppTypography.dongleRegular
 
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier.fillMaxSize().then(modifier)
     ) {
         if (peek == null) {
             DetailsPage(

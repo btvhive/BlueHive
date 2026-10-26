@@ -13,7 +13,14 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.repository.RecommendationsRepository
+import com.example.bluehive.searchBarComponent.HoneycombKeyboardPopup
+import com.example.bluehive.searchBarComponent.hiveBackdropBlur
 import com.example.bluehive.searchBarComponent.openSearchScreen
+import android.os.Build
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -127,6 +134,9 @@ fun MovieDetailsScreen(
     val peek = remember(args.startInExtras) { DetailsPeekState(startFocused = args.startInExtras) }
     // The play button Down entered the row from, for Up to return to.
     var rowEnteredFrom by remember { mutableStateOf<FocusRequester?>(null) }
+
+    // The Search button's keyboard, over this page (see MovieSearchKeyboard).
+    var showSearchKeyboard by remember { mutableStateOf(false) }
 
     var blockHeaderInitialFocus by remember(args.startInExtras) { mutableStateOf(args.startInExtras) }
 
@@ -430,10 +440,11 @@ fun MovieDetailsScreen(
             favoriteFocusRequester = favoriteFocusRequester,
             extrasFocusRequester   = extrasFocusRequester,
             trailerFocusRequester  = trailerFocusRequester,
-            // Search: the trailer stops, as it does when a recommendation opens.
+            // Search: the keyboard opens over this page; the trailer stops, as
+            // it does when a recommendation opens.
             onSearch               = {
                 trailer.stop()
-                openSearchScreen(context, favoriteProfileId)
+                showSearchKeyboard = true
             },
         ),
         releaseTrailerOnLeave = false,
@@ -584,11 +595,54 @@ fun MovieDetailsScreen(
 
             // The trailer could not be loaded -- see TrailerFailedNotice.
             TrailerFailedNotice(trailer, dongleRegular)
+
+            MovieSearchKeyboard(
+                show      = showSearchKeyboard,
+                onSearch  = { query ->
+                    showSearchKeyboard = false
+                    openSearchScreen(context, favoriteProfileId, query)
+                },
+                onDismiss = { showSearchKeyboard = false },
+            )
         },
         peek = peek,
+        modifier = Modifier.hiveBackdropBlur(showSearchKeyboard),
     )
 }   // ← MovieDetailsScreen closes here
 
+
+/**
+ * The search keyboard over the movie page, as home and the media catalog
+ * show it: a pop-up window, so the page keeps its state and focus. The page
+ * behind blurs on API 31+ (the onn box, hiveBackdropBlur on the scaffold);
+ * older boxes (Fire TV, no RenderEffect) get the dark scrim home puts behind
+ * its sidebar, faded in. A search opens the search page; BACK closes it.
+ */
+@Composable
+private fun BoxScope.MovieSearchKeyboard(
+    show: Boolean,
+    onSearch: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        val dim by animateFloatAsState(
+            targetValue = if (show) 1f else 0f,
+            animationSpec = tween(durationMillis = 200),
+            label = "searchDim",
+        )
+        if (dim > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = dim }
+                    .background(overlayScrimColor())
+            )
+        }
+    }
+    if (show) {
+        HoneycombKeyboardPopup(onSearch = onSearch, onDismiss = onDismiss)
+    }
+}
 
 @Composable
 fun MoviesStreamerButton(
