@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.media3.common.util.UnstableApi
 import com.example.bluehive.details.shared.state.ExtrasState
@@ -188,6 +189,9 @@ private fun BoxScope.DetailsPage(
             // heavy Passion One and Inter SemiBold (the user's calls, 2026-10-26).
             fontFamily = if (peek != null) AppTypography.interBold else AppTypography.passionRegular,
             labelSize = if (peek != null) PEEK_HEADER_LABEL_SP else 12f,
+            // A little heavier than the Inter Bold file: Android's synthetic
+            // bold (the user's call, 2026-10-26).
+            labelWeight = if (peek != null) FontWeight.ExtraBold else null,
             pressTiming = header.pressTiming,
             enableFocus = header.enableFocus,
             favoriteFocusRequester = header.favoriteFocusRequester,

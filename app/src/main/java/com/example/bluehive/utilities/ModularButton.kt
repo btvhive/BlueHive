@@ -33,6 +33,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -349,6 +350,13 @@ data class ModularButtonTextConfig(
     val toggledText: String? = null,
     val fontSize: Float = 12f,
     val offsetX: Dp = 0.dp,
+
+    /**
+     * The label's weight; null draws the font file as it is. Asking for a
+     * weight heavier than the file has makes Android thicken it (synthetic
+     * bold) -- how the movie page's Inter Bold labels get a little heavier.
+     */
+    val fontWeight: FontWeight? = null,
 
     /**
      * Draw this drawable instead of [text].
@@ -796,6 +804,7 @@ fun ModularButton(
                         color = labelColor,
                         fontSize = textConfig.fontSize.sp,
                         fontFamily = fontFamily,
+                        fontWeight = textConfig.fontWeight,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .offset(y = textYOffset, x = textConfig.offsetX)
