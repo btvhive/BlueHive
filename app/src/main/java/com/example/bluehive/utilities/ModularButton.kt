@@ -34,6 +34,10 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -357,6 +361,13 @@ data class ModularButtonTextConfig(
      * bold) -- how the movie page's Inter Bold labels get a little heavier.
      */
     val fontWeight: FontWeight? = null,
+
+    /**
+     * Thickens the label past what any weight can: the same text drawn first
+     * as an outline this wide, in the label's colour, under the filled text.
+     * Null draws the text alone, as every button did before.
+     */
+    val strokeWidth: Dp? = null,
 
     /**
      * Draw this drawable instead of [text].
@@ -799,17 +810,48 @@ fun ModularButton(
                             .offset(y = textYOffset, x = textConfig.offsetX)
                     )
                 } else {
-                    Text(
-                        text = labelText,
-                        color = labelColor,
-                        fontSize = textConfig.fontSize.sp,
-                        fontFamily = fontFamily,
-                        fontWeight = textConfig.fontWeight,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .offset(y = textYOffset, x = textConfig.offsetX)
-                            .semantics { contentDescription = labelText }
-                    )
+                    val stroke = textConfig.strokeWidth
+                    if (stroke == null) {
+                        Text(
+                            text = labelText,
+                            color = labelColor,
+                            fontSize = textConfig.fontSize.sp,
+                            fontFamily = fontFamily,
+                            fontWeight = textConfig.fontWeight,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier
+                                .offset(y = textYOffset, x = textConfig.offsetX)
+                                .semantics { contentDescription = labelText }
+                        )
+                    } else {
+                        // The outline under the fill, in one box so both sit
+                        // exactly where the text alone sat.
+                        val strokePx = with(LocalDensity.current) { stroke.toPx() }
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .offset(y = textYOffset, x = textConfig.offsetX)
+                                .semantics { contentDescription = labelText }
+                        ) {
+                            Text(
+                                text = labelText,
+                                color = labelColor,
+                                fontSize = textConfig.fontSize.sp,
+                                fontFamily = fontFamily,
+                                fontWeight = textConfig.fontWeight,
+                                textAlign = TextAlign.Center,
+                                style = TextStyle(drawStyle = Stroke(width = strokePx, join = StrokeJoin.Round)),
+                            )
+                            Text(
+                                text = labelText,
+                                color = labelColor,
+                                fontSize = textConfig.fontSize.sp,
+                                fontFamily = fontFamily,
+                                fontWeight = textConfig.fontWeight,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -192,6 +192,8 @@ private fun BoxScope.DetailsPage(
             // A little heavier than the Inter Bold file: Android's synthetic
             // bold (the user's call, 2026-10-26).
             labelWeight = if (peek != null) FontWeight.ExtraBold else null,
+            // ...and thicker again with a same-colour outline (user, 2026-10-26).
+            labelStroke = if (peek != null) PEEK_HEADER_LABEL_STROKE else null,
             pressTiming = header.pressTiming,
             enableFocus = header.enableFocus,
             favoriteFocusRequester = header.favoriteFocusRequester,

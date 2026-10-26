@@ -91,6 +91,8 @@ fun BoxScope.DetailsHeaderButtons(
     labelSize: Float = 12f,
     /** The labels' weight; null draws the font as it is. See ModularButtonTextConfig.fontWeight. */
     labelWeight: FontWeight? = null,
+    /** The labels' extra outline; null draws none. See ModularButtonTextConfig.strokeWidth. */
+    labelStroke: Dp? = null,
 ) {
     // Peek layout: Rewind at the metadata's left edge, then the trailer
     // button and Forward, PEEK_TRAILER_GAP apart.
@@ -110,6 +112,7 @@ fun BoxScope.DetailsHeaderButtons(
         goldAndBronze = !showExtras,
         labelSize = labelSize,
         labelWeight = labelWeight,
+        labelStroke = labelStroke,
         onToggle = { favorite.toggle() }
     )
 
@@ -144,6 +147,7 @@ fun BoxScope.DetailsHeaderButtons(
         glowWidth = trailerGlowWidth,
         labelSize = labelSize,
         labelWeight = labelWeight,
+        labelStroke = labelStroke,
         enableFocus = enableFocus,
         onClick = { trailer.onButtonPressed() }
     )
@@ -203,6 +207,7 @@ private fun DetailsFavoriteButton(
     goldAndBronze: Boolean = false,
     labelSize: Float = 12f,
     labelWeight: FontWeight? = null,
+    labelStroke: Dp? = null,
     onToggle: () -> Unit = {}
 ) {
     ModularButton(
@@ -211,6 +216,7 @@ private fun DetailsFavoriteButton(
                 text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites",
                 fontSize = labelSize,
                 fontWeight = labelWeight,
+                strokeWidth = labelStroke,
             )
         } else {
             ModularButtonTextConfig(
@@ -218,6 +224,7 @@ private fun DetailsFavoriteButton(
                 toggledText = "- Remove from Favorites",
                 fontSize = labelSize,
                 fontWeight = labelWeight,
+                strokeWidth = labelStroke,
             )
         },
         isToggleable = !goldAndBronze,
@@ -438,6 +445,7 @@ private fun DetailsTrailerButton(
     glowWidth: Dp = width + 16.5.dp,
     labelSize: Float = 12f,
     labelWeight: FontWeight? = null,
+    labelStroke: Dp? = null,
     enableFocus: Boolean = true,
     onClick: () -> Unit = {}
 ) {
@@ -447,6 +455,7 @@ private fun DetailsTrailerButton(
             toggledText = if (isPlaying) "Play Trailer" else "Pause Trailer",
             fontSize = labelSize,
             fontWeight = labelWeight,
+            strokeWidth = labelStroke,
         ),
         isToggleable = false,
         fontFamily = fontFamily,
