@@ -184,10 +184,7 @@ private fun BoxScope.DetailsPage(
         // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:
         // see DetailsHeaderButtons. Each press runs a state holder's method.
         DetailsHeaderButtons(
-            // Passion One on both screens; the peek layout's labels run smaller
-            // (10 sp, not 12). Inter was tried and dropped (the user's calls, 2026-10-26).
             fontFamily = AppTypography.passionRegular,
-            labelSize = if (peek != null) PEEK_HEADER_LABEL_SP else 12f,
             pressTiming = header.pressTiming,
             enableFocus = header.enableFocus,
             favoriteFocusRequester = header.favoriteFocusRequester,
