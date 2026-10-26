@@ -113,7 +113,7 @@ Every press draws two frames, and one of them is a slow UI-thread frame on both 
 | F3 | v409 | 1,131 units, 45 registers: under the budget, off the ratchet | 5,030 units, 118 registers | v409: 12,737 classes, 0 failures (18:49 UTC), then installed on the onn box for Round A (18:50 UTC) |
 | H1 | v410 | 1,131 units, 45 registers | 4,153 units, 99 registers (ceiling now 4,190 / 101) | not yet: the box is in Round A |
 | H2 | v412 | 1,131 units, 45 registers | 3,012 units, 67 registers (ceiling now 3,040 / 69) | v412: 12,748 classes, 0 failures (00:47 UTC 2026-10-26); not installed |
-| H3 | v413 | 1,131 units, 45 registers | 1,076 units, 34 registers: under the budget, off the ratchet | v413: 12,749 classes, 0 failures (00:54 UTC 2026-10-26); not installed |
+| H3 | v413 | 1,131 units, 45 registers | 1,076 units, 34 registers: under the budget, off the ratchet | v413: 12,749 classes, 0 failures (00:54 UTC 2026-10-26); installed on the Fire Stick (the test device) for Round B, 00:57 UTC |
 
 ### F3 (v409)
 
