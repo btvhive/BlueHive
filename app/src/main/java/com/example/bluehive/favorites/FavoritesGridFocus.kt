@@ -85,6 +85,15 @@ internal class FavoritesGridFocus(
         return requesterPool
     }
 
+    /**
+     * Focus card [index] through the latest pool, without scrolling. For a
+     * restore after the list has grown: the pool a click captured belongs to
+     * the old size and is attached to nothing (§9 #7).
+     */
+    fun requestCardFocus(index: Int) {
+        requesterPool.getOrNull(index)?.requestFocus()
+    }
+
     // ── focusGridItem — mirrors TvWideLazyRow.focusAndScrollTo ───────────────
     fun focusGridItem(index: Int, scroll: Boolean = true) {
         if (index !in filter.filtered.indices) return

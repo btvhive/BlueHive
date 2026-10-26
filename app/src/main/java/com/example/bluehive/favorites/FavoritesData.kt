@@ -33,6 +33,25 @@ internal class FavoritesData {
     /** Removed in remove mode, not committed yet. */
     val removed = mutableStateListOf<FavoriteEntry>()
 
+    /** Pressed in remove mode, still in the 150 ms before it leaves the grid (by favoriteId). */
+    private val removing = HashSet<Int>()
+
+    /**
+     * An OK press in remove mode on [entry]: true if this press removes it,
+     * false if it is already on its way out. Two presses inside the 150 ms
+     * used to record a card twice, so Accept toggled it back into the
+     * favourites and Undo put two cards with one key in the grid (§9 #8).
+     */
+    fun startRemoval(entry: FavoriteEntry): Boolean =
+        entry !in removed && removing.add(entry.favoriteId)
+
+    /** The card leaves the grid and joins [removed]. */
+    fun completeRemoval(entry: FavoriteEntry) {
+        removing.remove(entry.favoriteId)
+        entries.remove(entry)
+        removed.add(entry)
+    }
+
     /** "Exit Remove Mode" shows: asked for, or every card has been removed. */
     val showExitRemoveOverlay: Boolean by derivedStateOf {
         showDeleteConfirm || (removeMode && removed.isNotEmpty() && entries.isEmpty())

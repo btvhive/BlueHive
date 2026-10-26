@@ -179,7 +179,9 @@ internal fun BoxScope.RemoveConfirmOverlay(
                                 focus.focusedGridIndex = target
                                 focus.gridState.scrollToItem(target)
                                 kotlinx.coroutines.android.awaitFrame()
-                                gridFocusRequesters.getOrNull(target)?.requestFocus()
+                                // The undone cards made the list longer, so the
+                                // grid has new requesters by now (§9 #7).
+                                focus.requestCardFocus(target)
                             }
                             data.showDeleteConfirm = false
                         }

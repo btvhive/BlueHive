@@ -229,6 +229,8 @@ internal fun FavoriteCard(
                         Key.NumPadEnter -> {
                             BlueHiveApplication.playClickSound()
                             if (data.removeMode) {
+                                // A second OK while this card is leaving does nothing.
+                                if (!data.startRemoval(entry)) return@onKeyEvent true
                                 vanishController.vanish()
                                 coroutineScope.launch {
                                     delay(150)
@@ -248,8 +250,7 @@ internal fun FavoriteCard(
                                         focus.focusedGridIndex = if (nextIdx > removeIdx) removeIdx else nextIdx
                                     }
                                     kotlinx.coroutines.android.awaitFrame()
-                                    data.entries.remove(entry)
-                                    data.removed.add(entry)
+                                    data.completeRemoval(entry)
                                 }
                             } else {
                                 // Animate, then open — see TitleCardPress.

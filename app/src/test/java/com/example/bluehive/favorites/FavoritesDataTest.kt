@@ -27,6 +27,44 @@ class FavoritesDataTest {
     }
 
     @Test
+    fun `a second OK on a card that is leaving does nothing (9 #8)`() {
+        val data = FavoritesData()
+        data.entries.addAll(listOf(fav(1), fav(2)))
+        assertTrue(data.startRemoval(fav(1)))
+        assertFalse(data.startRemoval(fav(1)))
+        data.completeRemoval(fav(1))
+        assertFalse(data.startRemoval(fav(1)))
+        assertEquals(listOf(2), data.entries.map { it.favoriteId })
+        assertEquals(listOf(1), data.removed.map { it.favoriteId })
+    }
+
+    @Test
+    fun `another card can be removed while one is leaving`() {
+        val data = FavoritesData()
+        data.entries.addAll(listOf(fav(1), fav(2), fav(3)))
+        assertTrue(data.startRemoval(fav(1)))
+        assertTrue(data.startRemoval(fav(2)))
+        data.completeRemoval(fav(1))
+        data.completeRemoval(fav(2))
+        assertEquals(listOf(3), data.entries.map { it.favoriteId })
+        assertEquals(listOf(1, 2), data.removed.map { it.favoriteId })
+    }
+
+    @Test
+    fun `after undo a card can be removed again, once`() {
+        val data = FavoritesData()
+        data.entries.addAll(listOf(fav(1), fav(2)))
+        data.startRemoval(fav(1))
+        data.completeRemoval(fav(1))
+        data.undoRemovals()
+        assertTrue(data.startRemoval(fav(1)))
+        assertFalse(data.startRemoval(fav(1)))
+        data.completeRemoval(fav(1))
+        assertEquals(listOf(2), data.entries.map { it.favoriteId })
+        assertEquals(listOf(1), data.removed.map { it.favoriteId })
+    }
+
+    @Test
     fun `undo puts the removed titles back at the end, in the order removed`() {
         val data = FavoritesData()
         data.entries.addAll(listOf(fav(1), fav(2), fav(3), fav(4)))
