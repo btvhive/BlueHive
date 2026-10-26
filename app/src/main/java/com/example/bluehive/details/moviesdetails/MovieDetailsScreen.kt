@@ -419,6 +419,12 @@ fun MovieDetailsScreen(
 
 
 
+    // The metadata lines this title has, stacked with no gaps; the genres line
+    // follows the last one -- see MovieInfoLabels.
+    val infoRows = remember(displayRevenue, displayBudget, args.releaseDate, args.originalLanguage) {
+        movieInfoRows(displayRevenue, displayBudget, args.releaseDate, args.originalLanguage)
+    }
+
     // Main container with background: the frame both screens share, with this
     // screen's labels, play area and overlays plugged in -- see DetailsScaffold.
     DetailsScaffold(
@@ -431,6 +437,7 @@ fun MovieDetailsScreen(
             voteAverage         = args.voteAverage,
             genres              = args.genres,
             overview            = args.overview,
+            genresTop           = movieGenresTop(infoRows.size),
         ),
         trailer = trailer,
         favorite = favorite,
@@ -464,11 +471,8 @@ fun MovieDetailsScreen(
         },
         labels = {
             MovieInfoLabels(
-                displayRevenue   = displayRevenue,
-                displayBudget    = displayBudget,
-                releaseDate      = args.releaseDate,
-                originalLanguage = args.originalLanguage,
-                dongleRegular    = dongleRegular,
+                rows          = infoRows,
+                dongleRegular = dongleRegular,
             )
         },
         playArea = {

@@ -17,7 +17,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import com.example.bluehive.details.shared.state.ExtrasState
 import com.example.bluehive.details.shared.state.FavoriteState
@@ -44,6 +46,11 @@ data class DetailsInfo(
     val voteAverage: Double,
     val genres: String?,
     val overview: String?,
+    /**
+     * Where the genres line goes. Null keeps 96 dp, under all four metadata
+     * lines; the movie screen passes the top under the lines it actually has.
+     */
+    val genresTop: Dp? = null,
 )
 
 /** A screen's settings for the five header buttons. */
@@ -178,6 +185,7 @@ private fun BoxScope.DetailsPage(
         labels()
         DetailsOverview(
             genres = info.genres,
+            genresTop = info.genresTop ?: 96.dp,
             overview = info.overview,
             dongleRegular = dongleRegular,
             onTextBottom = peek?.let { p -> { bottom -> p.overviewBottom = bottom } },

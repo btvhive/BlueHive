@@ -33,6 +33,8 @@ import androidx.compose.ui.unit.sp
 @Composable
 fun BoxScope.DetailsOverview(
     genres: String?,
+    /** The genres line's top: 96 dp under the four metadata lines. */
+    genresTop: Dp = 96.dp,
     overview: String?,
     dongleRegular: FontFamily,
     /**
@@ -52,7 +54,7 @@ fun BoxScope.DetailsOverview(
             lineHeight = 12.sp,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(start = 258.25.dp, top = 96.dp)
+                .padding(start = 258.25.dp, top = genresTop)
                 .width(160.dp)  // Add width constraint so it wraps nicely
         )
     }else {
