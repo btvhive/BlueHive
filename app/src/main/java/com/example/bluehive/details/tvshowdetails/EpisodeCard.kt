@@ -165,14 +165,14 @@ private val baseStillModifier =
 
 /**
  * One episode tile: the air date above the still, the still with its focus
- * glow, badge and watched fold, the unaired and "select a site" scrims, the
- * title under it and the overview that pops up after 1.5 s of focus.
+ * glow, badge and watched fold, the unaired scrim, and the title under it.
+ * (The overview and the sources moved to the episode overlay, 2026-10-27 --
+ * see EpisodeSourceOverlay.)
  *
  * Takes plain values (architecture P3), so a tile whose values did not change
  * is skipped when the row recomposes. What the row decides stays with the row
  * and comes in as callbacks: [onFocused] when the tile gains focus, the
- * D-pad rules as [onKeyEvent], and [onAnchored] with the still's position
- * while its source overlay is open.
+ * D-pad rules as [onKeyEvent].
  *
  * Moved here from the screen in Stage 8 of the details redesign.
  */
@@ -191,7 +191,6 @@ internal fun EpisodeCard(
     dongleRegular: FontFamily,
     onFocused: () -> Unit,
     onKeyEvent: (KeyEvent) -> Boolean,
-    onAnchored: (Offset) -> Unit,
 ) {
     var isEpisodeFocused by remember { mutableStateOf(false) }
 
@@ -199,10 +198,6 @@ internal fun EpisodeCard(
     val stillUrl = episode.stillImageUrl ?: backdropUrl
 
     val titleText = episode.title
-
-    // ✅ If your Episode model uses a different field name, change this line.
-    val episodeOverviewText = episode.overview ?: ""
-
 
     // 👇 true only when the whole item is within the viewport
     val isFullyVisible by remember(rowState, index) {
@@ -296,12 +291,6 @@ internal fun EpisodeCard(
             modifier = Modifier
                 .width(174.27.dp)
                 .height(97.5.dp)
-                .onGloballyPositioned { coords ->
-                    // Only care about the box for the *selected* episode’s overlay
-                    if (isEpisodeSelectOverlay) {
-                        onAnchored(coords.positionInRoot())
-                    }
-                }
         ) {
 
             // ✅ Glow behind image when focused
@@ -374,17 +363,14 @@ internal fun EpisodeCard(
             // Over the still rather than instead of it: the card still
             // has to read as the episode it is, so the artwork stays
             // visible underneath. Drawn after the badge and the watched
-            // fold so it covers both, and before the select overlay,
-            // which an unaired episode can never reach anyway -- the
-            // press that raises it is refused above.
+            // fold so it covers both.
             if (isUnaired) {
                 Box(
                     modifier = Modifier
                         .matchParentSize()
                         .clip(episodeShape)
                         .background(Color(0xD9101014))
-                        // Border re-added ON TOP, same as the select
-                        // overlay does, or the scrim squares the corners.
+                        // Border re-added ON TOP, or the scrim squares the corners.
                         .border(
                             width = 1.1.dp,
                             color = Color(0xFF505050),
@@ -404,36 +390,6 @@ internal fun EpisodeCard(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 12.dp)
-                    )
-                }
-            }
-
-            if (isEpisodeSelectOverlay) {  // overlay for when a episode is selected
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(episodeShape)
-                        .background(Color.Black)
-                        // ✅ re-add border ON TOP of the overlay
-                        .border(
-                            width = 1.1.dp,
-                            color = Color(0xFF505050),
-                            shape = episodeShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "SELECT A SITE BELOW TO WATCH EPISODE ON",
-                        fontFamily = passionFont,
-                        fontSize = 20.sp,
-                        color = Color.White,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        textAlign = TextAlign.Center,
-                        // ✅ add breathing room left/right like your Figma
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp)
                     )
                 }
             }
@@ -459,65 +415,6 @@ internal fun EpisodeCard(
                 modifier = Modifier
                     .offset(x = 4.dp, y = titleYOffset)
             )
-        }
-
-        // ✅ NEW: Overview appears only when focused, with 1.5s delayed fade-in
-        var showOverview by remember(index) { mutableStateOf(false) }
-
-        LaunchedEffect(isEpisodeFocused, episodeOverviewText, isEpisodeSelectOverlay) {
-            if (!isEpisodeSelectOverlay && isEpisodeFocused && episodeOverviewText.isNotBlank()) {
-                showOverview = false
-                delay(1500)
-                if (isEpisodeFocused) {
-                    showOverview = true
-                }
-            } else {
-                showOverview = false
-            }
-        }
-
-        AnimatedVisibility(
-            visible = showOverview && !isEpisodeSelectOverlay,
-            enter = fadeIn(animationSpec = tween(durationMillis = 280)),
-            exit = fadeOut(animationSpec = tween(durationMillis = 160))
-        ) {
-            val overviewAlpha by animateFloatAsState(
-                targetValue = if (showOverview) 1f else 0f,
-                animationSpec = tween(
-                    durationMillis = if (showOverview) 420 else 260,
-                    easing = LinearOutSlowInEasing
-                ),
-                label = "overviewAlpha"
-            )
-
-            Box(
-                modifier = Modifier
-                    .padding(start = 20.dp, top = 6.dp)
-                    .offset(x = (-9.7).dp, y = (-2).dp) // position of the overview background
-                    .wrapContentSize(unbounded = true)
-                    .graphicsLayer { alpha = overviewAlpha }
-            ) {
-                Box(
-                    modifier = Modifier
-                        .requiredWidth(196.dp)
-                        .heightIn(max = 98.5.dp)
-                        .background(
-                            color = Color(0xFF949494).copy(alpha = 0.20f), // opacity of the overview background
-                            shape = RoundedCornerShape(6.5.dp)
-                        )
-                        .padding(start = 6.dp, top = 2.dp, end = 5.dp, bottom = 0.dp)
-                ) {
-                    Text(
-                        text = episodeOverviewText,
-                        fontFamily = dongleRegular,
-                        lineHeight = 11.sp,
-                        fontSize = 13.sp,
-                        color = Color(0xFFE7E3E3),
-                        maxLines = 8,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
         }
 
     }

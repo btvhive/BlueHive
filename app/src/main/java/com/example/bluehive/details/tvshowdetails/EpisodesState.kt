@@ -65,9 +65,6 @@ class EpisodesState internal constructor(
 
     var selectedEpisodeOverlayIndex by mutableIntStateOf(-1)
 
-    /** ✅ Position of the selected episode still in root coordinates. */
-    var overlayAnchor by mutableStateOf<Offset?>(null)
-
     // Set true by the focused episode tile's onFocusChanged (see Edit 3).
     // Lets the initial-focus effect confirm focus actually landed
     // instead of assuming a fire-and-forget requestFocus() succeeded.

@@ -13,9 +13,6 @@ import androidx.compose.ui.Alignment
 import com.example.bluehive.R
 import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.CoroutineScope
-import com.example.bluehive.details.shared.state.ExtrasState
-import com.example.bluehive.details.shared.playback.AnimePlaybackController
-import com.example.bluehive.details.shared.playback.SourcePlaybackController
 
 /**
  * The right-hand caps' left edge: 10 dp right of where they were (902.75), so
@@ -26,9 +23,10 @@ import com.example.bluehive.details.shared.playback.SourcePlaybackController
 internal val RIGHT_CAP_X = 912.75.dp
 
 /**
- * The TV screen's play area: the episode row between its side caps, the
- * season accordion built into the left cap, and the source overlay under the
- * selected tile, drawn into the scaffold's Box.
+ * The TV screen's play area: the episode row between its side caps and the
+ * season accordion built into the left cap, drawn into the scaffold's Box.
+ * (The episode overlay is drawn with the screen's overlays, over the blurred
+ * page, since 2026-10-27 -- see EpisodeSourceOverlay.)
  *
  * Moved here from the screen in Stage 8 of the details redesign. Since
  * 2026-10-27 the left cap is extended_mini_left_upper_body, lined up with Add
@@ -43,19 +41,10 @@ internal fun BoxScope.TvPlayArea(
     episodesState: EpisodesState,
     focusMap: TvFocusMap,
     unairedGate: UnairedGate,
-    extras: ExtrasState,
-    anime: AnimePlaybackController,
-    sourcePlayback: SourcePlaybackController,
-    mediaType: String,
-    mediaId: Int,
-    genres: String?,
-    originalLanguage: String?,
     backdropUrl: String?,
     passionFont: FontFamily,
     dongleRegular: FontFamily,
     coroutineScope: CoroutineScope,
-    stopTrailerAndSelectEpisode: (season: Int, episode: Int, epName: String?) -> Unit,
-    onUnavailable: () -> Unit,
 ) {
     // ===============================================================================> episode lAZY ROW DECORATIONS
     // The strip behind the season cap's right edge, where the cards come out.
@@ -127,22 +116,4 @@ internal fun BoxScope.TvPlayArea(
         contentScale = ContentScale.Fit
     )
     // ===============================================================================> episode lAZY ROW DECORATIONS
-
-
-    // The source overlay under the selected tile -- see EpisodeSourceOverlay.
-    EpisodeSourceOverlay(
-        extras                      = extras,
-        episodesState               = episodesState,
-        focusMap                    = focusMap,
-        anime                       = anime,
-        sourcePlayback              = sourcePlayback,
-        mediaType                   = mediaType,
-        mediaId                     = mediaId,
-        genres                      = genres,
-        originalLanguage            = originalLanguage,
-        passionFont                 = passionFont,
-        stopTrailerAndSelectEpisode = stopTrailerAndSelectEpisode,
-        onUnavailable               = onUnavailable,
-    )
-
 }

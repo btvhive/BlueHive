@@ -17,7 +17,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 
-// ====================================================================================================================>  Anime episode overlay (DuB / SuB / VidFast)
+// ====================================================================================================================>  Anime episode overlay (Watch in English / Japanese)
 @Composable
 internal fun AnimeEpisodeProviderButtons(
     passionFont: FontFamily,
@@ -68,126 +68,45 @@ internal fun AnimeEpisodeProviderButtons(
             onUnavailable()
         }
     }
-    // Auto-focus DuB when the overlay opens (matches EpisodeProviderInlineButtons).
+    // Auto-focus English when the overlay opens (matches EpisodeSourceButtons).
     LaunchedEffect(Unit) {
         delay(50)
         focusRequesters.firstOrNull()?.requestFocus()
     }
 
-    fun moveTo(idx: Int): Boolean {
-        val fr = focusRequesters.getOrNull(idx) ?: return true
-        fr.requestFocus()
-        BlueHiveApplication.playHoverSound()
-        return true
-    }
-
-    Column(
-        verticalArrangement = Arrangement.spacedBy((-4).dp),
-        modifier = Modifier.offset(x = 0.3.dp)
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy((-2).dp)) {
-            AnimeOverlayButton(
-                text = "Watch in English",
-                passionFont = passionFont,
-                focusRequester = focusRequesters[0],
-                buttonColors = AnimeDubButtonColors,
-                modifier = Modifier.onPreviewKeyEvent { e ->
-                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (e.key) {
-                        Key.DirectionRight -> moveTo(1)
-                        Key.DirectionDown  -> true
-                        Key.DirectionLeft  -> true
-                        Key.DirectionUp    -> true
-                        Key.Back           -> { onBack(); true }
-                        else               -> false
-                    }
-                },
-                onClick = {
-                    when {
-                        miruroUrl != null -> onDub(miruroUrl)
-                        resolving -> queued = true      // honour it when it lands
-                        else -> onUnavailable()
-                    }
-                }
-            )
-            AnimeOverlayButton(
-                text = "Watch in Japanese",
-                passionFont = passionFont,
-                focusRequester = focusRequesters[1],
-                buttonColors = AnimeSubButtonColors,
-                modifier = Modifier.onPreviewKeyEvent { e ->
-                    if (e.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when (e.key) {
-                        Key.DirectionLeft  -> moveTo(0)
-                        Key.DirectionDown  -> true
-                        Key.DirectionRight -> true
-                        Key.DirectionUp    -> true
-                        Key.Back           -> { onBack(); true }
-                        else               -> false
-                    }
-                },
-                onClick = {
-                    when {
-                        miruroUrl != null -> onSub(miruroUrl)
-                        resolving -> queued = false     // honour it when it lands
-                        else -> onUnavailable()
-                    }
-                }
-            )
+    // One under another in the episode overlay, like its Watch on ... buttons:
+    // Up / Down move, the ends and Left / Right go nowhere -- see OverlayWatchButton.
+    OverlayWatchButton(
+        text = "Watch in English",
+        colors = AnimeDubButtonColors,
+        passionFont = passionFont,
+        focusRequester = focusRequesters[0],
+        index = 0,
+        focusRequesters = focusRequesters.subList(0, 2),
+        onBack = onBack,
+        onClick = {
+            when {
+                miruroUrl != null -> onDub(miruroUrl)
+                resolving -> queued = true      // honour it when it lands
+                else -> onUnavailable()
+            }
         }
-    }
-}
-
-@Composable
-private fun AnimeOverlayButton(
-    text: String,
-    passionFont: FontFamily,
-    focusRequester: FocusRequester,
-    // ONE PALETTE, not four loose colours. Passing the parts individually is how
-    // mainFocused went missing here: there was no parameter for it, so no call
-    // site could have supplied one, and every focused anime button fell back to
-    // the neutral grey default.
-    buttonColors: ModularButtonColors,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit,
-) {
-    ModularButton(
-        textConfig = ModularButtonTextConfig(text = text, fontSize = 9f),
-        isToggleable = false,
-        fontFamily = passionFont,
-        focusRequester = focusRequester,
-        modifier = modifier,
-        dimensions = ModularButtonDimensions(
-            mainWidth = 83.dp,
-            mainHeight = 23.62.dp,
-            mainYOffset = 0.7.dp,
-            secondWidth = 83.dp,
-            secondHeight = 22.5.dp,
-            secondYOffset = 6.5.dp,
-            shadowHeight = 6.dp,
-            glowWidth = 96.dp,
-            glowHeight = 41.5.dp,
-            mainCornerRadius = 7f,
-            secondCornerRadius = 8f,
-        ),
-        colors = buttonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_wide_glow,
-            toggledRes = R.drawable.button_focus_wide_nonglow,
-            offsetX = (-6.5).dp,
-            offsetY = (-2.5).dp
-        ),
-        // Timing shared with the movie screen; only the offsets are per-screen,
-        // being tuned to this button's smaller size.
-        animationConfig = WatchButtonAnimation.copy(
-            pressOffset = 2.0.dp,
-            textOffsetDefault = 0.6.dp,
-            textOffsetPressed = 1.6.dp,
-        ),
-        // ModularButton already plays the click, immediately. This second call
-        // was a duplicate, inaudible only because both landed on one frame.
-        onClick = onClick
+    )
+    OverlayWatchButton(
+        text = "Watch in Japanese",
+        colors = AnimeSubButtonColors,
+        passionFont = passionFont,
+        focusRequester = focusRequesters[1],
+        index = 1,
+        focusRequesters = focusRequesters.subList(0, 2),
+        onBack = onBack,
+        onClick = {
+            when {
+                miruroUrl != null -> onSub(miruroUrl)
+                resolving -> queued = false     // honour it when it lands
+                else -> onUnavailable()
+            }
+        }
     )
 }
 

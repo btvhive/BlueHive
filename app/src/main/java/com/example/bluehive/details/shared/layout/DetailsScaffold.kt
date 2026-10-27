@@ -111,6 +111,11 @@ fun DetailsScaffold(
     peek: DetailsPeekState? = null,
     /** On the whole page: the movie screen blurs it behind its search keyboard. */
     modifier: Modifier = Modifier,
+    /**
+     * On the page but not the overlays: the TV screen blurs the page behind its
+     * episode overlay, which is one of its overlays and has to stay sharp.
+     */
+    pageModifier: Modifier = Modifier,
 ) {
     val dongleRegular = AppTypography.dongleRegular
 
@@ -118,10 +123,12 @@ fun DetailsScaffold(
         modifier = Modifier.fillMaxSize().then(modifier)
     ) {
         if (peek == null) {
-            DetailsPage(
-                info, trailer, favorite, extras, header, releaseTrailerOnLeave,
-                onOpenRecommendation, onUpFromRecommendations, labels, playArea, null, dongleRegular,
-            )
+            Box(Modifier.fillMaxSize().then(pageModifier)) {
+                DetailsPage(
+                    info, trailer, favorite, extras, header, releaseTrailerOnLeave,
+                    onOpenRecommendation, onUpFromRecommendations, labels, playArea, null, dongleRegular,
+                )
+            }
         } else {
             DetailsPageBackground()
             DetailsSlidingPage(peek) {

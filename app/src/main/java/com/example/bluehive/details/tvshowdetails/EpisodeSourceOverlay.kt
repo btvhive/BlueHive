@@ -1,243 +1,68 @@
 package com.example.bluehive.details.tvshowdetails
 
+import android.os.Build
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.unit.dp
-import com.example.bluehive.utilities.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.focus.focusRequester
-import kotlinx.coroutines.delay
-import androidx.compose.foundation.focusGroup
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
-import com.example.bluehive.details.shared.playback.StreamSource
-import androidx.compose.ui.platform.LocalDensity
-import com.example.bluehive.api.SourceCatalog
-import com.example.bluehive.api.isJapaneseAnimation
 import com.example.bluehive.api.buildJapaneseAnimationSources
-import com.example.bluehive.details.shared.state.ExtrasState
+import com.example.bluehive.api.isJapaneseAnimation
 import com.example.bluehive.details.shared.playback.AnimePlaybackController
 import com.example.bluehive.details.shared.playback.SourcePlaybackController
+import com.example.bluehive.details.shared.playback.StreamSource
+import com.example.bluehive.details.shared.state.ExtrasState
+import com.example.bluehive.utilities.*
+import kotlinx.coroutines.delay
 
-// =====================================================================================================================>  Episode overlay section
-@Composable
-internal fun EpisodeProviderInlineButtons(
-    passionFont: FontFamily,
-    sources: List<StreamSource>,
-    focusRequesters: List<FocusRequester>,
-    onSourceSelected: (StreamSource) -> Unit,
-    onBack: () -> Unit,   // ✅ NEW
-) {
-    val safeSources = remember {
-        mutableStateListOf<StreamSource>()
-    }
+// The overlay card (design E, 2026-10-27): the episode still as its backdrop,
+// darkened from the left (the text) and the right (the buttons).
+private val OVERLAY_WIDTH = 660.dp
+private val OVERLAY_HEIGHT = 262.dp
+private val OVERLAY_SHAPE = RoundedCornerShape(12.dp)
+private val OVERLAY_EDGE = Color(0xFF343648)
+private val OVERLAY_FACE = Color(0xFF12131C)
+private val OVERLAY_SHADE = Color(0xEB0A0B12)
+private val OVERLAY_SHADE_LIGHT = Color(0x550A0B12)
+private val OVERLAY_GOLD = Color(0xFFD19814)
 
-    LaunchedEffect(sources) {
-        safeSources.clear()
-        // Cap to the focus-requester pool so we never index past it; the pool is
-        // sized to the source list, so in practice this keeps every source.
-        safeSources.addAll(sources.take(focusRequesters.size))
-    }
+/** The Watch buttons: the movie page's, 190 dp wide, one under another. */
+private val SOURCE_BUTTON_WIDTH = 190.dp
+private val SOURCE_BUTTON_STEP = 52.dp
 
-    LaunchedEffect(safeSources.size) {
-        if (safeSources.isNotEmpty()) {
-            // give Compose a frame to attach focus nodes
-            delay(50)
-            focusRequesters.firstOrNull()?.requestFocus()
-        }
-    }
-
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy((-6).dp),
-        modifier = Modifier
-            .wrapContentWidth()
-            .offset(x = 0.3.dp) // how far left or right the entire section of button goes!!!
-            .focusGroup()
-    ) {
-        // Two per row, laid out FROM the source list — adding/removing a source
-        // now just adds/removes a button (an odd count leaves a lone left button)
-        // with no per-index Row block to keep in sync.
-        safeSources.chunked(2).forEachIndexed { rowIndex, rowSources ->
-            Row(
-                horizontalArrangement = Arrangement.spacedBy((-2).dp),
-                // Wrap to content (NOT fillMaxWidth): the Column's CenterHorizontally then
-                // centers a lone trailing button UNDER the 2-wide grid. With fillMaxWidth
-                // the row spanned the whole overlay, so centering threw it far right; the
-                // full 2-button rows are the widest, so they stay anchored at the left.
-                modifier = Modifier.wrapContentWidth()
-            ) {
-                rowSources.forEachIndexed { colIndex, source ->
-                    val i = rowIndex * 2 + colIndex
-                    EpisodeOverlayStreamerButton(
-                        index = i,
-                        total = safeSources.size,
-                        // right column nudged left the same 1.5.dp as before
-                        offsetX = if (colIndex == 0) (-1).dp else (-1.5).dp,
-                        source = source,
-                        passionFont = passionFont,
-                        focusRequesters = focusRequesters,
-                        onClick = { onSourceSelected(source) },
-                        onBack = onBack,
-                    )
-                }
-            }
-        }
-    }
-}
-
-
-
-
-@Composable
-private fun EpisodeOverlayStreamerButton(
-    index: Int,
-    total: Int,                       // total buttons in the grid — drives edge-aware D-pad nav
-    offsetX: Dp = (-1).dp,
-    source: StreamSource,
-    passionFont: FontFamily,
-    focusRequesters: List<FocusRequester>,
-    onClick: () -> Unit,
-    onBack: () -> Unit,
-) {
-    // 🔹 manual x tweak just for certain names
-    val labelOffsetX = when (source.name) {
-        "VidEasy" -> (2).dp   // a little left
-        "VidRock" -> (2).dp   // same tweak
-        else -> 0.dp
-    }
-
-
-    val glowWidth= when (source.name) {
-        "VidEasy" -> (96).dp   // a little width
-        "VidRock" -> (96).dp   // same tweak
-        else -> 96.dp
-    }
-
-    ModularButton(
-        textConfig = ModularButtonTextConfig(
-            text = "Watch on ${source.name}",
-            fontSize = 9f,
-            offsetX = labelOffsetX
-        ),
-        isToggleable = false,
-        fontFamily = passionFont,
-        focusRequester = focusRequesters[index],
-        modifier = Modifier
-            .offset(x = offsetX)
-            .onPreviewKeyEvent { event ->
-                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-
-                // 2-column grid: col = index % 2, row = index / 2. Targets are
-                // computed so the nav is correct for ANY button count (adding a
-                // source can't leave a stale index mapping behind). -1 = edge → the
-                // key is consumed with no move and no sound, exactly as before.
-                when (event.key) {
-                    Key.DirectionLeft -> {
-                        val target = if (index % 2 == 1) index - 1 else -1   // right col → left neighbour
-                        if (target >= 0) {
-                            focusRequesters.getOrNull(target)?.requestFocus()
-                            BlueHiveApplication.playHoverSound()   // 🔊 play on successful move
-                        }
-                        true
-                    }
-
-                    Key.DirectionRight -> {
-                        val target = if (index % 2 == 0 && index + 1 < total) index + 1 else -1  // left col → right neighbour
-                        if (target >= 0) {
-                            focusRequesters.getOrNull(target)?.requestFocus()
-                            BlueHiveApplication.playHoverSound()
-                        }
-                        // Right column (and a lone trailing button): RIGHT is a
-                        // dead end again now the corner button is gone.
-                        true
-                    }
-
-                    Key.DirectionUp -> {
-                        val target = index - 2                               // one row up, same column
-                        if (target >= 0) {
-                            focusRequesters.getOrNull(target)?.requestFocus()
-                            BlueHiveApplication.playHoverSound()
-                        }
-                        true
-                    }
-
-                    Key.DirectionDown -> {
-                        var target = index + 2                               // one row down, same column
-                        // Lone trailing button (odd source count — e.g. VidApi centered under
-                        // the 2x2 grid): the right-column button directly above it (index
-                        // total-2, e.g. VidLink) has no same-column neighbour below, so route
-                        // DOWN to the lone button instead of dead-ending with no move.
-                        if (total % 2 == 1 && index == total - 2) {
-                            target = total - 1
-                        }
-                        if (target < total) {
-                            focusRequesters.getOrNull(target)?.requestFocus()
-                            BlueHiveApplication.playHoverSound()
-                        }
-                        // Bottom row: nothing below it inside the grid, so DOWN
-                        // is consumed with no move.
-                        true
-                    }
-
-                    Key.Back -> {
-                        onBack()
-                        true   // consume so Activity back doesn't fire
-                    }
-
-                    else -> false
-                }
-            },
-        // just with your narrow width so 2-per-row still fit
-        dimensions = ModularButtonDimensions(
-            mainWidth = 83.dp,
-            mainHeight = 23.62.dp,      // was 23.625.dp
-            mainYOffset = 0.7.dp,
-            secondWidth = 83.dp,
-            secondHeight = 22.5.dp,    // was 21.dp
-            secondYOffset = 6.5.dp,   // was 6.5.dp
-            shadowHeight = 6.dp,    // was 6.dp
-            glowWidth = glowWidth,
-            glowHeight = 41.5.dp,
-            mainCornerRadius = 7f,
-            secondCornerRadius = 8f,
-        ),
-        // Shared with the movie screen — see StreamSourceButtonColors in
-        // utilities/ModularButton.kt. Change the blues there, not here.
-        colors = StreamSourceButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            // keep using your narrow glow asset
-            defaultRes = R.drawable.button_focus_wide_glow,
-            toggledRes = R.drawable.button_focus_wide_nonglow,
-            offsetX = (-6.5).dp,
-            offsetY = (-2.5).dp
-        ),
-        // Timing shared with the movie screen — see WatchButtonAnimation
-        // in utilities/ModularButton.kt. Only the offsets are per-screen, being
-        // tuned to this button's smaller size.
-        animationConfig = WatchButtonAnimation.copy(
-            pressOffset = 2.0.dp,
-            textOffsetDefault = 0.6.dp,
-            textOffsetPressed = 1.6.dp,
-        ),
-        // No playClickSound() here: ModularButton already plays it, immediately,
-        // and this second call fired a duplicate. Harmless while the two landed
-        // on the same frame — audible as a real double-click once onClick became
-        // deferred by clickDelayMillis.
-        onClick = onClick
-    )
-}
-// =====================================================================================================================> Episode overlay section
+private val OverlayShade = Brush.horizontalGradient(
+    0.00f to OVERLAY_SHADE,
+    0.30f to OVERLAY_SHADE,
+    0.50f to OVERLAY_SHADE_LIGHT,
+    0.60f to OVERLAY_SHADE_LIGHT,
+    0.68f to OVERLAY_SHADE,
+    1.00f to OVERLAY_SHADE,
+)
 
 /**
  * The source buttons for this episode.
@@ -271,17 +96,30 @@ internal fun getStreamingSources(
     return emptyList()
 }
 
+/** The overlay is open: the screen blurs the page behind it (API 31+). */
+internal fun episodeOverlayOpen(extras: ExtrasState, episodesState: EpisodesState): Boolean =
+    !extras.isOn && episodesState.selectedEpisodeOverlayIndex in episodesState.episodes.indices
+
 /**
- * The "Watch on ..." buttons under the tile whose source overlay is open,
- * placed at the still's position: English / Japanese for an anime, else the
- * source grid. A press records the episode in [episodesState] and starts the
- * anime flow or the source chain; Back closes the overlay and returns to the
- * tile.
+ * The episode overlay: OK on an episode opens it over the page. The still
+ * fills the card; the episode's number, title, air date and overview sit on
+ * the left, and the "Watch on ..." buttons (English / Japanese for an anime)
+ * one under another on the right. A press records the episode in
+ * [episodesState] and starts the anime flow or the source chain; Back closes
+ * it and returns to the tile.
  *
- * Moved here from the screen in Stage 8 of the details redesign.
+ * The page behind blurs on API 31+ (the onn box -- hiveBackdropBlur on the
+ * scaffold's page); older boxes (Fire TV, no RenderEffect) get the dark scrim
+ * the movie page's search keyboard uses, faded in. Drawn in the overlay slot,
+ * under the loading and anime overlays, so those still cover it. It STAYS
+ * open behind the player, which keeps the pressed button attached so focus
+ * can return to it on the way back.
+ *
+ * Replaced, 2026-10-27, the small 2x2 grid under the tile, the tile's "Select
+ * a site below" cover, and the overview that faded in under a focused tile.
  */
 @Composable
-internal fun EpisodeSourceOverlay(
+internal fun BoxScope.EpisodeSourceOverlay(
     extras: ExtrasState,
     episodesState: EpisodesState,
     focusMap: TvFocusMap,
@@ -291,76 +129,106 @@ internal fun EpisodeSourceOverlay(
     mediaId: Int,
     genres: String?,
     originalLanguage: String?,
+    backdropUrl: String?,
     passionFont: FontFamily,
+    dongleRegular: FontFamily,
     stopTrailerAndSelectEpisode: (season: Int, episode: Int, epName: String?) -> Unit,
     /** A brand-new anime with no AniList mapping yet: the screen shows its notice. */
     onUnavailable: () -> Unit,
 ) {
-    // ✅ Position of the selected episode still in root coordinates
-    val density = LocalDensity.current
+    val open = episodeOverlayOpen(extras, episodesState)
 
-    if (
-        !extras.isOn &&
-        episodesState.selectedEpisodeOverlayIndex != -1 &&
-        episodesState.overlayAnchor != null &&
-        episodesState.selectedEpisodeOverlayIndex in episodesState.episodes.indices
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        val dim by animateFloatAsState(
+            targetValue = if (open) 1f else 0f,
+            animationSpec = tween(durationMillis = 200),
+            label = "episodeOverlayDim",
+        )
+        if (dim > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer { alpha = dim }
+                    .background(overlayScrimColor())
+            )
+        }
+    }
+    if (!open) return
+
+    val selectedEpisode = episodesState.episodes[episodesState.selectedEpisodeOverlayIndex]
+    val episodeNumber = selectedEpisode.episodeNumber
+    val season = episodesState.selectedSeason
+    val isAnime = isJapaneseAnimation(genres, originalLanguage)
+
+    // Build sources for this episode.
+    // Japanese animation → 2 buttons (Miruro + VidFast); else the standard set.
+    val episodeSources by produceState(
+        initialValue = emptyList(),
+        mediaType, mediaId, season, episodeNumber, genres, originalLanguage
     ) {
-        val anchor = episodesState.overlayAnchor!!
-
-        val selectedEpisode = episodesState.episodes[episodesState.selectedEpisodeOverlayIndex]
-
-        // fall back to index+1 if episodeNumber is null
-        val episodeNumber = selectedEpisode.episodeNumber
-
-        // Build sources for this episode.
-        // Japanese animation → 2 buttons (Miruro + VidFast); else the standard set.
-        val episodeSources by produceState(
-            initialValue = emptyList(),
-            mediaType, mediaId, episodesState.selectedSeason, episodeNumber, genres, originalLanguage
-        ) {
-            if (isJapaneseAnimation(genres, originalLanguage)) {
-                value = buildJapaneseAnimationSources(
-                    mediaType     = mediaType,
-                    tmdbId        = mediaId,
-                    seasonNumber  = episodesState.selectedSeason,
-                    episodeNumber = episodeNumber,
-                ) { c, n, u -> StreamSource(c, n, u) }
-            } else {
-                // READ FIRST, REFRESH SECOND, READ AGAIN. The first read
-                // is synchronous and fills the buttons immediately from
-                // cache; the refresh then upgrades them if the server has
-                // changed since. Fetching before the first assignment
-                // would make every title wait on the network to draw its
-                // own buttons, which is a worse trade than being one
-                // screen late to a kill switch.
-                value = getStreamingSources(
-                    mediaType = mediaType,
-                    mediaId = mediaId,
-                    seasonNumber = episodesState.selectedSeason,
-                    episodeNumber = episodeNumber
-                )
-                com.example.bluehive.api.SourceCatalog
-                    .warm(BlueHiveApplication.appContext ?: return@produceState)
-                value = getStreamingSources(
-                    mediaType = mediaType,
-                    mediaId = mediaId,
-                    seasonNumber = episodesState.selectedSeason,
-                    episodeNumber = episodeNumber
-                )
-            }
+        if (isAnime) {
+            value = buildJapaneseAnimationSources(
+                mediaType     = mediaType,
+                tmdbId        = mediaId,
+                seasonNumber  = season,
+                episodeNumber = episodeNumber,
+            ) { c, n, u -> StreamSource(c, n, u) }
+        } else {
+            // READ FIRST, REFRESH SECOND, READ AGAIN. The first read
+            // is synchronous and fills the buttons immediately from
+            // cache; the refresh then upgrades them if the server has
+            // changed since. Fetching before the first assignment
+            // would make every title wait on the network to draw its
+            // own buttons, which is a worse trade than being one
+            // screen late to a kill switch.
+            value = getStreamingSources(mediaType, mediaId, season, episodeNumber)
+            com.example.bluehive.api.SourceCatalog
+                .warm(BlueHiveApplication.appContext ?: return@produceState)
+            value = getStreamingSources(mediaType, mediaId, season, episodeNumber)
         }
+    }
 
-        val gridOffsetX = with(density) { anchor.x.toDp() }
-        val gridOffsetY = with(density) {
-            (anchor.y + 97.5.dp.toPx() + 12.dp.toPx()).toDp()
-        }
+    val closeToTile: () -> Unit = {
+        episodesState.selectedEpisodeOverlayIndex = -1
+        val targetIndex = episodesState.lastFocusedEpisodeIndex
+            .coerceIn(0, episodesState.focusRequesters.lastIndex)
+        episodesState.focusRequesters[targetIndex].requestFocus()
+    }
+
+    Box(
+        modifier = Modifier
+            .align(Alignment.Center)
+            .size(OVERLAY_WIDTH, OVERLAY_HEIGHT)
+            .clip(OVERLAY_SHAPE)
+            .background(OVERLAY_FACE)
+    ) {
+        AsyncImage(
+            model = selectedEpisode.stillImageUrl ?: backdropUrl,
+            contentDescription = selectedEpisode.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        Box(Modifier.fillMaxSize().background(OverlayShade))
+
+        EpisodeOverlayText(
+            season = season,
+            episodeNumber = episodeNumber,
+            title = selectedEpisode.title,
+            airDate = formatEpisodeAirDate(selectedEpisode.airDate),
+            overview = selectedEpisode.overview.orEmpty(),
+            passionFont = passionFont,
+            dongleRegular = dongleRegular,
+        )
 
         Box(
             modifier = Modifier
-                .offset(x = gridOffsetX, y = gridOffsetY)
+                .align(Alignment.TopEnd)
+                .padding(top = 30.dp, end = 24.dp)
+                .width(SOURCE_BUTTON_WIDTH)
+                .focusGroup()
         ) {
-            if (isJapaneseAnimation(genres, originalLanguage)) {
-                // Anime: exactly DuB / SuB. DuB+SuB run the Miruro flow
+            if (isAnime) {
+                // Anime: exactly English / Japanese. Both run the Miruro flow
                 // (the URL already carries ?ep=, so the extractor clicks
                 // the right episode).
                 val miruroUrl = episodeSources.firstOrNull { it.name.equals("Miruro", true) }?.url
@@ -373,8 +241,8 @@ internal fun EpisodeSourceOverlay(
                     focusRequesters = focusMap.providers,
                     onDub = { url ->
                         val epName = selectedEpisode.title
-                        stopTrailerAndSelectEpisode(episodesState.selectedSeason, episodeNumber, epName)
-                        // NOT marked watched here. Picking DuB only opens the
+                        stopTrailerAndSelectEpisode(season, episodeNumber, epName)
+                        // NOT marked watched here. Picking English only opens the
                         // server prompt — extraction can still fail, find no
                         // servers, or be cancelled. The mark happens where the
                         // stream actually plays (see the extractor result
@@ -382,33 +250,28 @@ internal fun EpisodeSourceOverlay(
                         focusMap.lastStream = focusMap.providers.getOrNull(0)
                         anime.pendingUrl         = url
                         anime.pendingDub         = true
-                        episodesState.pendingSeason      = episodesState.selectedSeason
+                        episodesState.pendingSeason      = season
                         episodesState.pendingEpisode     = episodeNumber
                         episodesState.pendingEpisodeName = epName
                         anime.showDefaultPrompt  = true
                     },
                     onSub = { url ->
                         val epName = selectedEpisode.title
-                        stopTrailerAndSelectEpisode(episodesState.selectedSeason, episodeNumber, epName)
+                        stopTrailerAndSelectEpisode(season, episodeNumber, epName)
                         // NOT marked watched here — same reason as onDub above.
                         focusMap.lastStream = focusMap.providers.getOrNull(1)
                         anime.pendingUrl         = url
                         anime.pendingDub         = false
-                        episodesState.pendingSeason      = episodesState.selectedSeason
+                        episodesState.pendingSeason      = season
                         episodesState.pendingEpisode     = episodeNumber
                         episodesState.pendingEpisodeName = epName
                         anime.showDefaultPrompt  = true
                     },
                     onUnavailable = onUnavailable,
-                    onBack = {
-                        episodesState.selectedEpisodeOverlayIndex = -1
-                        val targetIndex = episodesState.lastFocusedEpisodeIndex
-                            .coerceIn(0, episodesState.focusRequesters.lastIndex)
-                        episodesState.focusRequesters[targetIndex].requestFocus()
-                    }
+                    onBack = closeToTile,
                 )
             } else {
-                EpisodeProviderInlineButtons(
+                EpisodeSourceButtons(
                     passionFont = passionFont,
                     sources = episodeSources,
                     focusRequesters = focusMap.providers,
@@ -424,24 +287,176 @@ internal fun EpisodeSourceOverlay(
                         // Every source: server-side m3u8 extraction, then our
                         // own player. The server reports every source as
                         // extractable; one it could not extract fails into the
-                        // same chain as a dead one. The episode overlay STAYS
-                        // open behind the player, which keeps this button
-                        // attached so focus can return to it on the way back.
-                        episodesState.pendingSeason      = episodesState.selectedSeason
+                        // same chain as a dead one.
+                        episodesState.pendingSeason      = season
                         episodesState.pendingEpisode     = episodeNumber
                         episodesState.pendingEpisodeName = epName
                         sourcePlayback.start(source)
                     },
-                    onBack = {
-                        episodesState.selectedEpisodeOverlayIndex = -1
-
-                        val targetIndex = episodesState.lastFocusedEpisodeIndex
-                            .coerceIn(0, episodesState.focusRequesters.lastIndex)
-
-                        episodesState.focusRequesters[targetIndex].requestFocus()
-                    },
+                    onBack = closeToTile,
                 )
             }
         }
+
+        // The edge on top, over the still's corners.
+        Box(Modifier.fillMaxSize().border(1.dp, OVERLAY_EDGE, OVERLAY_SHAPE))
     }
+}
+
+/** The left column: S6 · E7 in gold, the title, the air date, the overview. */
+@Composable
+private fun BoxScope.EpisodeOverlayText(
+    season: Int,
+    episodeNumber: Int,
+    title: String,
+    airDate: String,
+    overview: String,
+    passionFont: FontFamily,
+    dongleRegular: FontFamily,
+) {
+    Column(
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .padding(start = 24.dp, top = 28.dp, bottom = 22.dp)
+            .width(236.dp)
+            .fillMaxHeight()
+    ) {
+        Text(
+            text = "S$season · E$episodeNumber",
+            fontFamily = AppTypography.interBold,
+            fontSize = 10.sp,
+            color = OVERLAY_GOLD,
+        )
+        Text(
+            text = title,
+            fontFamily = passionFont,
+            fontSize = 26.sp,
+            lineHeight = 27.sp,
+            color = Color.White,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+            // The Watch buttons' label shadow -- see ButtonLabelShadow.
+            style = TextStyle(shadow = ButtonLabelShadow),
+            modifier = Modifier.padding(top = 4.dp),
+        )
+        if (airDate.isNotBlank()) {
+            Text(
+                text = airDate,
+                fontFamily = AppTypography.interSemiBold,
+                fontSize = 9.5.sp,
+                color = Color(0xFFAAACB9),
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
+        if (overview.isNotBlank()) {
+            // As tall as the card leaves room for; a long overview ends in "...".
+            Text(
+                text = overview,
+                fontFamily = dongleRegular,
+                fontSize = 16.sp,
+                lineHeight = 11.5.sp,
+                color = Color(0xFFE7E3E3),
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .padding(top = 12.dp)
+                    .weight(1f, fill = false),
+            )
+        }
+    }
+}
+
+/** The "Watch on ..." buttons, one under another; focus starts on the first. */
+@Composable
+private fun EpisodeSourceButtons(
+    passionFont: FontFamily,
+    sources: List<StreamSource>,
+    focusRequesters: List<FocusRequester>,
+    onSourceSelected: (StreamSource) -> Unit,
+    onBack: () -> Unit,
+) {
+    // Capped to the focus-requester pool so we never index past it; the pool
+    // is sized to the source list, so in practice this keeps every source.
+    val shown = sources.take(focusRequesters.size)
+
+    LaunchedEffect(shown.isNotEmpty()) {
+        if (shown.isNotEmpty()) {
+            // give Compose a frame to attach focus nodes
+            delay(50)
+            focusRequesters.firstOrNull()?.requestFocus()
+        }
+    }
+
+    shown.forEachIndexed { i, source ->
+        OverlayWatchButton(
+            text = "Watch on ${source.name}",
+            colors = StreamSourceButtonColors,
+            passionFont = passionFont,
+            focusRequester = focusRequesters[i],
+            index = i,
+            focusRequesters = focusRequesters.subList(0, shown.size),
+            onBack = onBack,
+            onClick = { onSourceSelected(source) },
+        )
+    }
+}
+
+/**
+ * One of the overlay's buttons, at row [index]: the movie page's Watch
+ * button, 190 dp wide. Up / Down move between [focusRequesters]; every
+ * other direction, and both ends, are consumed with no move and no sound,
+ * so focus cannot wander onto the page behind. Back is [onBack].
+ */
+@Composable
+internal fun OverlayWatchButton(
+    text: String,
+    colors: ModularButtonColors,
+    passionFont: FontFamily,
+    focusRequester: FocusRequester,
+    index: Int,
+    focusRequesters: List<FocusRequester>,
+    onBack: () -> Unit,
+    onClick: () -> Unit,
+) {
+    ModularButton(
+        textConfig = ModularButtonTextConfig(text = text, fontSize = 14f, shadow = ButtonLabelShadow),
+        isToggleable = false,
+        fontFamily = passionFont,
+        focusRequester = focusRequester,
+        modifier = Modifier
+            .offset(y = SOURCE_BUTTON_STEP * index)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                when (event.key) {
+                    Key.DirectionUp, Key.DirectionDown -> {
+                        val target = index + if (event.key == Key.DirectionUp) -1 else 1
+                        focusRequesters.getOrNull(target)?.let {
+                            it.requestFocus()
+                            BlueHiveApplication.playHoverSound()
+                        }
+                        true
+                    }
+                    Key.DirectionLeft, Key.DirectionRight -> true
+                    Key.Back -> { onBack(); true }   // consume so Activity back doesn't fire
+                    else -> false
+                }
+            },
+        dimensions = ModularButtonDimensions(
+            mainWidth = SOURCE_BUTTON_WIDTH, mainHeight = 33.dp, mainYOffset = 0.7.dp,
+            secondWidth = SOURCE_BUTTON_WIDTH, secondHeight = 22.dp, secondYOffset = 18.dp,
+            shadowHeight = 12.dp, glowWidth = SOURCE_BUTTON_WIDTH + 23.8.dp, glowHeight = 55.8.dp,
+            mainCornerRadius = 7f, secondCornerRadius = 8f,
+        ),
+        colors = colors,
+        glowConfig = ModularButtonGlowConfig(
+            enabled = true,
+            defaultRes = R.drawable.button_focus_wide_glow,
+            toggledRes = R.drawable.button_focus_wide_nonglow,
+            offsetX = (-11.8).dp,
+            offsetY = (-2.5).dp
+        ),
+        // Timing shared with the movie screen -- see WatchButtonAnimation.
+        animationConfig = WatchButtonAnimation,
+        // No playClickSound() here: ModularButton already plays it.
+        onClick = onClick
+    )
 }

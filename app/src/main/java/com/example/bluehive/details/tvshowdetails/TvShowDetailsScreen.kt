@@ -38,6 +38,8 @@ import com.example.bluehive.details.shared.state.DetailsBackHandlers
 import com.example.bluehive.details.shared.state.rememberExtrasState
 import com.example.bluehive.details.shared.state.rememberFavoriteState
 import com.example.bluehive.details.shared.state.rememberTrailerState
+import androidx.compose.ui.Modifier
+import com.example.bluehive.searchBarComponent.hiveBackdropBlur
 
 
 /**
@@ -420,7 +422,20 @@ fun TvShowDetailsScreen(
                 episodesState               = episodesState,
                 focusMap                    = focusMap,
                 unairedGate                 = unairedGate,
+                backdropUrl                 = args.backdropUrl,
+                passionFont                 = passionFont,
+                dongleRegular               = dongleRegular,
+                coroutineScope              = coroutineScope,
+            )
+        },
+        overlays = {
+            // The episode overlay: OK on an episode opens it over the page,
+            // first so the loading and anime overlays below still cover it --
+            // see EpisodeSourceOverlay.
+            EpisodeSourceOverlay(
                 extras                      = extras,
+                episodesState               = episodesState,
+                focusMap                    = focusMap,
                 anime                       = anime,
                 sourcePlayback              = sourcePlayback,
                 mediaType                   = args.mediaType,
@@ -430,14 +445,12 @@ fun TvShowDetailsScreen(
                 backdropUrl                 = args.backdropUrl,
                 passionFont                 = passionFont,
                 dongleRegular               = dongleRegular,
-                coroutineScope              = coroutineScope,
                 stopTrailerAndSelectEpisode = { season, episode, epName ->
                     stopTrailerAndSelectEpisode(season, episode, epName)
                 },
                 onUnavailable               = { showNotYetAvailable = true },
             )
-        },
-        overlays = {
+
             // ════════════════════════════════════════════════════════════════════
             //  Anime DuB/SuB overlays — last so they render on top of everything
             // ════════════════════════════════════════════════════════════════════
@@ -482,5 +495,8 @@ fun TvShowDetailsScreen(
             // The trailer could not be loaded -- see TrailerFailedNotice.
             TrailerFailedNotice(trailer, dongleRegular)
         },
+        // The page blurs behind the episode overlay (API 31+; older boxes get
+        // its dark scrim instead) -- the overlays themselves stay sharp.
+        pageModifier = Modifier.hiveBackdropBlur(episodeOverlayOpen(extras, episodesState)),
     )
 }

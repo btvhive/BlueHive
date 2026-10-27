@@ -234,7 +234,6 @@ internal fun BoxScope.EpisodeRow(
                                     false
                                 }
                             },
-                            onAnchored = { episodesState.overlayAnchor = it },
                         )
                     }
 
