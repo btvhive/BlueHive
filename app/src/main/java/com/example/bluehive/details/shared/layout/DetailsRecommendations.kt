@@ -3,7 +3,6 @@ package com.example.bluehive.details.shared.layout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
 import com.example.bluehive.details.shared.state.ExtrasState
@@ -56,7 +55,7 @@ fun DetailsPeekRecommendations(
             onMediaClick = onOpen,
             onNavigateUp = onNavigateUp,
             topOffset = peek.rowTop,
-            titleFontSize = 18.sp,
+            titleFontSize = PEEK_TITLE_FONT_SIZE,
             titleOffsetY = PEEK_TITLE_OFFSET_Y,
             dimTitleUntilFocused = true,
             autoFocusFirst = peek.startFocused,

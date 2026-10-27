@@ -8,7 +8,9 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.bluehive.utilities.RecommendedRowEntry
 
 /**
@@ -81,8 +83,14 @@ val PEEK_PLAY_TOP: Dp = 296.dp
 /** Space between the overview's last line and the play buttons. */
 val PEEK_PLAY_GAP: Dp = 12.dp
 
-/** The Recommended Media heading's offset in the peek layout, clear of the row's frame. */
-val PEEK_TITLE_OFFSET_Y: Dp = (-50).dp
+/**
+ * The Recommended Media heading's offset in the peek layout, clear of the
+ * row's frame: 3 dp lower than v417-v470's -50 (the user's call, 2026-10-27).
+ */
+val PEEK_TITLE_OFFSET_Y: Dp = (-47).dp
+
+/** The heading's size in the peek layout: 16 sp since v471 (18 before, the user's call). */
+val PEEK_TITLE_FONT_SIZE: TextUnit = 16.sp
 
 /**
  * The right column of play buttons (162 dp wide): its right edge on Play
