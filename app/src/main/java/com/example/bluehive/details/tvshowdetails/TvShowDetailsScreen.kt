@@ -449,6 +449,7 @@ fun TvShowDetailsScreen(
                     stopTrailerAndSelectEpisode(season, episode, epName)
                 },
                 onUnavailable               = { showNotYetAvailable = true },
+                session                     = session,
             )
 
             // ════════════════════════════════════════════════════════════════════
