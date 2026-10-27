@@ -216,3 +216,20 @@ Same box, same session, two runs each of `measure_movie_page.sh`, 2026-10-27 00:
 
 The layer was no cheaper (worse at the median), and both have the same slow UI-thread frames, so moving the page is not what costs: it is the work that runs when the row takes focus (the heading's 350 ms grey-to-white fade, the focused card's glow and title). The code stays on the placement offset, which also moves the trailer's SurfaceView. Last night's single v447 run (24 slow frames) was a quiet moment for the box; the v449 runs are the fair comparison. Idle (0 frames), the header D-pad (p50 19-23 ms) and the row (p50 22-27 ms) did not change.
 
+### What the slide was paying for, and the fix (v450)
+
+A system trace of three slides on v449 (`atrace -a com.bluehive.tv gfx view input am sched freq`, read with a small parser in the session scratchpad) showed where the slow UI frames went: 94 of 249 frames were over 16.7 ms, and inside them `Recomposer:recompose` took 925 + 378 ms -- 20-33 ms in each of the worst frames, about nine recompositions per frame -- against 640 + 443 ms of drawing.
+
+The cause was the Recommended Media heading's grey-to-white fade: its colour was animated in RecommendedMediaSection's body, so each frame of the 350 ms fade (on the way in and out) rebuilt the section, the row and every visible card. v450 moves the heading into its own composable that reads the colour only while drawing (`BasicText(color = { ... })`, with the style Material's Text would build) and reads the focus flag through a lambda.
+
+Same box, same session, two runs each:
+
+| Slide to the row and back (x3) | Frames | Janky | p50 | p90 | p99 | Slow UI thread |
+|---|---|---|---|---|---|---|
+| v449, run 1 | 161 | 37.3% | 26 ms | 81 | 97 | 56 |
+| v449, run 2 | 173 | 29.5% | 27 ms | 65 | 73 | 48 |
+| v450, run 1 | 216 | 5.1% | 29 ms | 38 | 57 | 7 |
+| v450, run 2 | 207 | 3.9% | 25 ms | 38 | 57 | 5 |
+
+Slow UI-thread frames during the slide went from about 50 to 5-7. Idle stayed at 0 frames and the header D-pad at p50 20-21 ms; the row's 10 Rights stayed at p50 22 ms (p99 65-85 ms, varying run to run).
+

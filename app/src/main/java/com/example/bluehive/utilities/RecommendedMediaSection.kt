@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +66,36 @@ class RecommendedRowEntry {
         e()
         return true
     }
+}
+
+/**
+ * "Recommended Media", grey while [dim] and white otherwise, fading over
+ * 350 ms.
+ *
+ * ITS OWN COMPOSABLE, AND THE COLOUR IS READ ONLY WHILE DRAWING. It used to be
+ * animated in RecommendedMediaSection's body, so every frame of the fade
+ * rebuilt the whole section -- the row and every visible card. A trace of the
+ * movie page's slide on the onn box (2026-10-27) put 20-33 ms of
+ * recomposition into each of its slow frames, about nine recompositions a
+ * frame. [dim] is a lambda for the same reason: a focus change re-runs only
+ * this. The style is what Material's Text would build, so nothing on screen
+ * changes.
+ */
+@Composable
+private fun RecommendedHeading(dim: () -> Boolean, fontSize: TextUnit, modifier: Modifier) {
+    val color by animateColorAsState(
+        targetValue = if (dim()) DIM_TITLE_COLOR else Color.White,
+        animationSpec = tween(durationMillis = 350),
+        label = "recHeadingColor"
+    )
+    BasicText(
+        text = "Recommended Media",
+        modifier = modifier,
+        style = LocalTextStyle.current.merge(
+            TextStyle(fontSize = fontSize, fontFamily = AppTypography.passionRegular)
+        ),
+        color = { color },
+    )
 }
 
 /**
@@ -121,22 +154,14 @@ fun RecommendedMediaSection(
         }
     }
 
-    val titleColor by animateColorAsState(
-        targetValue = if (dimTitleUntilFocused && !hasRowFocus) DIM_TITLE_COLOR else Color.White,
-        animationSpec = tween(durationMillis = 350),
-        label = "recHeadingColor"
-    )
-
     Column(
         modifier = modifier
             .offset(x = 60.dp, y = topOffset)
             .height(250.dp)
     ) {
-        Text(
-            text = "Recommended Media",
-            color = titleColor,
+        RecommendedHeading(
+            dim = { dimTitleUntilFocused && !hasRowFocus },
             fontSize = titleFontSize,
-            fontFamily = AppTypography.passionRegular,
             // A smaller heading moves down by its lost line height, so it keeps
             // its gap to the cards.
             modifier = Modifier.offset(
