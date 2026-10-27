@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.exjunk.lib.thanos.vanish.VanishContainer
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 import com.example.bluehive.api.buildJapaneseAnimationSources
@@ -218,22 +217,13 @@ internal fun BoxScope.EpisodeSourceOverlay(
     }
 
     // The snap: a Watch on ... press turns the card to dust, and the source
-    // chain starts only once the dust is gone -- see EpisodeSnapState. The
-    // renderer lives with this overlay; the snap forgets it when it goes.
-    DisposableEffect(snap) { onDispose { snap.renderer = null } }
+    // chain starts only once the dust is gone -- see EpisodeSnapState.
 
     // The whole card at OVERLAY_SCALE: a smaller density scales every dp and sp
     // inside it -- the still, the text and the buttons alike -- and centring
     // keeps it in the middle of whatever screen it is on.
     val density = LocalDensity.current
     val scaled = remember(density) { Density(density.density * OVERLAY_SCALE, density.fontScale) }
-    VanishContainer(
-        modifier = Modifier.fillMaxSize(),
-        onGLSurfaceViewCreated = {
-            it.setAnimationConfig(duration = SNAP_RENDER_DURATION_MS.toFloat(), particleSize = 2f)
-            snap.renderer = it
-        },
-    ) {
     CompositionLocalProvider(LocalDensity provides scaled) {
     Column(
         modifier = Modifier
@@ -354,7 +344,10 @@ internal fun BoxScope.EpisodeSourceOverlay(
         }
     }
     }
-    }
+
+    // The dust's surface, only from a press until the dust is gone -- see
+    // EpisodeSnapRenderer.
+    if (snap.rendererWanted) EpisodeSnapRenderer(snap)
 }
 
 /**

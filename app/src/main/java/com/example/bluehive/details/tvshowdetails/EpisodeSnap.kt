@@ -30,6 +30,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.bluehive.details.shared.playback.PlaybackSession
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.DisposableEffect
+import com.exjunk.lib.thanos.vanish.VanishContainer
 import com.exjunk.lib.thanos.vanish.VanishGLSurfaceView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -52,8 +55,12 @@ internal const val SNAP_DURATION_MS = 1000L   // the user's call, 2026-10-27 (wa
  */
 internal const val SNAP_RENDER_DURATION_MS = 1500L
 
-/** The dust's first frames overlap the card before the card hides, so nothing blinks. */
-private const val SNAP_HIDE_DELAY_MS = 120L
+/**
+ * The dust's first frames overlap the card before the card hides, so nothing
+ * blinks. 200 ms, not Favorites' 150: the surface is made fresh on each press
+ * now, so its first frame (a new GL context, the shaders compiled) comes later.
+ */
+private const val SNAP_HIDE_DELAY_MS = 200L
 
 /** A capture that takes longer than this is abandoned: the press goes ahead without dust. */
 private const val SNAP_CAPTURE_TIMEOUT_MS = 600L
@@ -116,8 +123,19 @@ internal class EpisodeSnapState(
     var cardVisible by mutableStateOf(true)
         private set
 
-    /** The particle renderer; null until its surface exists. */
-    var renderer: VanishGLSurfaceView? = null
+    /**
+     * The particle renderer's surface is wanted: from a press until the dust
+     * is gone. It is NOT kept while the overlay idles or while the player is
+     * up -- a live GL surface behind the player has to be rebuilt before this
+     * screen can draw its first frame on the way back, which added ~60 ms to
+     * every player close (v463-v467: 305 ms average against 246 ms in v462).
+     */
+    var rendererWanted by mutableStateOf(false)
+        private set
+
+    /** The particle renderer, once its surface exists; null otherwise. */
+    var renderer by mutableStateOf<VanishGLSurfaceView?>(null)
+        internal set
 
     internal var layer: GraphicsLayer? = null
     internal var bounds: Rect? = null
@@ -129,6 +147,7 @@ internal class EpisodeSnapState(
     fun snapThen(action: () -> Unit) {
         if (phase != Phase.Idle) return
         phase = Phase.Snapping
+        rendererWanted = true
         scope.launch {
             val dust = try {
                 withTimeoutOrNull(SNAP_CAPTURE_TIMEOUT_MS) { startDust(this@EpisodeSnapState) } ?: false
@@ -144,6 +163,7 @@ internal class EpisodeSnapState(
                 delay(SNAP_DURATION_MS - SNAP_HIDE_DELAY_MS)
             } else {
                 cardVisible = false
+                rendererWanted = false
             }
             phase = Phase.Playing
             try {
@@ -153,6 +173,13 @@ internal class EpisodeSnapState(
             } catch (t: Throwable) {
                 warn("the press's action failed", t)
                 finish()
+                return@launch
+            }
+            // The renderer runs longer than the hold (SNAP_RENDER_DURATION_MS):
+            // let the last of the dust go, then drop the surface.
+            if (dust) {
+                delay(SNAP_RENDER_DURATION_MS - SNAP_DURATION_MS + SNAP_HIDE_DELAY_MS)
+                rendererWanted = false
             }
         }
     }
@@ -190,13 +217,15 @@ internal class EpisodeSnapState(
         } catch (t: Throwable) {
             warn("renderer reset failed", t)
         }
+        rendererWanted = false
         cardVisible = true
         phase = Phase.Idle
     }
 
     /** Hands the card's picture to the renderer; false when there is nothing to animate with. */
     internal suspend fun startRendererDust(): Boolean {
-        val gl = renderer ?: return false
+        // The surface is made on the press (rendererWanted): wait for it.
+        val gl = snapshotFlow { renderer }.first { it != null }!!
         val layer = layer ?: return false
         val box = bounds ?: return false
         if (box.width < 1f || box.height < 1f) return false
@@ -269,3 +298,20 @@ internal fun Modifier.blockFocusWhileSnapping(snap: EpisodeSnapState): Modifier 
         }
     }
     .focusGroup()
+
+/**
+ * The dust's GL surface (ThanosEffect's VanishContainer, which puts it on top
+ * of the window), composed only while [EpisodeSnapState.rendererWanted]. The
+ * snap is told about it when it exists and forgets it when it goes.
+ */
+@Composable
+internal fun EpisodeSnapRenderer(snap: EpisodeSnapState) {
+    DisposableEffect(snap) { onDispose { snap.renderer = null } }
+    VanishContainer(
+        modifier = Modifier.fillMaxSize(),
+        onGLSurfaceViewCreated = {
+            it.setAnimationConfig(duration = SNAP_RENDER_DURATION_MS.toFloat(), particleSize = 2f)
+            snap.renderer = it
+        },
+    ) {}
+}
