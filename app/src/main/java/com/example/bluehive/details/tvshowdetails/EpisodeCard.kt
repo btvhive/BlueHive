@@ -393,7 +393,7 @@ internal fun EpisodeCard(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "EPISODE NOT AVAILABLE",
+                        text = "EPISODE NOT AIRED",
                         fontFamily = passionFont,
                         fontSize = 15.sp,
                         lineHeight = 17.sp,

@@ -12,7 +12,7 @@ import org.junit.Test
  *
  *   * a false NEGATIVE lets through an episode that cannot play — the old
  *     behaviour, a slow failure;
- *   * a false POSITIVE puts "EPISODE NOT AVAILABLE" over something that would
+ *   * a false POSITIVE puts "EPISODE NOT AIRED" over something that would
  *     have played, with no way past it.
  *
  * So the rule fails open, and these tests exist mostly to keep it that way
