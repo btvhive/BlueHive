@@ -51,9 +51,10 @@ private val OVERLAY_WIDTH = 400.dp
 private const val OVERLAY_SCALE = 0.85f
 private val OVERLAY_SHAPE = RoundedCornerShape(10.dp)
 private val OVERLAY_EDGE = Color(0xFF343648)
-// Near-black, a touch lifted -- not the darkest black (the user's call,
-// 2026-10-27; was the dark grey-blue 0xFF12131C).
-private val OVERLAY_FACE = Color(0xFF0A0A0C)
+// The app's background black, 0B0B0B, with no blue in it (the user's call,
+// 2026-10-27; was the dark grey-blue 0xFF12131C, then 0A0A0C). The still
+// fades into it too.
+private val OVERLAY_FACE = Color(0xFF0B0B0B)
 private val OVERLAY_STILL_HEIGHT = 190.dp
 
 /** The Watch buttons: the movie page's, 162 dp wide, two to a row. */
@@ -225,7 +226,7 @@ internal fun BoxScope.EpisodeSourceOverlay(
             .width(OVERLAY_WIDTH)
             .clip(OVERLAY_SHAPE)
             .background(OVERLAY_FACE)
-            .border(2.dp, OVERLAY_EDGE, OVERLAY_SHAPE)
+            .border(1.dp, OVERLAY_EDGE, OVERLAY_SHAPE)
     ) {
         EpisodeOverlayHeader(
             stillUrl = fullSizeStill(selectedEpisode.stillImageUrl) ?: backdropUrl,
