@@ -35,6 +35,9 @@ private const val EPISODE_NAV_REPEAT_MS = 140L
 /** The row's left edge: 11.25 dp inside the season cap, like the old mini cap's overlap. */
 internal val EPISODE_ROW_X = SEASON_CAP_X + SEASON_CAP_WIDTH - 11.25.dp
 
+/** The row's right edge: 17 dp under the right cap, as with the cap at 902.75 and the edge at 919.75. */
+internal val EPISODE_ROW_END = RIGHT_CAP_X + 17.dp
+
 /**
  * The episode row: "Loading episodes...", "No episodes found", or the
  * LazyRow of EpisodeCards for the season on show, keyed by tmdbEpisodeId.
@@ -63,9 +66,9 @@ internal fun BoxScope.EpisodeRow(
         modifier = Modifier
             .align(Alignment.TopStart)
             // Starts 11.25 dp inside the season cap's right edge (as it did with
-            // the mini cap) and ends where it always did, at 919.75 dp.
+            // the mini cap) and ends 17 dp under the right cap (EPISODE_ROW_END).
             .offset(x = EPISODE_ROW_X, y = 299.5.dp)
-            .width(919.75.dp - EPISODE_ROW_X)
+            .width(EPISODE_ROW_END - EPISODE_ROW_X)
             .height(260.dp) //122.25
         //.background(Color.Red)
     ) {
