@@ -19,12 +19,21 @@ import com.example.bluehive.details.shared.layout.OverviewLines
 import com.example.bluehive.utilities.RecommendedRowEntry
 
 /**
- * The right-hand caps' left edge: 10 dp right of where they were (902.75), so
- * the last card visible when a season first draws sits clearly outside the
- * cap (the user's calls, 2026-10-27: 6 dp, 16, then 10). The row ends
- * 17 dp under them, as it always did (EPISODE_ROW_END).
+ * The recommended row's right cap's right edge: right_upper_body at the row's
+ * x 60 + 840, 25.4 dp wide (RecommendedMediaSection). Declared before
+ * RIGHT_CAP_X, which reads it: top-level values initialise in file order.
  */
-internal val RIGHT_CAP_X = 912.75.dp
+private val RECOMMENDED_RIGHT_CAP_END = 925.4.dp
+
+/**
+ * The right-hand caps' left edge. Since v475 their right edge (the upper cap
+ * is 30.5 dp wide) lines up with the recommended row's right cap, the user's
+ * call, 2026-10-27: 894.9 dp. Before that 912.75 (902.75 originally, then 6,
+ * 16 and 10 dp right so the last card visible when a season first draws sat
+ * clear of it). The row ends 17 dp under them, as it always did
+ * (EPISODE_ROW_END).
+ */
+internal val RIGHT_CAP_X = RECOMMENDED_RIGHT_CAP_END - 30.5.dp
 
 /**
  * How much lower the recommended row peeks here than on the movie page: the
