@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -31,8 +32,8 @@ import androidx.compose.ui.unit.sp
 
 /**
  * The genres line, then the overview, which drops to a smaller font when it
- * would not fit: with [maxLines] (the TV page) step by step until it fits that
- * many lines (fitOverviewSize); without, from 18 to 16 sp past five lines.
+ * would not fit: with [lines] (the TV page) step by step until it fits
+ * (fitOverviewSize); without, from 18 to 16 sp past five lines.
  *
  * Moved here word for word from both screens in Stage 2 of the details
  * redesign. A BoxScope extension: it positions itself in the screen's Box.
@@ -51,11 +52,10 @@ fun BoxScope.DetailsOverview(
      */
     onTextBottom: ((Dp) -> Unit)? = null,
     /**
-     * The most lines shown, ending in an ellipsis; unlimited leaves it to the
-     * box's height. The TV page shows 5, so its last line keeps clear of the
-     * episodes' air dates (2026-10-27).
+     * The most lines shown, ending in an ellipsis; null leaves it to the
+     * box's height. See OverviewLines.
      */
-    maxLines: Int = Int.MAX_VALUE,
+    lines: OverviewLines? = null,
 ) {
     // ========================================================================================================================================= > // Genres
     if (!genres.isNullOrBlank() && genres != "N/A") {
@@ -89,11 +89,11 @@ fun BoxScope.DetailsOverview(
         // With a line limit (the TV page): the largest size that fits it --
         // see fitOverviewSize. Measured while composing, so the first frame
         // already has the right size.
-        val fitted = if (maxLines == Int.MAX_VALUE) null else {
+        val fitted = if (lines == null) null else {
             val style = LocalTextStyle.current
             val widthPx = with(density) { OVERVIEW_WIDTH.roundToPx() }
-            remember(overview, maxLines, widthPx, dongleRegular, style) {
-                fitOverviewSize(overview, maxLines, widthPx, style, dongleRegular, textMeasurer)
+            remember(overview, lines, widthPx, dongleRegular, style) {
+                fitOverviewSize(overview, lines, widthPx, style, dongleRegular, textMeasurer)
             }
         }
 
@@ -128,9 +128,9 @@ fun BoxScope.DetailsOverview(
         Text(
             text = overview,
             color = Color(0xFF8B8B8B),
-            fontSize = fitted?.fontSize ?: fontSize,
+            fontSize = fitted?.size?.fontSize ?: fontSize,
             fontFamily = dongleRegular,
-            lineHeight = fitted?.lineHeight ?: lineHeight,
+            lineHeight = fitted?.size?.lineHeight ?: lineHeight,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(start = 28.25.dp, top = 175.dp)
@@ -138,7 +138,7 @@ fun BoxScope.DetailsOverview(
                 .height(108.25.dp)
                 .width(OVERVIEW_WIDTH),
             overflow = TextOverflow.Ellipsis,
-            maxLines = maxLines,
+            maxLines = fitted?.maxLines ?: Int.MAX_VALUE,
             onTextLayout = { layout ->
                 if (onTextBottom != null && layout.lineCount > 0) {
                     val bottomPx = minOf(layout.getLineBottom(layout.lineCount - 1), layout.size.height.toFloat())
@@ -171,15 +171,36 @@ internal val OVERVIEW_SIZES = listOf(
     OverviewSize(14.sp, 12.sp),
 )
 
-/** The first of [sizes] at which [lineCount] fits [maxLines]; the last (smallest) if none does. Pure, so it is unit-tested. */
-internal fun pickOverviewSize(
-    sizes: List<OverviewSize>,
-    maxLines: Int,
-    lineCount: (OverviewSize) -> Int,
-): OverviewSize = sizes.firstOrNull { lineCount(it) <= maxLines } ?: sizes.last()
+/**
+ * A line-limited overview's limits: [atFullSize] lines at the first (largest)
+ * size, [whenShrunk] at every smaller one, whose lines take less height. The
+ * TV page: 5 at 18 sp, so the last line keeps clear of the episodes' air
+ * dates, and 6 once it has shrunk (the user's calls, 2026-10-27).
+ */
+@Immutable
+data class OverviewLines(val atFullSize: Int, val whenShrunk: Int)
+
+/** The size an overview is drawn at, and the most lines it shows there. */
+internal data class OverviewFit(val size: OverviewSize, val maxLines: Int)
 
 /**
- * The largest overview size whose text wraps into [maxLines] lines in a box
+ * The first of [sizes] at which [lineCount] fits its limit in [lines]; the
+ * last (smallest) if none does. Pure, so it is unit-tested.
+ */
+internal fun pickOverviewSize(
+    sizes: List<OverviewSize>,
+    lines: OverviewLines,
+    lineCount: (OverviewSize) -> Int,
+): OverviewFit {
+    sizes.forEachIndexed { index, size ->
+        val limit = if (index == 0) lines.atFullSize else lines.whenShrunk
+        if (lineCount(size) <= limit) return OverviewFit(size, limit)
+    }
+    return OverviewFit(sizes.last(), if (sizes.size == 1) lines.atFullSize else lines.whenShrunk)
+}
+
+/**
+ * The largest overview size whose text wraps into its [lines] limit in a box
  * [widthPx] wide, measured in the style the Text draws with ([style] is
  * Material's LocalTextStyle, merged as Text merges it), so the count is the
  * one the screen shows. Stops at the first fit, so a short overview costs one
@@ -187,14 +208,14 @@ internal fun pickOverviewSize(
  */
 private fun fitOverviewSize(
     overview: String,
-    maxLines: Int,
+    lines: OverviewLines,
     widthPx: Int,
     style: TextStyle,
     fontFamily: FontFamily,
     measurer: TextMeasurer,
-): OverviewSize {
+): OverviewFit {
     val text = AnnotatedString(overview)
-    return pickOverviewSize(OVERVIEW_SIZES, maxLines) { size ->
+    return pickOverviewSize(OVERVIEW_SIZES, lines) { size ->
         measurer.measure(
             text = text,
             style = style.merge(TextStyle(fontSize = size.fontSize, fontFamily = fontFamily, lineHeight = size.lineHeight)),

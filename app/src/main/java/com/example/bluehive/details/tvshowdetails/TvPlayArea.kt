@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.CoroutineScope
 import com.example.bluehive.details.shared.layout.PEEK_ROW_TOP
 import com.example.bluehive.details.shared.layout.PEEK_SLIDE
+import com.example.bluehive.details.shared.layout.OverviewLines
 import com.example.bluehive.utilities.RecommendedRowEntry
 
 /**
@@ -34,8 +35,12 @@ internal val RIGHT_CAP_X = 912.75.dp
  */
 private val TV_PEEK_ROW_DROP = 32.dp
 
-/** The overview's most lines on the TV page, so its last one clears the air dates (v470; it showed 7). */
-internal const val TV_OVERVIEW_MAX_LINES = 5
+/**
+ * The overview's most lines on the TV page: 5 at full size, so the last one
+ * clears the air dates (v470; it showed 7), and 6 once the font has shrunk
+ * (v473).
+ */
+internal val TV_OVERVIEW_LINES = OverviewLines(atFullSize = 5, whenShrunk = 6)
 
 /** The TV page's recommended row top (DetailsPeekState.baseRowTop). */
 internal val TV_PEEK_ROW_TOP = PEEK_ROW_TOP + TV_PEEK_ROW_DROP
