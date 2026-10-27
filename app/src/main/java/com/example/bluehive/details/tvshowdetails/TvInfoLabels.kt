@@ -1,30 +1,64 @@
 package com.example.bluehive.details.tvshowdetails
 
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import com.example.bluehive.details.shared.layout.DetailsInfoLine
+import com.example.bluehive.details.shared.layout.DetailsInfoLines
 
 /**
- * The TV screen's four metadata labels: seasons, status, release date and
- * language.
+ * The lines that have a value, in their order: seasons, status, release
+ * date, language. A missing one is left out and the rest close up, as on the
+ * movie page (2026-10-27; they used to print "N/A" in a fixed slot). The
+ * hand-tuned spacing inside the strings is the screen's as it was. Pure, so
+ * TvInfoLabelsTest pins it.
+ */
+internal fun tvInfoLines(
+    numberOfSeasons: Int,
+    status: String?,
+    releaseDate: String?,
+    originalLanguage: String?,
+): List<DetailsInfoLine> = buildList {
+    if (numberOfSeasons > 0) add(DetailsInfoLine("Seasons:          $numberOfSeasons", 17))
+    if (status != null && isKnown(status)) add(DetailsInfoLine("Status:            $status", 17))
+    if (releaseDate != null && isKnown(releaseDate)) {
+        val dateParts = releaseDate.split("-")
+        val text = if (dateParts.size == 3) {
+            "Release Date:     ${dateParts[1]}/${dateParts[2]}/${dateParts[0]}"  // Format as MM/DD/YYYY
+        } else {
+            "Release Date:     $releaseDate"
+        }
+        add(DetailsInfoLine(text, 16))
+    }
+    if (originalLanguage != null && isKnown(originalLanguage)) {
+        add(DetailsInfoLine("Language:        $originalLanguage", 17))
+    }
+}
+
+private fun isKnown(value: String?) = !value.isNullOrBlank() && value != "N/A"
+
+/**
+ * How many lines [tvInfoLines] makes, without building them: the screen
+ * places the genres line with it (DetailsInfo.genresTop). The strings are
+ * built inside TvInfoLabels, out of the screen function's method budget.
+ */
+internal fun tvInfoLineCount(
+    numberOfSeasons: Int,
+    status: String?,
+    releaseDate: String?,
+    originalLanguage: String?,
+): Int = (if (numberOfSeasons > 0) 1 else 0) + (if (isKnown(status)) 1 else 0) +
+    (if (isKnown(releaseDate)) 1 else 0) + (if (isKnown(originalLanguage)) 1 else 0)
+
+/**
+ * The TV screen's metadata labels under the rating, stacked from the top with
+ * no gaps -- see [tvInfoLines] and DetailsInfoLines, which the movie page
+ * shares.
  *
  * They were the middle of TvDetailsInfoBlock, the first piece ever cut out of
  * TVShowsDetailsScreenContent (2026-09-21, after R8 made ART refuse that
- * class). Its logo and overview parts are shared since Stage 2 of the details
- * redesign (DetailsLogoOrTitle, DetailsOverview); these stay TV-only because
- * the movie screen shows revenue and budget instead, with its own spacing.
- * A BoxScope extension so each label keeps its absolute position.
- *
- * The four strings are worked out here, once per value. Until Stage 10 the
- * screen worked them out and passed them in.
+ * class). A BoxScope extension so each label keeps its absolute position.
  */
 @Composable
 internal fun BoxScope.TvInfoLabels(
@@ -34,87 +68,8 @@ internal fun BoxScope.TvInfoLabels(
     originalLanguage: String?,
     dongleRegular:    FontFamily,
 ) {
-    // 🔹 Precomputed display strings (recomputed only when inputs change)
-    val seasonsLabel = remember(numberOfSeasons) {
-        "Seasons:          " + if (numberOfSeasons > 0) numberOfSeasons.toString() else "N/A"
+    val lines = remember(numberOfSeasons, status, releaseDate, originalLanguage) {
+        tvInfoLines(numberOfSeasons, status, releaseDate, originalLanguage)
     }
-
-    val statusLabel = remember(status) {
-        "Status:            " + if (!status.isNullOrBlank() && status != "N/A") status else "N/A"
-    }
-
-    val languageLabel = remember(originalLanguage) {
-        "Language:        " + (
-                if (!originalLanguage.isNullOrBlank() && originalLanguage != "N/A")
-                    originalLanguage
-                else
-                    "N/A"
-                )
-    }
-
-    val releaseDateLabel = remember(releaseDate) {
-        if (!releaseDate.isNullOrBlank() && releaseDate != "N/A") {
-            val dateParts = releaseDate.split("-")
-            if (dateParts.size == 3) {
-                // Format as MM/DD/YYYY
-                "Release Date:     ${dateParts[1]}/${dateParts[2]}/${dateParts[0]}"
-            } else {
-                "Release Date:     $releaseDate"
-            }
-        } else {
-            "Release Date:      N/A"
-        }
-    }
-
-    // ========================================================================================================================================= > // Seasons
-    Text(
-        text = seasonsLabel,
-        color = Color(0xFF8B8B8B),
-        fontSize = 17.sp,
-        fontFamily = dongleRegular,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 258.25.dp, top = 34.dp)
-    )
-    // ========================================================================================================================================= >
-
-
-    // ========================================================================================================================================= > // Status
-    Text(
-        text = statusLabel,
-        color = Color(0xFF8B8B8B),
-        fontSize = 17.sp,
-        fontFamily = dongleRegular,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 258.25.dp, top = 48.dp)
-    )
-    // ========================================================================================================================================= >
-
-
-    // ========================================================================================================================================= > // release_date
-    Text(
-        text = releaseDateLabel,
-        color = Color(0xFF8B8B8B),
-        fontSize = 16.sp,
-        fontFamily = dongleRegular,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 258.25.dp, top = 63.dp)
-    )
-
-    // ========================================================================================================================================= >
-
-
-    // ========================================================================================================================================= > // original language
-    Text(
-        text = languageLabel,
-        color = Color(0xFF8B8B8B),
-        fontSize = 17.sp,
-        fontFamily = dongleRegular,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 258.25.dp, top = 75.dp)
-    )
-    // ========================================================================================================================================= >
+    DetailsInfoLines(lines, dongleRegular)
 }

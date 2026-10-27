@@ -52,3 +52,29 @@ class TvFocusMap internal constructor(
 @Composable
 fun rememberTvFocusMap(providerCount: () -> Int): TvFocusMap =
     remember { TvFocusMap(providerCount()) }
+
+/**
+ * Up from the recommended row: the episode Down came from (the last one
+ * focused, 0 on a season's first draw) while it is on screen, else the first
+ * episode on screen; with no episodes, the season accordion, then Play
+ * Trailer. Each is tried in turn, so a target that is not attached yet never
+ * leaves focus stranded in the row's slid-up page.
+ */
+internal fun TvFocusMap.focusAboveRow(episodesState: EpisodesState) {
+    val visible = episodesState.rowState.layoutInfo.visibleItemsInfo
+    val last = episodesState.lastFocusedEpisodeIndex
+    val index = if (visible.any { it.index == last }) last else visible.firstOrNull()?.index
+    val targets = listOfNotNull(
+        index?.let { episodesState.focusRequesters.getOrNull(it) },
+        seasonPicker,
+        trailer,
+    )
+    for (target in targets) {
+        try {
+            target.requestFocus()
+            return
+        } catch (_: IllegalStateException) {
+            // Not attached: try the next.
+        }
+    }
+}

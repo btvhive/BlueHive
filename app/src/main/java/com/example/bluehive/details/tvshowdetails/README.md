@@ -8,10 +8,10 @@ The plan is in `docs/details-redesign-architecture.md`, and the sizes after each
 |---|---|
 | TVShowsDetailsScreenCompose.kt | the Activity (same class name, new package) |
 | TvShowDetailsArgs.kt | typed intent extras |
-| TvShowDetailsScreen.kt | root: creates the state, plugs into `shared/layout/DetailsScaffold` |
+| TvShowDetailsScreen.kt | root: creates the state, plugs into `shared/layout/DetailsScaffold` with the peek layout (no Extras: Search, gold/bronze Favorites, recommended row under the episodes, since v469) |
 | TvFocusMap.kt | focus requesters shared between sections |
-| TvInfoLabels.kt | seasons, status, release date, language |
-| TvPlayArea.kt | the episode row between its caps, the season cap + accordion, the source overlay |
+| TvInfoLabels.kt | seasons, status, release date, language; missing ones close up (`shared/layout/DetailsInfoLines`) |
+| TvPlayArea.kt | the episode row between its caps, the season cap + accordion; the row's peek geometry (`TV_PEEK_ROW_TOP`) |
 | SeasonAvailability.kt | aired/unaired rules + season check (pure, tested) |
 | SeasonAccordion.kt | the season picker inside the left cap (gold card + wheel of slabs), since 2026-10-27; replaced SeasonColumn |
 | EpisodesState.kt | season loads, prefetch, first focus, watched markers |
@@ -25,4 +25,4 @@ Rules, checked on every build:
 
 - Never import anything from `moviesdetails` (`checkDetailsBoundaries`).
 - Code both screens need goes in `details/shared`.
-- No method over 2,500 dex code units or 100 registers (`checkMethodSizes`, after each release build). Effects moved out of a composable go in a restartable child composable, called where they were: R8 inlines a one-caller `remember…` function straight back.
+- No method over 2,500 dex code units or 100 registers (`checkMethodSizes`, after each release build). Effects moved out of a composable go in a restartable child composable, called where they were: R8 inlines a one-caller `remember…` function straight back. A `remember…` both screens call stays out (v469: `rememberDetailsPeek`, `rememberDetailsHeaderGate`, `rememberDetailsSearch`, `rememberTimedNotice`).

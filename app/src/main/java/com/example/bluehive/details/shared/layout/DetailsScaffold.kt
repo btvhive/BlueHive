@@ -11,6 +11,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -53,6 +56,28 @@ data class DetailsInfo(
     val genresTop: Dp? = null,
 )
 
+/**
+ * Keeps first focus off the header while the page sends it somewhere else
+ * (opened in the recommended row, or back to an episode from Continue
+ * Watching); [open] lets the header take focus again, for good. One holder
+ * per page, so neither screen function carries the flag or the lambdas that
+ * cleared it (checkMethodSizes).
+ */
+@Stable
+class DetailsHeaderGate(blocked: Boolean) {
+    var isOpen by mutableStateOf(!blocked)
+        private set
+
+    fun open() {
+        isOpen = true
+    }
+}
+
+/** The page's DetailsHeaderGate, made again only if [blocked] changes. */
+@Composable
+fun rememberDetailsHeaderGate(blocked: Boolean): DetailsHeaderGate =
+    remember(blocked) { DetailsHeaderGate(blocked) }
+
 /** A screen's settings for the five header buttons. */
 @Stable
 data class DetailsHeaderSpec(
@@ -62,8 +87,8 @@ data class DetailsHeaderSpec(
     val favoriteFocusRequester: FocusRequester,
     val extrasFocusRequester: FocusRequester,
     val trailerFocusRequester: FocusRequester,
-    /** The peek layout's Search button press; null shows no Search button. */
-    val onSearch: (() -> Unit)? = null,
+    /** The peek layout's Search button opens this keyboard; null shows no Search button. */
+    val search: DetailsSearchState? = null,
 )
 
 /**
@@ -88,7 +113,7 @@ data class DetailsHeaderSpec(
  * Each slot is its own recomposition scope: a change that only the play area
  * or only the overlays read re-runs that slot, not the whole screen.
  *
- * With a [peek] (the movie screen) the page is the peek layout instead: no
+ * With a [peek] (both screens since 2026-10-27) the page is the peek layout instead: no
  * Extras button, the play area and the recommended row both shown, and
  * everything but the background on a layer that slides up while the row has
  * focus. The overlays stay put. See DetailsPeekState.
@@ -113,7 +138,8 @@ fun DetailsScaffold(
     modifier: Modifier = Modifier,
     /**
      * On the page but not the overlays: the TV screen blurs the page behind its
-     * episode overlay, which is one of its overlays and has to stay sharp.
+     * episode overlay, which is one of its overlays and has to stay sharp, and
+     * refuses the page focus while the overlay snaps.
      */
     pageModifier: Modifier = Modifier,
 ) {
@@ -130,12 +156,14 @@ fun DetailsScaffold(
                 )
             }
         } else {
-            DetailsPageBackground()
-            DetailsSlidingPage(peek) {
-                DetailsPage(
-                    info, trailer, favorite, extras, header, releaseTrailerOnLeave,
-                    onOpenRecommendation, onUpFromRecommendations, labels, playArea, peek, dongleRegular,
-                )
+            Box(Modifier.fillMaxSize().then(pageModifier)) {
+                DetailsPageBackground()
+                DetailsSlidingPage(peek) {
+                    DetailsPage(
+                        info, trailer, favorite, extras, header, releaseTrailerOnLeave,
+                        onOpenRecommendation, onUpFromRecommendations, labels, playArea, peek, dongleRegular,
+                    )
+                }
             }
         }
 
@@ -211,8 +239,10 @@ private fun BoxScope.DetailsPage(
             extras = extras,
             trailer = trailer,
             showExtras = peek == null,
-            onSearch = header.onSearch,
-            // The movie page's labels carry a shadow, like its Watch buttons;
+            // Search: the trailer stops, as it does when a recommendation
+            // opens, and the keyboard opens over the page.
+            onSearch = header.search?.let { search -> { trailer.stop(); search.open() } },
+            // The peek layout's labels carry a shadow, like its Watch buttons;
             // Favorites' dark label a light highlight instead.
             labelShadow = if (peek != null) ButtonLabelShadow else null,
             favoriteLabelShadow = if (peek != null) FavoriteLabelHighlight else null,

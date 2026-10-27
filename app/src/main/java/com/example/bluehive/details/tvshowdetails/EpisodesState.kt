@@ -1,5 +1,6 @@
 package com.example.bluehive.details.tvshowdetails
 
+import com.example.bluehive.details.shared.layout.DetailsHeaderGate
 import android.util.Log
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -173,7 +174,7 @@ fun rememberEpisodesState(
 
 /**
  * The first focus when the page opens: the episode a resume asked for, or the
- * start of the row. [onHeaderReleased] lifts the screen's header focus block.
+ * start of the row. [headerGate] opens the screen's header to focus.
  *
  * Moved here from the screen in Stage 10 of the details redesign; the screen
  * calls it where the effect was (architecture C5).
@@ -184,7 +185,7 @@ internal fun FirstEpisodeFocus(
     focusMap: TvFocusMap,
     resumeToEpisode: Boolean,
     lastEpisode: Int,
-    onHeaderReleased: () -> Unit,
+    headerGate: DetailsHeaderGate,
 ) {
     var isInitialEpisodeLoad by remember { mutableStateOf(resumeToEpisode) }
 
@@ -228,12 +229,12 @@ internal fun FirstEpisodeFocus(
             // never took focus, un-block the header and focus Favorites.
             if (!landed) {
                 Log.w("TVDetails", "⚠️ Episode focus never landed — falling back to header")
-                onHeaderReleased()
+                headerGate.open()
                 awaitFrame()
                 focusMap.favorite.requestFocus()
             }
 
-            onHeaderReleased()
+            headerGate.open()
             isInitialEpisodeLoad = false
         } else {
             episodesState.lastFocusedEpisodeIndex = 0

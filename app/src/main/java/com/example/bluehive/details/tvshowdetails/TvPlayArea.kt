@@ -13,6 +13,9 @@ import androidx.compose.ui.Alignment
 import com.example.bluehive.R
 import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.CoroutineScope
+import com.example.bluehive.details.shared.layout.PEEK_ROW_TOP
+import com.example.bluehive.details.shared.layout.PEEK_SLIDE
+import com.example.bluehive.utilities.RecommendedRowEntry
 
 /**
  * The right-hand caps' left edge: 10 dp right of where they were (902.75), so
@@ -21,6 +24,20 @@ import kotlinx.coroutines.CoroutineScope
  * 17 dp under them, as it always did (EPISODE_ROW_END).
  */
 internal val RIGHT_CAP_X = 912.75.dp
+
+/**
+ * How much lower the recommended row peeks here than on the movie page: the
+ * season cap ends at 421.25 dp, about 25 dp under the movie's bottom play buttons (~396),
+ * and the row's heading keeps the movie page's gap below them. The slide
+ * grows by the same, so the slid-up row ends where the movie's does.
+ */
+private val TV_PEEK_ROW_DROP = 25.dp
+
+/** The TV page's recommended row top (DetailsPeekState.baseRowTop). */
+internal val TV_PEEK_ROW_TOP = PEEK_ROW_TOP + TV_PEEK_ROW_DROP
+
+/** How far the TV page slides up while the row has focus. */
+internal val TV_PEEK_SLIDE = PEEK_SLIDE + TV_PEEK_ROW_DROP
 
 /**
  * The TV screen's play area: the episode row between its side caps and the
@@ -45,6 +62,8 @@ internal fun BoxScope.TvPlayArea(
     passionFont: FontFamily,
     dongleRegular: FontFamily,
     coroutineScope: CoroutineScope,
+    /** Down on an episode enters the recommended row through this. */
+    rowEntry: RecommendedRowEntry,
 ) {
     // ===============================================================================> episode lAZY ROW DECORATIONS
     // The strip behind the season cap's right edge, where the cards come out.
@@ -81,6 +100,7 @@ internal fun BoxScope.TvPlayArea(
         passionFont     = passionFont,
         dongleRegular   = dongleRegular,
         coroutineScope  = coroutineScope,
+        rowEntry        = rowEntry,
     )
 
 

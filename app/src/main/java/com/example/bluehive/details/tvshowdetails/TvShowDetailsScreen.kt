@@ -1,7 +1,6 @@
 package com.example.bluehive.details.tvshowdetails
 
 import android.annotation.SuppressLint
-import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
@@ -31,8 +30,18 @@ import com.example.bluehive.details.shared.playback.rememberSourcePlayback
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
+import com.example.bluehive.details.shared.layout.rememberDetailsPeek
+import com.example.bluehive.details.shared.layout.DetailsCacheStats
 import com.example.bluehive.details.shared.layout.DetailsScaffold
+import com.example.bluehive.details.shared.layout.DetailsSearchKeyboard
+import com.example.bluehive.details.shared.layout.rememberDetailsSearch
+import com.example.bluehive.details.shared.layout.PeekRowStart
+import com.example.bluehive.details.shared.layout.rememberDetailsHeaderGate
+import com.example.bluehive.details.shared.layout.detailsGenresTop
+import com.example.bluehive.searchBarComponent.openSearchScreen
 import com.example.bluehive.details.shared.layout.DetailsToast
+import com.example.bluehive.details.shared.layout.TimedDetailsToast
+import com.example.bluehive.details.shared.layout.rememberTimedNotice
 import com.example.bluehive.details.shared.layout.TrailerFailedNotice
 import com.example.bluehive.details.shared.state.DetailsBackHandlers
 import com.example.bluehive.details.shared.state.rememberExtrasState
@@ -82,29 +91,32 @@ fun TvShowDetailsScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // Extras: the switch and its recommendations row -- see ExtrasState. On
-    // this screen the row loads on the main thread, and a page opened from
-    // another show's Extras uses the prefetched row (architecture §10, #5 and
-    // #13).
+    // The recommendations row -- see ExtrasState. This screen has no Extras
+    // switch any more: the peek layout (DetailsPeekState) shows the row under
+    // the episodes from the start, so it loads on open, on a background
+    // thread, unless the page opened with another show's prefetched row.
+    // Extras itself never turns on here.
     val extras = rememberExtrasState(
         scope            = coroutineScope,
         repository       = recommendationsRepository,
         tmdbId           = args.mediaId,
         mediaType        = args.mediaType,
-        startInExtras    = args.startInExtras,
+        startInExtras    = false,
         loadInBackground = false,
         prefetched       = prefetch?.recommendations,
     )
 
-    var blockHeaderInitialFocus by remember(args.startInExtras) {
-        mutableStateOf(args.startInExtras || args.resumeToEpisode)
-    }
+    // Opened from history in Extras: the row takes focus as it loads, so the
+    // page opens slid up on it. The row sits lower than the movie page's,
+    // under the season cap (TV_PEEK_ROW_TOP).
+    val peek = rememberDetailsPeek(startFocused = args.startInExtras, baseRowTop = TV_PEEK_ROW_TOP, baseSlide = TV_PEEK_SLIDE)
 
-    LaunchedEffect(args.startInExtras, extras.recommendations) {
-        if (args.startInExtras && extras.recommendations.isNotEmpty()) {
-            blockHeaderInitialFocus = false
-        }
-    }
+    // The Search button's keyboard, over this page -- see DetailsSearchKeyboard.
+    val search = rememberDetailsSearch()
+
+    // First focus off the header while the page opens in the row or on an
+    // episode -- see DetailsHeaderGate.
+    val headerGate = rememberDetailsHeaderGate(blocked = args.startInExtras || args.resumeToEpisode)
 
 
     // The season on show, its episodes, the row's scroll and focus, the open
@@ -171,9 +183,12 @@ fun TvShowDetailsScreen(
         focusMap         = focusMap,
         resumeToEpisode  = args.resumeToEpisode,
         lastEpisode      = args.lastEpisode,
-        onHeaderReleased = { blockHeaderInitialFocus = false },
+        headerGate       = headerGate,
     )
 
+
+    // The row loads; opened in it, the header waits for its titles -- see PeekRowStart.
+    PeekRowStart(peek, extras, focusMap.favorite, headerGate)
 
     val favoriteProfileId = args.profileId
 
@@ -208,7 +223,7 @@ fun TvShowDetailsScreen(
     // Shown when an anime's AniList mapping doesn't exist yet (resolveAnime 404 →
     // miruroUrl null). Brand-new titles aren't in anime_id_map until AniBridge
     // ingests them, so instead of leaving DuB/SuB inert we tell the user why.
-    var showNotYetAvailable by remember { mutableStateOf(false) }
+    val notYetAvailable = rememberTimedNotice()
 
     // The anime flow: the DuB/SuB prompt and the server picker, the extraction
     // (backend first, the on-device extractor as the fallback) and the
@@ -298,9 +313,6 @@ fun TvShowDetailsScreen(
         },
     )
 
-    LaunchedEffect(showNotYetAvailable) {
-        if (showNotYetAvailable) { delay(4000); showNotYetAvailable = false }
-    }
 
     // The first season load, and the move to the newest listed season -- see
     // SeasonLoadEffects.
@@ -313,35 +325,8 @@ fun TvShowDetailsScreen(
         listedSeasons   = listedSeasons,
     )
 
-    // ✅ Log cache stats when screen loads — deferred + off the main thread.
-    // gatherStats() does THREE full directory walks; running it inline on entry
-    // was a main-thread stall. Paint first, then walk on IO.
-    LaunchedEffect(Unit) {
-        delay(1500)
-        withContext(Dispatchers.IO) {
-            CacheMonitor.logCacheStats(
-                context = context,
-                screenName = "TVShowsDetailsScreenCompose",
-                imageCount = 0  // Initial load
-            )
-        }
-    }
-
-    // ✅ Log again when recommendations load — also off the main thread.
-    LaunchedEffect(extras.recommendations) {
-        if (extras.recommendations.isNotEmpty()) {
-            // 1 backdrop + 1 logo + 20 recommendations + 6 provider buttons
-            val totalImages = 1 + 1 + extras.recommendations.size + 6
-
-            withContext(Dispatchers.IO) {
-                CacheMonitor.logCacheStats(
-                    context = context,
-                    screenName = "TVShowsDetailsScreenCompose",
-                    imageCount = totalImages
-                )
-            }
-        }
-    }
+    // The image-cache stats -- see DetailsCacheStats.
+    DetailsCacheStats("TVShowsDetailsScreenCompose", extras.recommendations)
 
 
 
@@ -358,16 +343,20 @@ fun TvShowDetailsScreen(
             voteAverage         = args.voteAverage,
             genres              = args.genres,
             overview            = args.overview,
+            genresTop           = detailsGenresTop(
+                tvInfoLineCount(args.numberOfSeasons, args.status, args.releaseDate, args.originalLanguage)
+            ),
         ),
         trailer = trailer,
         favorite = favorite,
         extras = extras,
         header = DetailsHeaderSpec(
             pressTiming            = TvHeaderPressTiming,
-            enableFocus            = !blockHeaderInitialFocus,
+            enableFocus            = headerGate.isOpen,
             favoriteFocusRequester = focusMap.favorite,
             extrasFocusRequester   = focusMap.extras,
             trailerFocusRequester  = focusMap.trailer,
+            search                 = search,
         ),
         releaseTrailerOnLeave = true,
         onOpenRecommendation = { media ->
@@ -403,9 +392,9 @@ fun TvShowDetailsScreen(
             }
         },
         onUpFromRecommendations = {
+            // Back to the episode Down came from -- see focusAboveRow.
             BlueHiveApplication.playHoverSound()
-            focusMap.extras.requestFocus()
-            Log.d("SeekDebug", "R.drawable.button_focus_narrow_nonglow should be the extra button's focus glow")
+            focusMap.focusAboveRow(episodesState)
         },
         labels = {
             TvInfoLabels(
@@ -430,6 +419,7 @@ fun TvShowDetailsScreen(
                 passionFont                 = passionFont,
                 dongleRegular               = dongleRegular,
                 coroutineScope              = coroutineScope,
+                rowEntry                    = peek.rowEntry,
             )
         },
         overlays = {
@@ -452,7 +442,7 @@ fun TvShowDetailsScreen(
                 stopTrailerAndSelectEpisode = { season, episode, epName ->
                     stopTrailerAndSelectEpisode(season, episode, epName)
                 },
-                onUnavailable               = { showNotYetAvailable = true },
+                onUnavailable               = { notYetAvailable.show() },
                 snap                        = episodeSnap,
             )
 
@@ -488,22 +478,25 @@ fun TvShowDetailsScreen(
             // The press-again notice of an armed unaired episode -- see UnairedNotice.
             UnairedNotice(unairedGate, episodesState, dongleRegular)
 
-            if (showNotYetAvailable) {
-                DetailsToast(
-                    "This show isn't in our search engines yet — it's brand new, so check back in a week or so",
-                    dongleRegular,
-                    centered = true,
-                    maxWidth = 720.dp,
-                )
-            }
+            TimedDetailsToast(
+                notYetAvailable,
+                "This show isn't in our search engines yet — it's brand new, so check back in a week or so",
+                dongleRegular,
+                centered = true,
+                maxWidth = 720.dp,
+            )
 
             // The trailer could not be loaded -- see TrailerFailedNotice.
             TrailerFailedNotice(trailer, dongleRegular)
+
+            DetailsSearchKeyboard(search, favoriteProfileId)
         },
-        // The page blurs behind the episode overlay (API 31+; older boxes get
-        // its dark scrim instead) -- the overlays themselves stay sharp.
+        peek = peek,
+        // The page blurs behind the episode overlay and the search keyboard
+        // (API 31+; older boxes get their dark scrims instead) -- the overlays
+        // themselves stay sharp.
         pageModifier = Modifier
-            .hiveBackdropBlur(episodeOverlayOpen(extras, episodesState))
+            .hiveBackdropBlur(search.isOpen || episodeOverlayOpen(extras, episodesState))
             .blockFocusWhileSnapping(episodeSnap),
     )
 }

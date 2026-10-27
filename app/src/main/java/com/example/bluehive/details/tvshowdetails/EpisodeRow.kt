@@ -43,7 +43,7 @@ internal val EPISODE_ROW_END = RIGHT_CAP_X + 17.dp
  * LazyRow of EpisodeCards for the season on show, keyed by tmdbEpisodeId.
  * The tile's D-pad rules live here: Back closes its source overlay or goes to
  * its season, OK opens the overlay (or arms an unaired episode first), Down
- * enters the overlay, and Left / Right move with the hold-to-repeat pace.
+ * enters the recommended row, and Left / Right move with the hold-to-repeat pace.
  *
  * Moved here from the screen in Stage 8 of the details redesign; drawn into
  * the play area's Box at the same offsets as before.
@@ -60,6 +60,8 @@ internal fun BoxScope.EpisodeRow(
     passionFont: FontFamily,
     dongleRegular: FontFamily,
     coroutineScope: CoroutineScope,
+    /** Down on a tile enters the recommended row under the episodes through this. */
+    rowEntry: RecommendedRowEntry,
 ) {
     // ================================================================> episode lazy row
     Box(
@@ -201,9 +203,11 @@ internal fun BoxScope.EpisodeRow(
                                                 focusMap.providers.firstOrNull()?.requestFocus()
                                                 true
                                             } else {
-                                                // Nothing below a tile now that the corner button is
-                                                // gone. Consumed with no move, so the press is silent
-                                                // rather than sending focus somewhere arbitrary.
+                                                // The recommended row peeks under the episodes
+                                                // (DetailsPeekState). Consumed either way: before
+                                                // its titles arrive the press is silent rather than
+                                                // sending focus somewhere arbitrary.
+                                                if (rowEntry.focus()) BlueHiveApplication.playHoverSound()
                                                 true
                                             }
                                         }

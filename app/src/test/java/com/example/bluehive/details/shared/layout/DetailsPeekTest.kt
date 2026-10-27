@@ -34,4 +34,19 @@ class DetailsPeekTest {
         assertEquals(PEEK_ROW_TOP + 55.5.dp, peek.rowTop)
         assertEquals(PEEK_SLIDE + 55.5.dp, peek.slide)
     }
+
+    @Test
+    fun `a page with its own row top and slide keeps the slid-up row where the movie page's ends`() {
+        val tv = DetailsPeekState(startFocused = false, baseRowTop = PEEK_ROW_TOP + 25.dp, baseSlide = PEEK_SLIDE + 25.dp)
+        val movie = DetailsPeekState(startFocused = false)
+        assertEquals(PEEK_ROW_TOP + 25.dp, tv.rowTop)
+        assertEquals(movie.rowTop - movie.slide, tv.rowTop - tv.slide)
+    }
+
+    @Test
+    fun `giving up the start focus is for good`() {
+        val peek = DetailsPeekState(startFocused = true)
+        peek.giveUpStartFocus()
+        assertEquals(false, peek.startFocused)
+    }
 }

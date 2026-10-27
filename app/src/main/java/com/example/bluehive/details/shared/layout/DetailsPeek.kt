@@ -1,6 +1,8 @@
 package com.example.bluehive.details.shared.layout
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -10,20 +12,38 @@ import androidx.compose.ui.unit.dp
 import com.example.bluehive.utilities.RecommendedRowEntry
 
 /**
- * The movie screen's peek layout (approved mockup, 2026-10-26): no Extras
+ * The details screens' peek layout (the movie page's approved mockup, 2026-10-26): no Extras
  * button; the play buttons sit right under the overview, and the recommended
  * row is always there, peeking up from the bottom edge. Down from the bottom
  * play buttons enters the row, and the page (everything but its background)
  * slides up [PEEK_SLIDE] so the row shows in full; leaving the row slides it
  * back.
  *
- * The TV screen passes no DetailsPeekState and keeps the Extras switch.
+ * The TV screen uses it too since 2026-10-27, with its row lower: the season
+ * cap ends further down than the movie's play buttons ([baseRowTop],
+ * [baseSlide]).
  */
 @Stable
 class DetailsPeekState(
     /** Opened from history in Extras: the row takes focus as soon as it loads. */
-    val startFocused: Boolean,
+    startFocused: Boolean,
+    /** The row's top with two rows of play buttons or fewer. */
+    private val baseRowTop: Dp = PEEK_ROW_TOP,
+    /** The slide with two rows of play buttons or fewer: the row ends in the same place either way. */
+    private val baseSlide: Dp = PEEK_SLIDE,
 ) {
+    /**
+     * The row takes focus as soon as it loads. Turned off for good when the
+     * titles never came and the header took focus instead (PeekRowStart),
+     * so titles arriving late cannot pull focus out from under the viewer.
+     */
+    var startFocused by mutableStateOf(startFocused)
+        private set
+
+    fun giveUpStartFocus() {
+        startFocused = false
+    }
+
     /** The row has focus, so the page is slid up. */
     var isScrolled by mutableStateOf(false)
 
@@ -39,9 +59,21 @@ class DetailsPeekState(
     /** Moves focus into the row from the play buttons. */
     val rowEntry = RecommendedRowEntry()
 
-    val rowTop: Dp get() = PEEK_ROW_TOP + PEEK_SOURCE_ROW_STEP * extraSourceRows
-    val slide: Dp get() = PEEK_SLIDE + PEEK_SOURCE_ROW_STEP * extraSourceRows
+    val rowTop: Dp get() = baseRowTop + PEEK_SOURCE_ROW_STEP * extraSourceRows
+    val slide: Dp get() = baseSlide + PEEK_SOURCE_ROW_STEP * extraSourceRows
 }
+
+/**
+ * The page's DetailsPeekState, made again only if [startFocused] changes.
+ * Both screens call this one function, so R8 keeps it out of their method
+ * budgets (checkMethodSizes).
+ */
+@Composable
+fun rememberDetailsPeek(
+    startFocused: Boolean,
+    baseRowTop: Dp = PEEK_ROW_TOP,
+    baseSlide: Dp = PEEK_SLIDE,
+): DetailsPeekState = remember(startFocused) { DetailsPeekState(startFocused, baseRowTop, baseSlide) }
 
 /** The lowest the first row of play buttons sits: under the overview's full box (top 175 + height 108.25). */
 val PEEK_PLAY_TOP: Dp = 296.dp

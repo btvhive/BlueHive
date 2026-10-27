@@ -1,6 +1,9 @@
 package com.example.bluehive.details.moviesdetails
 
 import androidx.compose.ui.unit.dp
+import com.example.bluehive.details.shared.layout.DetailsInfoLine
+import com.example.bluehive.details.shared.layout.detailsGenresTop
+import com.example.bluehive.details.shared.layout.detailsInfoLineTop
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -11,8 +14,8 @@ class MovieInfoLabelsTest {
     fun `all four lines keep the slots they always had, genres at 96 dp`() {
         val rows = movieInfoRows(1_000, 2_000, "1985-12-21", "Japanese")
         assertEquals(listOf("Revenue", "Budget", "Release Date", "Language"), rows.map { it.text.substringBefore(':') })
-        assertEquals(listOf(34.dp, 48.dp, 63.dp, 75.dp), rows.indices.map { movieInfoRowTop(it) })
-        assertEquals(96.dp, movieGenresTop(rows.size))
+        assertEquals(listOf(34.dp, 48.dp, 63.dp, 75.dp), rows.indices.map { detailsInfoLineTop(it) })
+        assertEquals(96.dp, detailsGenresTop(rows.size))
     }
 
     @Test
@@ -21,20 +24,20 @@ class MovieInfoLabelsTest {
         assertEquals("Release Date:      12/21/1985", rows[0].text)
         assertEquals("Language:         Japanese", rows[1].text)
         assertEquals(2, rows.size)
-        assertEquals(48.dp + 21.dp, movieGenresTop(rows.size))
+        assertEquals(48.dp + 21.dp, detailsGenresTop(rows.size))
     }
 
     @Test
     fun `an unknown date or language is left out, not printed as N A`() {
         val rows = movieInfoRows(5, 0, "N/A", "")
         assertEquals(listOf("Revenue"), rows.map { it.text.substringBefore(':') })
-        assertEquals(34.dp + 21.dp, movieGenresTop(rows.size))
+        assertEquals(34.dp + 21.dp, detailsGenresTop(rows.size))
     }
 
     @Test
     fun `with nothing at all the genres take the first slot`() {
-        assertEquals(emptyList<MovieInfoRow>(), movieInfoRows(0, 0, null, null))
-        assertEquals(34.dp, movieGenresTop(0))
+        assertEquals(emptyList<DetailsInfoLine>(), movieInfoRows(0, 0, null, null))
+        assertEquals(34.dp, detailsGenresTop(0))
     }
 
     @Test

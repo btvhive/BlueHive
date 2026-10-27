@@ -13,14 +13,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.repository.RecommendationsRepository
-import com.example.bluehive.searchBarComponent.HoneycombKeyboardPopup
 import com.example.bluehive.searchBarComponent.hiveBackdropBlur
 import com.example.bluehive.searchBarComponent.openSearchScreen
-import android.os.Build
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -45,13 +39,21 @@ import com.example.bluehive.details.shared.playback.rememberPlaybackSession
 import com.example.bluehive.details.shared.playback.rememberSourcePlayback
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
-import com.example.bluehive.details.shared.layout.DetailsPeekState
+import com.example.bluehive.details.shared.layout.rememberDetailsPeek
 import com.example.bluehive.details.shared.layout.PEEK_RIGHT_COLUMN_X
 import com.example.bluehive.details.shared.layout.PEEK_SOURCE_ROW_STEP
 import com.example.bluehive.details.shared.layout.peekExtraSourceRows
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
+import com.example.bluehive.details.shared.layout.DetailsCacheStats
 import com.example.bluehive.details.shared.layout.DetailsScaffold
+import com.example.bluehive.details.shared.layout.DetailsSearchKeyboard
+import com.example.bluehive.details.shared.layout.rememberDetailsSearch
+import com.example.bluehive.details.shared.layout.PeekRowStart
+import com.example.bluehive.details.shared.layout.rememberDetailsHeaderGate
+import com.example.bluehive.details.shared.layout.detailsGenresTop
 import com.example.bluehive.details.shared.layout.DetailsToast
+import com.example.bluehive.details.shared.layout.TimedDetailsToast
+import com.example.bluehive.details.shared.layout.rememberTimedNotice
 import com.example.bluehive.details.shared.layout.TrailerFailedNotice
 import com.example.bluehive.details.shared.state.DetailsBackHandlers
 import com.example.bluehive.details.shared.state.rememberExtrasState
@@ -128,18 +130,17 @@ fun MovieDetailsScreen(
         loadInBackground = true,
         prefetched       = null,
     )
-    LaunchedEffect(extras) { extras.loadRow() }
 
     // Opened from history in Extras: the row takes focus as it loads, so the
     // page opens slid up on it.
-    val peek = remember(args.startInExtras) { DetailsPeekState(startFocused = args.startInExtras) }
+    val peek = rememberDetailsPeek(startFocused = args.startInExtras)
     // The play button Down entered the row from, for Up to return to.
     var rowEnteredFrom by remember { mutableStateOf<FocusRequester?>(null) }
 
-    // The Search button's keyboard, over this page (see MovieSearchKeyboard).
-    var showSearchKeyboard by remember { mutableStateOf(false) }
+    // The Search button's keyboard, over this page -- see DetailsSearchKeyboard.
+    val search = rememberDetailsSearch()
 
-    var blockHeaderInitialFocus by remember(args.startInExtras) { mutableStateOf(args.startInExtras) }
+    val headerGate = rememberDetailsHeaderGate(blocked = args.startInExtras)
 
     // The backdrop trailer: playing, started, extracting, its player -- see
     // TrailerState.
@@ -175,7 +176,7 @@ fun MovieDetailsScreen(
     // Shown when this anime movie has no AniList mapping yet, so there is no Miruro
     // URL to extract from. Without this, DuB/SuB were a SILENT no-op — the guard
     // below just found sources.size <= 2 and did nothing at all.
-    var showNotYetAvailable by remember { mutableStateOf(false) }
+    val notYetAvailable = rememberTimedNotice()
 
     // Named requesters for DuB/Sub so we know exactly where to send focus back.
     val animeDubFocusRequester = remember { FocusRequester() }
@@ -324,7 +325,7 @@ fun MovieDetailsScreen(
         }
         if (sources.isNotEmpty()) {          // resolved, and carries no Miruro
             queuedAnimePress = null
-            showNotYetAvailable = true
+            notYetAvailable.show()
             return@LaunchedEffect
         }
         // Still resolving. Bounded, so a resolve that never completes cannot
@@ -332,18 +333,7 @@ fun MovieDetailsScreen(
         delay(8_000)
         if (queuedAnimePress != null) {
             queuedAnimePress = null
-            showNotYetAvailable = true
-        }
-    }
-
-
-
-
-
-    LaunchedEffect(showNotYetAvailable) {
-        if (showNotYetAvailable) {
-            delay(4000)
-            showNotYetAvailable = false
+            notYetAvailable.show()
         }
     }
 
@@ -367,43 +357,12 @@ fun MovieDetailsScreen(
     }
 
 
-    // ✅ Log cache stats when screen loads — deferred + off the main thread.
-    // gatherStats() does THREE full directory walks (disk cache + cacheDir +
-    // filesDir); running it inline on entry was a main-thread stall. Let the
-    // screen paint first, then walk on IO.
-    LaunchedEffect(Unit) {
-        delay(1500)
-        withContext(Dispatchers.IO) {
-            CacheMonitor.logCacheStats(
-                context = context,
-                screenName = "MoviesDetailsScreen",
-                imageCount = 0  // Initial load
-            )
-        }
-    }
-
-    // ✅ Log again when recommendations load — also off the main thread.
-    LaunchedEffect(extras.recommendations) {
-        if (extras.recommendations.isNotEmpty()) {
-            // 1 backdrop + 1 logo + 20 recommendations + 6 provider buttons
-            val totalImages = 1 + 1 + extras.recommendations.size + 6
-
-            withContext(Dispatchers.IO) {
-                CacheMonitor.logCacheStats(
-                    context = context,
-                    screenName = "MoviesDetailsScreen",
-                    imageCount = totalImages
-                )
-            }
-        }
-    }
+    // The image-cache stats -- see DetailsCacheStats.
+    DetailsCacheStats("MoviesDetailsScreen", extras.recommendations)
 
 
-    LaunchedEffect(args.startInExtras, extras.recommendations) {
-        if (args.startInExtras && extras.recommendations.isNotEmpty()) {
-            blockHeaderInitialFocus = false
-        }
-    }
+    // The row loads; opened in it, the header waits for its titles -- see PeekRowStart.
+    PeekRowStart(peek, extras, favoriteFocusRequester, headerGate)
 
     var displayBudget by remember { mutableLongStateOf(args.budget) }
     var displayRevenue by remember { mutableLongStateOf(args.revenue) }
@@ -435,23 +394,18 @@ fun MovieDetailsScreen(
             voteAverage         = args.voteAverage,
             genres              = args.genres,
             overview            = args.overview,
-            genresTop           = movieGenresTop(infoRowCount),
+            genresTop           = detailsGenresTop(infoRowCount),
         ),
         trailer = trailer,
         favorite = favorite,
         extras = extras,
         header = DetailsHeaderSpec(
             pressTiming            = MovieHeaderPressTiming,
-            enableFocus            = !blockHeaderInitialFocus,
+            enableFocus            = headerGate.isOpen,
             favoriteFocusRequester = favoriteFocusRequester,
             extrasFocusRequester   = extrasFocusRequester,
             trailerFocusRequester  = trailerFocusRequester,
-            // Search: the keyboard opens over this page; the trailer stops, as
-            // it does when a recommendation opens.
-            onSearch               = {
-                trailer.stop()
-                showSearchKeyboard = true
-            },
+            search                 = search,
         ),
         releaseTrailerOnLeave = false,
         onOpenRecommendation = { media ->
@@ -508,7 +462,7 @@ fun MovieDetailsScreen(
                         // title genuinely has no AniList mapping yet. Say so
                         // instead of silently doing nothing.
                         Log.w("scraper", "$name pressed but no Miruro source (tmdb=${args.mediaId}) — unmapped")
-                        showNotYetAvailable = true
+                        notYetAvailable.show()
                     }
                 },
                 onSourcePress          = { from, source ->
@@ -533,13 +487,12 @@ fun MovieDetailsScreen(
             }
 
             // ── "Not in our search engine yet" — no AniList mapping for this movie ──
-            if (showNotYetAvailable) {
-                DetailsToast(
-                    "This title isn't in our anime search engine yet — try VidFast below",
-                    dongleRegular,
-                    centered = true,
-                )
-            }
+            TimedDetailsToast(
+                notYetAvailable,
+                "This title isn't in our anime search engine yet — try VidFast below",
+                dongleRegular,
+                centered = true,
+            )
 
             // Extraction failure the user can act on ("try another source").
             PlaybackErrorOverlay(session)
@@ -552,53 +505,13 @@ fun MovieDetailsScreen(
             // The trailer could not be loaded -- see TrailerFailedNotice.
             TrailerFailedNotice(trailer, dongleRegular)
 
-            MovieSearchKeyboard(
-                show      = showSearchKeyboard,
-                onSearch  = { query ->
-                    showSearchKeyboard = false
-                    openSearchScreen(context, favoriteProfileId, query)
-                },
-                onDismiss = { showSearchKeyboard = false },
-            )
+            DetailsSearchKeyboard(search, favoriteProfileId)
         },
         peek = peek,
-        modifier = Modifier.hiveBackdropBlur(showSearchKeyboard),
+        modifier = Modifier.hiveBackdropBlur(search.isOpen),
     )
 }   // ← MovieDetailsScreen closes here
 
-
-/**
- * The search keyboard over the movie page, as home and the media catalog
- * show it: a pop-up window, so the page keeps its state and focus. The page
- * behind blurs on API 31+ (the onn box, hiveBackdropBlur on the scaffold);
- * older boxes (Fire TV, no RenderEffect) get the dark scrim home puts behind
- * its sidebar, faded in. A search opens the search page; BACK closes it.
- */
-@Composable
-private fun BoxScope.MovieSearchKeyboard(
-    show: Boolean,
-    onSearch: (String) -> Unit,
-    onDismiss: () -> Unit,
-) {
-    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-        val dim by animateFloatAsState(
-            targetValue = if (show) 1f else 0f,
-            animationSpec = tween(durationMillis = 200),
-            label = "searchDim",
-        )
-        if (dim > 0f) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer { alpha = dim }
-                    .background(overlayScrimColor())
-            )
-        }
-    }
-    if (show) {
-        HoneycombKeyboardPopup(onSearch = onSearch, onDismiss = onDismiss)
-    }
-}
 
 //0x33000000 = 20% opacity (very light)
 //0x50000000 = 31% opacity (your current - too light)
