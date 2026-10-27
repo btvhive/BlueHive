@@ -18,12 +18,12 @@ import com.example.bluehive.details.shared.playback.AnimePlaybackController
 import com.example.bluehive.details.shared.playback.SourcePlaybackController
 
 /**
- * The right-hand caps' left edge: 16 dp right of where they were (902.75), so
+ * The right-hand caps' left edge: 10 dp right of where they were (902.75), so
  * the last card visible when a season first draws sits clearly outside the
- * cap (the user's calls, 2026-10-27: 6 dp, then further). The episode row ends
+ * cap (the user's calls, 2026-10-27: 6 dp, 16, then 10). The row ends
  * 17 dp under them, as it always did (EPISODE_ROW_END).
  */
-internal val RIGHT_CAP_X = 918.75.dp
+internal val RIGHT_CAP_X = 912.75.dp
 
 /**
  * The TV screen's play area: the episode row between its side caps, the
