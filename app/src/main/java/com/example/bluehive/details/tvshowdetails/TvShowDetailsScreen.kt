@@ -201,6 +201,10 @@ fun TvShowDetailsScreen(
     // PlaybackSession.
     val session = rememberPlaybackSession()
 
+    // The episode overlay's snap -- see EpisodeSnapState. Here, not in the
+    // overlay, so the page can refuse focus while it runs.
+    val episodeSnap = rememberEpisodeSnap(session)
+
     // Shown when an anime's AniList mapping doesn't exist yet (resolveAnime 404 →
     // miruroUrl null). Brand-new titles aren't in anime_id_map until AniBridge
     // ingests them, so instead of leaving DuB/SuB inert we tell the user why.
@@ -449,7 +453,7 @@ fun TvShowDetailsScreen(
                     stopTrailerAndSelectEpisode(season, episode, epName)
                 },
                 onUnavailable               = { showNotYetAvailable = true },
-                session                     = session,
+                snap                        = episodeSnap,
             )
 
             // ════════════════════════════════════════════════════════════════════
@@ -498,6 +502,8 @@ fun TvShowDetailsScreen(
         },
         // The page blurs behind the episode overlay (API 31+; older boxes get
         // its dark scrim instead) -- the overlays themselves stay sharp.
-        pageModifier = Modifier.hiveBackdropBlur(episodeOverlayOpen(extras, episodesState)),
+        pageModifier = Modifier
+            .hiveBackdropBlur(episodeOverlayOpen(extras, episodesState))
+            .blockFocusWhileSnapping(episodeSnap),
     )
 }

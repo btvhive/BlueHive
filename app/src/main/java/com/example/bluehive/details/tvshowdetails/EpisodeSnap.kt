@@ -12,7 +12,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.foundation.focusGroup
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
@@ -32,8 +36,19 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** How long the dust takes to blow away. Playback starts only after it. */
+/** How long the snap holds the press. Playback starts only after it. */
 internal const val SNAP_DURATION_MS = 1000L   // the user's call, 2026-10-27 (was 2 s)
+
+/**
+ * The duration handed to the particle renderer, longer than the hold so the
+ * dust fills all of it. ThanosEffect's shader ends a particle at
+ *   delay + life = (x / screenWidth) * D/4 + (D/4) * (1 + r),  r in [0, 1),
+ * so the last one off a card centred on the screen (right edge at ~0.68 of
+ * the width) goes at ~0.67 D: at D = 1000 the dust was gone by ~670 ms and
+ * the rest of the second was empty. D = 1500 ends it at the 1 s mark, as
+ * the loading screen begins.
+ */
+internal const val SNAP_RENDER_DURATION_MS = 1500L
 
 /** The dust's first frames overlap the card before the card hides, so nothing blinks. */
 private const val SNAP_HIDE_DELAY_MS = 120L
@@ -179,7 +194,11 @@ internal class EpisodeSnapState(
     }
 }
 
-/** The overlay's snap state, and the wait for the playback it started. */
+/**
+ * The overlay's snap state, and the wait for the playback it started. Held by
+ * the screen, not the overlay, so the page can refuse focus while it runs --
+ * see blockFocusWhileSnapping.
+ */
 @Composable
 internal fun rememberEpisodeSnap(session: PlaybackSession): EpisodeSnapState {
     val scope = rememberCoroutineScope()
@@ -209,3 +228,22 @@ internal fun Modifier.episodeSnapCard(snap: EpisodeSnapState): Modifier = this
             drawLayer(layer)
         }
     }
+
+/**
+ * On the page (under the overlay): while a snap or its playback runs, focus
+ * cannot enter it. The card hides and the loading screen's trap takes focus a
+ * frame after it appears; if focus is dropped anywhere in between, Android
+ * hands it back to the first focusable thing on the page -- Add to Favorites,
+ * which lit up through the dust (v465). With the page closed to focus there
+ * is nothing there for it to land on. Explicit requestFocus() calls (the
+ * return to the pressed button, Back to the tile) are not affected.
+ */
+// focusProperties.enter: experimental in Compose 1.7, stable (as onEnter) later.
+@OptIn(ExperimentalComposeUiApi::class)
+internal fun Modifier.blockFocusWhileSnapping(snap: EpisodeSnapState): Modifier = this
+    .focusProperties {
+        enter = {
+            if (snap.phase != EpisodeSnapState.Phase.Idle) FocusRequester.Cancel else FocusRequester.Default
+        }
+    }
+    .focusGroup()

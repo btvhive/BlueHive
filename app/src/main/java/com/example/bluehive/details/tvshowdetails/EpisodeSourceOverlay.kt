@@ -31,7 +31,6 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import com.example.bluehive.details.shared.playback.PlaybackSession
 import com.exjunk.lib.thanos.vanish.VanishContainer
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
@@ -156,8 +155,8 @@ internal fun BoxScope.EpisodeSourceOverlay(
     stopTrailerAndSelectEpisode: (season: Int, episode: Int, epName: String?) -> Unit,
     /** A brand-new anime with no AniList mapping yet: the screen shows its notice. */
     onUnavailable: () -> Unit,
-    /** The playback session: the card stays snapped away while it extracts. */
-    session: PlaybackSession,
+    /** The screen's snap: a Watch on ... press turns the card to dust first -- see EpisodeSnapState. */
+    snap: EpisodeSnapState,
 ) {
     val open = episodeOverlayOpen(extras, episodesState)
 
@@ -219,8 +218,9 @@ internal fun BoxScope.EpisodeSourceOverlay(
     }
 
     // The snap: a Watch on ... press turns the card to dust, and the source
-    // chain starts only once the dust is gone -- see EpisodeSnapState.
-    val snap = rememberEpisodeSnap(session)
+    // chain starts only once the dust is gone -- see EpisodeSnapState. The
+    // renderer lives with this overlay; the snap forgets it when it goes.
+    DisposableEffect(snap) { onDispose { snap.renderer = null } }
 
     // The whole card at OVERLAY_SCALE: a smaller density scales every dp and sp
     // inside it -- the still, the text and the buttons alike -- and centring
@@ -230,7 +230,7 @@ internal fun BoxScope.EpisodeSourceOverlay(
     VanishContainer(
         modifier = Modifier.fillMaxSize(),
         onGLSurfaceViewCreated = {
-            it.setAnimationConfig(duration = SNAP_DURATION_MS.toFloat(), particleSize = 2f)
+            it.setAnimationConfig(duration = SNAP_RENDER_DURATION_MS.toFloat(), particleSize = 2f)
             snap.renderer = it
         },
     ) {
