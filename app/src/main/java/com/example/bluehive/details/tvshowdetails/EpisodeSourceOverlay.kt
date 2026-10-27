@@ -26,6 +26,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -45,7 +47,8 @@ import kotlinx.coroutines.delay
 // buttons two by two. Sizes are the approved mockup's (scratchpad
 // ep_overlay_mock.py / ep_overlay_b.py, b1(12)).
 private val OVERLAY_WIDTH = 400.dp
-private val OVERLAY_TOP = 28.dp
+/** The whole card drawn at 85% of the mockup's size (the user's call, 2026-10-27). */
+private const val OVERLAY_SCALE = 0.85f
 private val OVERLAY_SHAPE = RoundedCornerShape(10.dp)
 private val OVERLAY_EDGE = Color(0xFF343648)
 private val OVERLAY_FACE = Color(0xFF12131C)
@@ -202,10 +205,15 @@ internal fun BoxScope.EpisodeSourceOverlay(
         episodesState.focusRequesters[targetIndex].requestFocus()
     }
 
+    // The whole card at OVERLAY_SCALE: a smaller density scales every dp and sp
+    // inside it -- the still, the text and the buttons alike -- and centring
+    // keeps it in the middle of whatever screen it is on.
+    val density = LocalDensity.current
+    val scaled = remember(density) { Density(density.density * OVERLAY_SCALE, density.fontScale) }
+    CompositionLocalProvider(LocalDensity provides scaled) {
     Column(
         modifier = Modifier
-            .align(Alignment.TopCenter)
-            .offset(y = OVERLAY_TOP)
+            .align(Alignment.Center)
             .width(OVERLAY_WIDTH)
             .clip(OVERLAY_SHAPE)
             .background(OVERLAY_FACE)
@@ -319,6 +327,7 @@ internal fun BoxScope.EpisodeSourceOverlay(
                 )
             }
         }
+    }
     }
 }
 
