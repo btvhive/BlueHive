@@ -18,12 +18,14 @@ import com.example.bluehive.details.shared.playback.AnimePlaybackController
 import com.example.bluehive.details.shared.playback.SourcePlaybackController
 
 /**
- * The TV screen's play area: the decorations around the season column and
- * the episode row, the column, the row, and the source overlay under the
- * selected tile -- drawn into the scaffold's Box at the same offsets and in
- * the same order as before.
+ * The TV screen's play area: the episode row between its side caps, the
+ * season accordion built into the left cap, and the source overlay under the
+ * selected tile, drawn into the scaffold's Box.
  *
- * Moved here from the screen in Stage 8 of the details redesign.
+ * Moved here from the screen in Stage 8 of the details redesign. Since
+ * 2026-10-27 the left cap is extended_mini_left_upper_body, lined up with Add
+ * to Favorites, and holds the season accordion; the season column and its
+ * frame pieces are gone.
  */
 @Composable
 internal fun BoxScope.TvPlayArea(
@@ -47,68 +49,15 @@ internal fun BoxScope.TvPlayArea(
     stopTrailerAndSelectEpisode: (season: Int, episode: Int, epName: String?) -> Unit,
     onUnavailable: () -> Unit,
 ) {
-    Image(
-        painter = painterResource(id = R.drawable.top_lower_body),
-        contentDescription = null,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .size(width = 132.dp, height = 7.75.dp)
-            .offset(x = 32.7.dp, y = 321.6.dp),
-        contentScale = ContentScale.Fit
-    )
-
-    Image(
-        painter = painterResource(id = R.drawable.bottom_lower_body),
-        contentDescription = null,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .size(width = 132.dp, height = 7.75.dp)
-            .offset(x = 32.7.dp, y = 499.25.dp),
-        contentScale = ContentScale.Fit
-    )
-
-    // The season column -- see SeasonColumn.
-    SeasonColumn(
-        listedSeasons   = listedSeasons,
-        numberOfSeasons = numberOfSeasons,
-        episodesState   = episodesState,
-        focusMap        = focusMap,
-        passionFont     = passionFont,
-        coroutineScope  = coroutineScope,
-    )
-
-    Image(
-        painter = painterResource(id = R.drawable.top_upper_body),
-        contentDescription = null,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .size(width = 140.25.dp, height = 30.5.dp)
-            .offset(x = 28.25.dp, y = 299.dp),
-        contentScale = ContentScale.Fit
-    )
-
-    Image(
-        painter = painterResource(id = R.drawable.bottom_upper_body),
-        contentDescription = null,
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .size(width = 140.25.dp, height = 30.5.dp)
-            .offset(x = 28.25.dp, y = 499.25.dp),
-        contentScale = ContentScale.Fit
-    )
-
-
-
-
     // ===============================================================================> episode lAZY ROW DECORATIONS
+    // The strip behind the season cap's right edge, where the cards come out.
     Image(
-        painter = painterResource(id = R.drawable.mini_left_lower_body),
+        painter = painterResource(id = R.drawable.extended_mini_left_lower_body),
         contentDescription = null,
         modifier = Modifier
             .align(Alignment.TopStart)
-            .size(width = 7.75.dp, height = 115.dp)
-            .offset(x = 239.7.dp, y = 302.75.dp),
-        //.padding(start = 240.75.dp, top = 299.dp),
+            .size(width = 9.dp, height = 115.dp)
+            .offset(x = SEASON_CAP_X + SEASON_CAP_WIDTH + 0.2.dp - 9.dp, y = 302.75.dp),
         contentScale = ContentScale.Fit
     )
 
@@ -139,15 +88,24 @@ internal fun BoxScope.TvPlayArea(
 
 
 
+    // The season cap, on Add to Favorites' left edge, and the accordion inside it.
     Image(
-        painter = painterResource(id = R.drawable.mini_left_upper_body),
+        painter = painterResource(id = R.drawable.extended_mini_left_upper_body),
         contentDescription = null,
         modifier = Modifier
             .align(Alignment.TopStart)
-            .size(width = 30.5.dp, height = 122.25.dp)
-            .offset(x = 216.75.dp, y = 299.dp),
-        //.padding(start = 240.75.dp, top = 299.dp),
+            .size(width = SEASON_CAP_WIDTH, height = SEASON_CAP_HEIGHT)
+            .offset(x = SEASON_CAP_X, y = SEASON_CAP_Y),
         contentScale = ContentScale.Fit
+    )
+
+    SeasonAccordion(
+        listedSeasons   = listedSeasons,
+        numberOfSeasons = numberOfSeasons,
+        episodesState   = episodesState,
+        focusMap        = focusMap,
+        passionFont     = passionFont,
+        coroutineScope  = coroutineScope,
     )
 
     Image(

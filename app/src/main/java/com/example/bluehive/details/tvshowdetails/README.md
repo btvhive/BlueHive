@@ -11,9 +11,9 @@ The plan is in `docs/details-redesign-architecture.md`, and the sizes after each
 | TvShowDetailsScreen.kt | root: creates the state, plugs into `shared/layout/DetailsScaffold` |
 | TvFocusMap.kt | focus requesters shared between sections |
 | TvInfoLabels.kt | seasons, status, release date, language |
-| TvPlayArea.kt | decorations + season column + episode row + source overlay |
+| TvPlayArea.kt | the episode row between its caps, the season cap + accordion, the source overlay |
 | SeasonAvailability.kt | aired/unaired rules + season check (pure, tested) |
-| SeasonColumn.kt | the season list |
+| SeasonAccordion.kt | the season picker inside the left cap (gold card + wheel of slabs), since 2026-10-27; replaced SeasonColumn |
 | EpisodesState.kt | season loads, prefetch, first focus, watched markers |
 | EpisodeRow.kt | the episode row + hold-to-repeat |
 | EpisodeCard.kt | one episode tile |

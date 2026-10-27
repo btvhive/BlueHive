@@ -32,6 +32,9 @@ import kotlinx.coroutines.CoroutineScope
 // uses CW_NAV_REPEAT_MS = 70L; episode tiles are chunkier, so this starts a touch slower.)
 private const val EPISODE_NAV_REPEAT_MS = 140L
 
+/** The row's left edge: 11.25 dp inside the season cap, like the old mini cap's overlap. */
+internal val EPISODE_ROW_X = SEASON_CAP_X + SEASON_CAP_WIDTH - 11.25.dp
+
 /**
  * The episode row: "Loading episodes...", "No episodes found", or the
  * LazyRow of EpisodeCards for the season on show, keyed by tmdbEpisodeId.
@@ -59,8 +62,10 @@ internal fun BoxScope.EpisodeRow(
     Box(
         modifier = Modifier
             .align(Alignment.TopStart)
-            .offset(x = 236.dp, y = 299.5.dp) // adjust to sit between side decorations
-            .width(683.75.dp)
+            // Starts 11.25 dp inside the season cap's right edge (as it did with
+            // the mini cap) and ends where it always did, at 919.75 dp.
+            .offset(x = EPISODE_ROW_X, y = 299.5.dp)
+            .width(919.75.dp - EPISODE_ROW_X)
             .height(260.dp) //122.25
         //.background(Color.Red)
     ) {
@@ -152,18 +157,14 @@ internal fun BoxScope.EpisodeRow(
                                                     episodesState.selectedEpisodeOverlayIndex = -1
                                                     true
                                                 }
-                                                (listedSeasons ?: numberOfSeasons) > 1 && focusMap.seasons.isNotEmpty() -> {
-                                                    val seasonIdx = (episodesState.selectedSeason - 1)
-                                                        .coerceIn(0, focusMap.seasons.lastIndex)
+                                                (listedSeasons ?: numberOfSeasons) > 1 -> {
                                                     BlueHiveApplication.playHoverSound()
-                                                    // Don't assume the season button is attached. On the
-                                                    // Continue Watching path the episode tile is focused
-                                                    // programmatically under load, before the season
-                                                    // LazyColumn has placed its buttons — a direct
-                                                    // requestFocus() no-ops and Back appears dead. Scroll
-                                                    // the season in, wait for layout, then focus.
+                                                    // Don't assume the accordion is attached: on the
+                                                    // Continue Watching path the tile is focused under
+                                                    // load, before the season check lets it compose --
+                                                    // see focusSeasonPicker.
                                                     coroutineScope.launch {
-                                                        focusMap.focusSeasonReliably(seasonIdx)
+                                                        focusMap.focusSeasonPicker()
                                                     }
                                                     true
                                                 }

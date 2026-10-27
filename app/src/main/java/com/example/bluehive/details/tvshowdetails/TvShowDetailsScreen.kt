@@ -109,7 +109,7 @@ fun TvShowDetailsScreen(
     // source overlay and the watched marks -- see EpisodesState. The focus
     // requesters the sections share -- see TvFocusMap.
     val episodesState = rememberEpisodesState(coroutineScope, episodesRepository, args.mediaId)
-    val focusMap = rememberTvFocusMap(args.numberOfSeasons) {
+    val focusMap = rememberTvFocusMap {
         getStreamingSources(args.mediaType, args.mediaId, 1, 1).size.coerceAtLeast(2)
     }
 

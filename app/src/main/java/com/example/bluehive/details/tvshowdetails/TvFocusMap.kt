@@ -1,7 +1,5 @@
 package com.example.bluehive.details.tvshowdetails
 
-import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -13,7 +11,7 @@ import androidx.compose.ui.focus.FocusRequester
 /**
  * Every focus requester on the TV details screen that more than one section
  * uses (docs/details-redesign-architecture.md §6, rule 5): the three header
- * buttons, the season buttons, the source overlay's buttons, and whichever
+ * buttons, the season accordion, the source overlay's buttons, and whichever
  * stream button was pressed last. Sections are handed these; none creates a
  * requester another one asks for. The episode tiles' requesters change with
  * the season on show, so they live with the episodes, in EpisodesState.
@@ -22,25 +20,17 @@ import androidx.compose.ui.focus.FocusRequester
  */
 @Stable
 class TvFocusMap internal constructor(
-    seasonCount: Int,
     providerCount: Int,
-    /**
-     * Hoisted season-column scroll state, so the episode row's Back handler
-     * can scroll a season button into view before focusing it.
-     */
-    val seasonList: LazyListState,
 ) {
     val favorite = FocusRequester()
     val extras = FocusRequester()
     val trailer = FocusRequester()
 
-    /** One per season button: index = season - 1. */
-    val seasons: List<FocusRequester> =
-        if (seasonCount > 0) {
-            List(seasonCount) { FocusRequester() }
-        } else {
-            emptyList()
-        }
+    /** The season accordion (SeasonAccordion): one focus target for every season. */
+    val seasonPicker = FocusRequester()
+
+    /** The accordion has focus: its card wears the white border, and focusSeasonPicker() knows it landed. */
+    var seasonPickerFocused by mutableStateOf(false)
 
     /**
      * ✅ Focus requesters for overlay buttons.
@@ -60,7 +50,5 @@ class TvFocusMap internal constructor(
  * made, as the pool it sizes always was.
  */
 @Composable
-fun rememberTvFocusMap(seasonCount: Int, providerCount: () -> Int): TvFocusMap {
-    val seasonList = rememberLazyListState()
-    return remember(seasonCount) { TvFocusMap(seasonCount, providerCount(), seasonList) }
-}
+fun rememberTvFocusMap(providerCount: () -> Int): TvFocusMap =
+    remember { TvFocusMap(providerCount()) }
