@@ -244,9 +244,11 @@ internal fun EpisodeCard(
         // UNDER the image, so it can come and go without disturbing
         // anything; this sits ABOVE it, where appearing and disappearing
         // would shove every thumbnail up and down as the row scrolls.
-        // So no isFullyVisible gate here — and a blank string still
-        // occupies its line, which keeps unaired episodes (null
-        // air_date) exactly the same height as aired ones.
+        // So isFullyVisible only HIDES it (alpha 0, read in the layer so
+        // scrolling redraws rather than recomposes): a card cut off by the
+        // caps shows no half date. A blank string still occupies its line,
+        // which keeps unaired episodes (null air_date) exactly the same
+        // height as aired ones.
         // Measured at its NATURAL size, then reported as zero height and
         // placed above the baseline — see ZeroHeightAbove.
         ZeroHeightAbove {
@@ -261,6 +263,7 @@ internal fun EpisodeCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(end = 4.dp)
+                    .graphicsLayer { alpha = if (isFullyVisible) 1f else 0f }
             )
         }
 
