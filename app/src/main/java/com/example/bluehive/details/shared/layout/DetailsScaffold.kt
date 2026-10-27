@@ -54,6 +54,8 @@ data class DetailsInfo(
      * lines; the movie screen passes the top under the lines it actually has.
      */
     val genresTop: Dp? = null,
+    /** The overview's most lines; null leaves it to its box. See DetailsOverview. */
+    val overviewMaxLines: Int? = null,
 )
 
 /**
@@ -224,6 +226,7 @@ private fun BoxScope.DetailsPage(
             overview = info.overview,
             dongleRegular = dongleRegular,
             onTextBottom = peek?.let { p -> { bottom -> p.overviewBottom = bottom } },
+            maxLines = info.overviewMaxLines ?: Int.MAX_VALUE,
         )
 
         // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:

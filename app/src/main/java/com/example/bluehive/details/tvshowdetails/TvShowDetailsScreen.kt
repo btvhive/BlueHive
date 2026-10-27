@@ -346,6 +346,8 @@ fun TvShowDetailsScreen(
             genresTop           = detailsGenresTop(
                 tvInfoLineCount(args.numberOfSeasons, args.status, args.releaseDate, args.originalLanguage)
             ),
+            // Clear of the episodes' air dates.
+            overviewMaxLines    = TV_OVERVIEW_MAX_LINES,
         ),
         trailer = trailer,
         favorite = favorite,

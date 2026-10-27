@@ -43,6 +43,12 @@ fun BoxScope.DetailsOverview(
      * there.
      */
     onTextBottom: ((Dp) -> Unit)? = null,
+    /**
+     * The most lines shown, ending in an ellipsis; unlimited leaves it to the
+     * box's height. The TV page shows 5, so its last line keeps clear of the
+     * episodes' air dates (2026-10-27).
+     */
+    maxLines: Int = Int.MAX_VALUE,
 ) {
     // ========================================================================================================================================= > // Genres
     if (!genres.isNullOrBlank() && genres != "N/A") {
@@ -109,6 +115,7 @@ fun BoxScope.DetailsOverview(
                 .height(108.25.dp)
                 .width(400.dp),
             overflow = TextOverflow.Ellipsis,
+            maxLines = maxLines,
             onTextLayout = { layout ->
                 if (onTextBottom != null && layout.lineCount > 0) {
                     val bottomPx = minOf(layout.getLineBottom(layout.lineCount - 1), layout.size.height.toFloat())

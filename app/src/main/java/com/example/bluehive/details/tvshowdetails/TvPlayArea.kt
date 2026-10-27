@@ -27,11 +27,15 @@ internal val RIGHT_CAP_X = 912.75.dp
 
 /**
  * How much lower the recommended row peeks here than on the movie page: the
- * season cap ends at 421.25 dp, about 25 dp under the movie's bottom play buttons (~396),
- * and the row's heading keeps the movie page's gap below them. The slide
- * grows by the same, so the slid-up row ends where the movie's does.
+ * season cap ends at 421.25 dp, about 25 dp under the movie's bottom play
+ * buttons (~396), plus 7 dp so the heading clears the episode titles (v470;
+ * v469 had 25 and the heading touched them). The slide grows by the same, so
+ * the slid-up row ends where the movie's does.
  */
-private val TV_PEEK_ROW_DROP = 25.dp
+private val TV_PEEK_ROW_DROP = 32.dp
+
+/** The overview's most lines on the TV page, so its last one clears the air dates (v470; it showed 7). */
+internal const val TV_OVERVIEW_MAX_LINES = 5
 
 /** The TV page's recommended row top (DetailsPeekState.baseRowTop). */
 internal val TV_PEEK_ROW_TOP = PEEK_ROW_TOP + TV_PEEK_ROW_DROP
