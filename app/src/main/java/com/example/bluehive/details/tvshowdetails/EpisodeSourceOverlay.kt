@@ -40,29 +40,36 @@ import com.example.bluehive.details.shared.state.ExtrasState
 import com.example.bluehive.utilities.*
 import kotlinx.coroutines.delay
 
-// The overlay card (design E, 2026-10-27): the episode still as its backdrop,
-// darkened from the left (the text) and the right (the buttons).
-private val OVERLAY_WIDTH = 660.dp
-private val OVERLAY_HEIGHT = 262.dp
-private val OVERLAY_SHAPE = RoundedCornerShape(12.dp)
+// The overlay card (design B1, 2026-10-27): the episode still across the top,
+// fading into the card under the title, then the overview and the Watch
+// buttons two by two. Sizes are the approved mockup's (scratchpad
+// ep_overlay_mock.py / ep_overlay_b.py, b1(12)).
+private val OVERLAY_WIDTH = 400.dp
+private val OVERLAY_TOP = 28.dp
+private val OVERLAY_SHAPE = RoundedCornerShape(10.dp)
 private val OVERLAY_EDGE = Color(0xFF343648)
 private val OVERLAY_FACE = Color(0xFF12131C)
-private val OVERLAY_SHADE = Color(0xEB0A0B12)
-private val OVERLAY_SHADE_LIGHT = Color(0x550A0B12)
-private val OVERLAY_GOLD = Color(0xFFD19814)
+private val OVERLAY_STILL_HEIGHT = 190.dp
 
-/** The Watch buttons: the movie page's, 190 dp wide, one under another. */
-private val SOURCE_BUTTON_WIDTH = 190.dp
-private val SOURCE_BUTTON_STEP = 52.dp
+/** The Watch buttons: the movie page's, 162 dp wide, two to a row. */
+private val SOURCE_BUTTON_WIDTH = 162.dp
+private val SOURCE_COLUMN_STEP = 176.dp   // 162 + a 14 dp gap
+private val SOURCE_ROW_STEP = 52.dp       // the 40 dp button + a 12 dp gap
+private val SOURCE_BUTTON_HEIGHT = 40.dp  // face + the strip under it
 
-private val OverlayShade = Brush.horizontalGradient(
-    0.00f to OVERLAY_SHADE,
-    0.30f to OVERLAY_SHADE,
-    0.50f to OVERLAY_SHADE_LIGHT,
-    0.60f to OVERLAY_SHADE_LIGHT,
-    0.68f to OVERLAY_SHADE,
-    1.00f to OVERLAY_SHADE,
+/** The still fades into the card from 45% of its height down, as in the mockup. */
+private val StillFade = Brush.verticalGradient(
+    0.45f to Color.Transparent,
+    1.00f to OVERLAY_FACE,
 )
+
+/**
+ * The episode still at full size. The server stores w300 (300 px wide) for the
+ * episode tiles, which is soft across the overlay's 400 dp; TMDB's "original"
+ * of the same picture is what this card shows. Other urls pass through.
+ */
+internal fun fullSizeStill(url: String?): String? =
+    url?.replace("/t/p/w300/", "/t/p/original/")
 
 /**
  * The source buttons for this episode.
@@ -102,9 +109,9 @@ internal fun episodeOverlayOpen(extras: ExtrasState, episodesState: EpisodesStat
 
 /**
  * The episode overlay: OK on an episode opens it over the page. The still
- * fills the card; the episode's number, title, air date and overview sit on
- * the left, and the "Watch on ..." buttons (English / Japanese for an anime)
- * one under another on the right. A press records the episode in
+ * (full size) runs across the top and fades into the card under the title
+ * and "Season · Episode · air date"; the overview follows, then the "Watch
+ * on ..." buttons two by two (English / Japanese for an anime). A press records the episode in
  * [episodesState] and starts the anime flow or the source chain; Back closes
  * it and returns to the tile.
  *
@@ -195,36 +202,51 @@ internal fun BoxScope.EpisodeSourceOverlay(
         episodesState.focusRequesters[targetIndex].requestFocus()
     }
 
-    Box(
+    Column(
         modifier = Modifier
-            .align(Alignment.Center)
-            .size(OVERLAY_WIDTH, OVERLAY_HEIGHT)
+            .align(Alignment.TopCenter)
+            .offset(y = OVERLAY_TOP)
+            .width(OVERLAY_WIDTH)
             .clip(OVERLAY_SHAPE)
             .background(OVERLAY_FACE)
+            .border(1.dp, OVERLAY_EDGE, OVERLAY_SHAPE)
     ) {
-        AsyncImage(
-            model = selectedEpisode.stillImageUrl ?: backdropUrl,
-            contentDescription = selectedEpisode.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
-        )
-        Box(Modifier.fillMaxSize().background(OverlayShade))
-
-        EpisodeOverlayText(
+        EpisodeOverlayHeader(
+            stillUrl = fullSizeStill(selectedEpisode.stillImageUrl) ?: backdropUrl,
             season = season,
             episodeNumber = episodeNumber,
             title = selectedEpisode.title,
             airDate = formatEpisodeAirDate(selectedEpisode.airDate),
-            overview = selectedEpisode.overview.orEmpty(),
             passionFont = passionFont,
-            dongleRegular = dongleRegular,
         )
 
+        val overview = selectedEpisode.overview.orEmpty()
+        if (overview.isNotBlank()) {
+            Text(
+                text = overview,
+                fontFamily = dongleRegular,
+                fontSize = 16.sp,
+                lineHeight = 11.5.sp,
+                color = Color(0xFFE7E3E3),
+                maxLines = 4,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 8.dp),
+            )
+        }
+
+        // The buttons sit 12 dp lower than the mockup's first cut (the user's
+        // pick, 2026-10-27): 30 dp under the overview, 36 dp above the edge.
+        val buttonCount = if (isAnime) 2 else episodeSources.size.coerceAtMost(focusMap.providers.size)
+        val rows = (buttonCount + 1) / 2
         Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 30.dp, end = 24.dp)
-                .width(SOURCE_BUTTON_WIDTH)
+                .padding(top = 30.dp, bottom = 36.dp)
+                .padding(horizontal = 31.dp)
+                .size(
+                    width = SOURCE_COLUMN_STEP + SOURCE_BUTTON_WIDTH,
+                    height = if (rows == 0) SOURCE_BUTTON_HEIGHT
+                             else SOURCE_ROW_STEP * (rows - 1) + SOURCE_BUTTON_HEIGHT,
+                )
                 .focusGroup()
         ) {
             if (isAnime) {
@@ -297,75 +319,67 @@ internal fun BoxScope.EpisodeSourceOverlay(
                 )
             }
         }
-
-        // The edge on top, over the still's corners.
-        Box(Modifier.fillMaxSize().border(1.dp, OVERLAY_EDGE, OVERLAY_SHAPE))
     }
 }
 
-/** The left column: S6 · E7 in gold, the title, the air date, the overview. */
+/**
+ * The top of the card: the still, fading into the card from 45% down, with
+ * the title (and its Watch-button label shadow) and "Season 6 · Episode 7 ·
+ * 11/25/2007" over the faded part.
+ */
 @Composable
-private fun BoxScope.EpisodeOverlayText(
+private fun EpisodeOverlayHeader(
+    stillUrl: String?,
     season: Int,
     episodeNumber: Int,
     title: String,
     airDate: String,
-    overview: String,
     passionFont: FontFamily,
-    dongleRegular: FontFamily,
 ) {
-    Column(
+    Box(
         modifier = Modifier
-            .align(Alignment.TopStart)
-            .padding(start = 24.dp, top = 28.dp, bottom = 22.dp)
-            .width(236.dp)
-            .fillMaxHeight()
+            .fillMaxWidth()
+            .height(OVERLAY_STILL_HEIGHT)
     ) {
-        Text(
-            text = "S$season · E$episodeNumber",
-            fontFamily = AppTypography.interBold,
-            fontSize = 10.sp,
-            color = OVERLAY_GOLD,
+        AsyncImage(
+            model = stillUrl,
+            contentDescription = title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
         )
-        Text(
-            text = title,
-            fontFamily = passionFont,
-            fontSize = 26.sp,
-            lineHeight = 27.sp,
-            color = Color.White,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            // The Watch buttons' label shadow -- see ButtonLabelShadow.
-            style = TextStyle(shadow = ButtonLabelShadow),
-            modifier = Modifier.padding(top = 4.dp),
-        )
-        if (airDate.isNotBlank()) {
+        Box(Modifier.fillMaxSize().background(StillFade))
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 20.dp, end = 20.dp, bottom = 3.dp)
+        ) {
             Text(
-                text = airDate,
+                text = title,
+                fontFamily = passionFont,
+                fontSize = 22.sp,
+                lineHeight = 22.sp,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                // The Watch buttons' label shadow -- see ButtonLabelShadow.
+                style = TextStyle(shadow = ButtonLabelShadow),
+            )
+            Text(
+                text = listOfNotNull(
+                    "Season $season",
+                    "Episode $episodeNumber",
+                    airDate.takeIf { it.isNotBlank() },
+                ).joinToString("  ·  "),
                 fontFamily = AppTypography.interSemiBold,
                 fontSize = 9.5.sp,
-                color = Color(0xFFAAACB9),
+                color = Color(0xFFBEC0CD),
                 modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        if (overview.isNotBlank()) {
-            // As tall as the card leaves room for; a long overview ends in "...".
-            Text(
-                text = overview,
-                fontFamily = dongleRegular,
-                fontSize = 16.sp,
-                lineHeight = 11.5.sp,
-                color = Color(0xFFE7E3E3),
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .padding(top = 12.dp)
-                    .weight(1f, fill = false),
             )
         }
     }
 }
 
-/** The "Watch on ..." buttons, one under another; focus starts on the first. */
+/** The "Watch on ..." buttons, two to a row; focus starts on the first. */
 @Composable
 private fun EpisodeSourceButtons(
     passionFont: FontFamily,
@@ -401,10 +415,11 @@ private fun EpisodeSourceButtons(
 }
 
 /**
- * One of the overlay's buttons, at row [index]: the movie page's Watch
- * button, 190 dp wide. Up / Down move between [focusRequesters]; every
- * other direction, and both ends, are consumed with no move and no sound,
- * so focus cannot wander onto the page behind. Back is [onBack].
+ * One of the overlay's buttons, at grid cell [index] (two to a row; a lone
+ * last button is centred under the others): the movie page's Watch button.
+ * The arrows move between [focusRequesters]; at an edge they are consumed
+ * with no move and no sound, so focus cannot wander onto the page behind.
+ * Back is [onBack].
  */
 @Composable
 internal fun OverlayWatchButton(
@@ -417,28 +432,33 @@ internal fun OverlayWatchButton(
     onBack: () -> Unit,
     onClick: () -> Unit,
 ) {
+    val total = focusRequesters.size
     ModularButton(
         textConfig = ModularButtonTextConfig(text = text, fontSize = 14f, shadow = ButtonLabelShadow),
         isToggleable = false,
         fontFamily = passionFont,
         focusRequester = focusRequester,
         modifier = Modifier
-            .offset(y = SOURCE_BUTTON_STEP * index)
+            .offset(
+                x = if (index % 2 == 0 && index == total - 1) SOURCE_COLUMN_STEP / 2 else SOURCE_COLUMN_STEP * (index % 2),
+                y = SOURCE_ROW_STEP * (index / 2),
+            )
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                when (event.key) {
-                    Key.DirectionUp, Key.DirectionDown -> {
-                        val target = index + if (event.key == Key.DirectionUp) -1 else 1
-                        focusRequesters.getOrNull(target)?.let {
-                            it.requestFocus()
-                            BlueHiveApplication.playHoverSound()
-                        }
-                        true
-                    }
-                    Key.DirectionLeft, Key.DirectionRight -> true
-                    Key.Back -> { onBack(); true }   // consume so Activity back doesn't fire
-                    else -> false
+                val target = when (event.key) {
+                    Key.DirectionLeft  -> if (index % 2 == 1) index - 1 else -1
+                    Key.DirectionRight -> if (index % 2 == 0 && index + 1 < total) index + 1 else -1
+                    Key.DirectionUp    -> index - 2
+                    // From the right column above a lone last button, Down goes to it.
+                    Key.DirectionDown  -> if (total % 2 == 1 && index == total - 2) total - 1 else index + 2
+                    Key.Back -> { onBack(); return@onPreviewKeyEvent true }   // consume so Activity back doesn't fire
+                    else -> return@onPreviewKeyEvent false
                 }
+                focusRequesters.getOrNull(target)?.let {
+                    it.requestFocus()
+                    BlueHiveApplication.playHoverSound()
+                }
+                true
             },
         dimensions = ModularButtonDimensions(
             mainWidth = SOURCE_BUTTON_WIDTH, mainHeight = 33.dp, mainYOffset = 0.7.dp,

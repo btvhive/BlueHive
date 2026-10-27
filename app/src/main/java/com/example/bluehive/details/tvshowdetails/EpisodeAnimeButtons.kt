@@ -74,8 +74,8 @@ internal fun AnimeEpisodeProviderButtons(
         focusRequesters.firstOrNull()?.requestFocus()
     }
 
-    // One under another in the episode overlay, like its Watch on ... buttons:
-    // Up / Down move, the ends and Left / Right go nowhere -- see OverlayWatchButton.
+    // Side by side in the episode overlay, like its Watch on ... buttons:
+    // Left / Right move, every edge goes nowhere -- see OverlayWatchButton.
     OverlayWatchButton(
         text = "Watch in English",
         colors = AnimeDubButtonColors,
