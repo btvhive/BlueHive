@@ -51,7 +51,9 @@ private val OVERLAY_WIDTH = 400.dp
 private const val OVERLAY_SCALE = 0.85f
 private val OVERLAY_SHAPE = RoundedCornerShape(10.dp)
 private val OVERLAY_EDGE = Color(0xFF343648)
-private val OVERLAY_FACE = Color(0xFF12131C)
+// Near-black, a touch lifted -- not the darkest black (the user's call,
+// 2026-10-27; was the dark grey-blue 0xFF12131C).
+private val OVERLAY_FACE = Color(0xFF0A0A0C)
 private val OVERLAY_STILL_HEIGHT = 190.dp
 
 /** The Watch buttons: the movie page's, 162 dp wide, two to a row. */
@@ -59,6 +61,12 @@ private val SOURCE_BUTTON_WIDTH = 162.dp
 private val SOURCE_COLUMN_STEP = 176.dp   // 162 + a 14 dp gap
 private val SOURCE_ROW_STEP = 52.dp       // the 40 dp button + a 12 dp gap
 private val SOURCE_BUTTON_HEIGHT = 40.dp  // face + the strip under it
+/**
+ * A button's own box is its glow's size (ModularButton), 55.8 dp tall. The
+ * grid leaves that much room under its last row -- with only 40 dp, a single
+ * row (anime) squashed the focus glow to the button's height.
+ */
+private val SOURCE_BUTTON_ROOM = 55.8.dp
 
 /** The still fades into the card from 45% of its height down, as in the mockup. */
 private val StillFade = Brush.verticalGradient(
@@ -217,7 +225,7 @@ internal fun BoxScope.EpisodeSourceOverlay(
             .width(OVERLAY_WIDTH)
             .clip(OVERLAY_SHAPE)
             .background(OVERLAY_FACE)
-            .border(1.dp, OVERLAY_EDGE, OVERLAY_SHAPE)
+            .border(2.dp, OVERLAY_EDGE, OVERLAY_SHAPE)
     ) {
         EpisodeOverlayHeader(
             stillUrl = fullSizeStill(selectedEpisode.stillImageUrl) ?: backdropUrl,
@@ -243,17 +251,17 @@ internal fun BoxScope.EpisodeSourceOverlay(
         }
 
         // The buttons sit 12 dp lower than the mockup's first cut (the user's
-        // pick, 2026-10-27): 30 dp under the overview, 36 dp above the edge.
+        // pick, 2026-10-27): 30 dp under the overview, 36 dp above the edge
+        // (20.2 dp under the glow room, which holds the other 15.8).
         val buttonCount = if (isAnime) 2 else episodeSources.size.coerceAtMost(focusMap.providers.size)
         val rows = (buttonCount + 1) / 2
         Box(
             modifier = Modifier
-                .padding(top = 30.dp, bottom = 36.dp)
+                .padding(top = 30.dp, bottom = 36.dp - (SOURCE_BUTTON_ROOM - SOURCE_BUTTON_HEIGHT))
                 .padding(horizontal = 31.dp)
                 .size(
                     width = SOURCE_COLUMN_STEP + SOURCE_BUTTON_WIDTH,
-                    height = if (rows == 0) SOURCE_BUTTON_HEIGHT
-                             else SOURCE_ROW_STEP * (rows - 1) + SOURCE_BUTTON_HEIGHT,
+                    height = SOURCE_ROW_STEP * (rows - 1).coerceAtLeast(0) + SOURCE_BUTTON_ROOM,
                 )
                 .focusGroup()
         ) {
