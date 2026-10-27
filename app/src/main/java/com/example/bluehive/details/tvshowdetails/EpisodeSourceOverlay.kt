@@ -31,16 +31,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import androidx.compose.ui.platform.LocalContext
 import com.example.bluehive.details.shared.playback.PlaybackSession
 import com.exjunk.lib.thanos.vanish.VanishContainer
-import com.exjunk.lib.thanos.vanish.VanishEffect.vanishable
-import com.exjunk.lib.thanos.vanish.VanishGLSurfaceView
-import com.exjunk.lib.thanos.vanish.rememberVanishController
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 import com.example.bluehive.api.buildJapaneseAnimationSources
@@ -57,11 +49,6 @@ import kotlinx.coroutines.delay
 // buttons two by two. Sizes are the approved mockup's (scratchpad
 // ep_overlay_mock.py / ep_overlay_b.py, b1(12)).
 private val OVERLAY_WIDTH = 400.dp
-/** The snap: the dust's length, the card's frame of overlap, the wait for the extraction. */
-private const val SNAP_DURATION_MS = 1000f
-private const val SNAP_HIDE_DELAY_MS = 120L
-private const val SNAP_START_WAIT_MS = 3000L
-
 /** The whole card drawn at 85% of the mockup's size (the user's call, 2026-10-27). */
 private const val OVERLAY_SCALE = 0.85f
 private val OVERLAY_SHAPE = RoundedCornerShape(10.dp)
@@ -231,36 +218,9 @@ internal fun BoxScope.EpisodeSourceOverlay(
         episodesState.focusRequesters[targetIndex].requestFocus()
     }
 
-    // ── The snap (an experiment, 2026-10-27) ──────────────────────────────
-    // A Watch on ... press turns the card to dust (ThanosEffect, as Favorites'
-    // remove does) while the loading screen comes up under it; the dust's GL
-    // surface is on top of the window, so it blows away over the loading
-    // screen. The card is only HIDDEN (alpha 0), never removed: its buttons
-    // stay attached, so focus can still return to the one pressed, and when
-    // the extraction ends -- the player opening, an error, a cancel -- the
-    // card is back, as it always was behind the player.
-    val glSurfaceView = remember { mutableStateOf<VanishGLSurfaceView?>(null) }
-    val vanishController = rememberVanishController(glSurfaceView.value)
-    var snapped by remember { mutableStateOf(false) }
-    val snapScope = rememberCoroutineScope()
-    LaunchedEffect(snapped) {
-        if (!snapped) return@LaunchedEffect
-        // Wait for the extraction to begin (or fail at once), then to end.
-        withTimeoutOrNull(SNAP_START_WAIT_MS) {
-            snapshotFlow { session.isExtracting || session.extractionError != null }.first { it }
-        }
-        snapshotFlow { session.isExtracting }.first { !it }
-        vanishController.reset()
-        snapped = false
-    }
-    val snapThen: (() -> Unit) -> Unit = { start ->
-        if (!snapped) {
-            vanishController.vanish()
-            start()
-            // One frame of dust over the card before it goes, as Favorites does.
-            snapScope.launch { delay(SNAP_HIDE_DELAY_MS); snapped = true }
-        }
-    }
+    // The snap: a Watch on ... press turns the card to dust, and the source
+    // chain starts only once the dust is gone -- see EpisodeSnapState.
+    val snap = rememberEpisodeSnap(session)
 
     // The whole card at OVERLAY_SCALE: a smaller density scales every dp and sp
     // inside it -- the still, the text and the buttons alike -- and centring
@@ -270,16 +230,15 @@ internal fun BoxScope.EpisodeSourceOverlay(
     VanishContainer(
         modifier = Modifier.fillMaxSize(),
         onGLSurfaceViewCreated = {
-            glSurfaceView.value = it
-            it.setAnimationConfig(duration = SNAP_DURATION_MS, particleSize = 2f)
+            it.setAnimationConfig(duration = SNAP_DURATION_MS.toFloat(), particleSize = 2f)
+            snap.renderer = it
         },
     ) {
     CompositionLocalProvider(LocalDensity provides scaled) {
     Column(
         modifier = Modifier
             .align(Alignment.Center)
-            .graphicsLayer { alpha = if (snapped) 0f else 1f }
-            .vanishable(vanishController, backgroundColor = Color.Transparent)
+            .episodeSnapCard(snap)
             .width(OVERLAY_WIDTH)
             .clip(OVERLAY_SHAPE)
             .background(OVERLAY_FACE)
@@ -387,7 +346,7 @@ internal fun BoxScope.EpisodeSourceOverlay(
                         episodesState.pendingSeason      = season
                         episodesState.pendingEpisode     = episodeNumber
                         episodesState.pendingEpisodeName = epName
-                        snapThen { sourcePlayback.start(source) }
+                        snap.snapThen { sourcePlayback.start(source) }
                     },
                     onBack = closeToTile,
                 )
@@ -418,12 +377,7 @@ private fun EpisodeOverlayHeader(
             .height(OVERLAY_STILL_HEIGHT)
     ) {
         AsyncImage(
-            // NOT a hardware bitmap: the snap copies the card onto a software
-            // canvas, which refuses them (Favorites' cards load the same way).
-            model = ImageRequest.Builder(LocalContext.current)
-                .data(stillUrl)
-                .allowHardware(false)
-                .build(),
+            model = stillUrl,
             contentDescription = title,
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),

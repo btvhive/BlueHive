@@ -877,6 +877,8 @@ dependencies {
     // The real org.json for JVM tests. android.jar's copy is a stub that throws,
     // which would make every JSON-reading helper look like it returns null.
     testImplementation("org.json:json:20240303")
+    // Virtual time for the coroutine state machines' tests (EpisodeSnapStateTest).
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:${libs.versions.kotlinxCoroutines.get()}")
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
