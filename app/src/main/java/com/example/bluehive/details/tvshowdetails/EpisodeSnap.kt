@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.bluehive.details.shared.playback.PlaybackSession
 import com.exjunk.lib.thanos.vanish.VanishGLSurfaceView
 import kotlinx.coroutines.CancellationException
@@ -59,6 +61,9 @@ private const val SNAP_CAPTURE_TIMEOUT_MS = 600L
 /** After the press's action, how long to wait for the extraction to begin before giving the card back. */
 private const val SNAP_START_WAIT_MS = 3000L
 
+/** After a successful extraction, how long the player may take to cover this screen. */
+private const val SNAP_PLAYER_OPEN_WAIT_MS = 3000L
+
 private const val TAG = "EpisodeSnap"
 
 /**
@@ -73,8 +78,9 @@ private const val TAG = "EpisodeSnap"
  *               the card hides once the dust covers it; keys are swallowed.
  *               After [SNAP_DURATION_MS] the action runs, exactly once.
  *   Playing  -> the card stays hidden while the extraction runs; when it ends
- *               (the player opening, an error, a cancel) the renderer is reset
- *               and the card comes back, focus still on the pressed button.
+ *               (an error, a cancel, or -- after the player opened -- the
+ *               viewer coming back from it) the renderer is reset and the
+ *               card comes back, focus still on the pressed button.
  *
  * What it guards against:
  *   - a second press while snapping or playing: ignored (phase check);
@@ -153,13 +159,28 @@ internal class EpisodeSnapState(
 
     /**
      * Playing: wait for the extraction to begin (or fail at once), then to
-     * end, and give the card back.
+     * end, and give the card back -- but after a SUCCESSFUL extraction, not
+     * until the viewer is back from the player. The player takes a moment to
+     * open over this screen, and handing the card back as the extraction
+     * ended flashed it between the loading screen and the player (v466). So:
+     * an error or a cancel gives it back at once; otherwise wait for the
+     * screen to be covered (paused) and then resumed. A player that never
+     * opens (the launch refused) gives it back after [SNAP_PLAYER_OPEN_WAIT_MS].
      */
-    suspend fun awaitPlaybackEnd(session: PlaybackSession) {
+    suspend fun awaitPlaybackEnd(session: PlaybackSession, lifecycle: Lifecycle) {
         withTimeoutOrNull(SNAP_START_WAIT_MS) {
             snapshotFlow { session.isExtracting || session.extractionError != null }.first { it }
         }
         snapshotFlow { session.isExtracting }.first { !it }
+        val playerOpening = session.extractionError == null && !session.extractCancelled
+        if (playerOpening) {
+            val covered = withTimeoutOrNull(SNAP_PLAYER_OPEN_WAIT_MS) {
+                lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) }
+            }
+            if (covered != null) {
+                lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }
+            }
+        }
         finish()
     }
 
@@ -204,8 +225,9 @@ internal fun rememberEpisodeSnap(session: PlaybackSession): EpisodeSnapState {
     val scope = rememberCoroutineScope()
     val snap = remember { EpisodeSnapState(scope) }
     snap.layer = rememberGraphicsLayer()
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
     LaunchedEffect(snap.phase == EpisodeSnapState.Phase.Playing) {
-        if (snap.phase == EpisodeSnapState.Phase.Playing) snap.awaitPlaybackEnd(session)
+        if (snap.phase == EpisodeSnapState.Phase.Playing) snap.awaitPlaybackEnd(session, lifecycle)
     }
     return snap
 }
