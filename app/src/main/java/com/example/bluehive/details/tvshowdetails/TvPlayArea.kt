@@ -18,6 +18,13 @@ import com.example.bluehive.details.shared.playback.AnimePlaybackController
 import com.example.bluehive.details.shared.playback.SourcePlaybackController
 
 /**
+ * The right-hand caps' left edge: 6 dp right of where they were (902.75), so
+ * the last card visible when a season first draws sits clearly outside the
+ * cap (the user's call, 2026-10-27). The row still ends under them, at 919.75.
+ */
+private val RIGHT_CAP_X = 908.75.dp
+
+/**
  * The TV screen's play area: the episode row between its side caps, the
  * season accordion built into the left cap, and the source overlay under the
  * selected tile, drawn into the scaffold's Box.
@@ -67,7 +74,7 @@ internal fun BoxScope.TvPlayArea(
         modifier = Modifier
             .align(Alignment.TopStart)
             .size(width = 7.75.dp, height = 115.dp)
-            .offset(x = 902.75.dp, y = 302.75.dp),
+            .offset(x = RIGHT_CAP_X, y = 302.75.dp),
         //.padding(start = 240.75.dp, top = 299.dp),
         contentScale = ContentScale.Fit
     )
@@ -114,7 +121,7 @@ internal fun BoxScope.TvPlayArea(
         modifier = Modifier
             .align(Alignment.TopStart)
             .size(width = 30.5.dp, height = 122.25.dp)
-            .offset(x = 902.75.dp, y = 299.dp),
+            .offset(x = RIGHT_CAP_X, y = 299.dp),
         //.padding(start = 240.75.dp, top = 299.dp),
         contentScale = ContentScale.Fit
     )
