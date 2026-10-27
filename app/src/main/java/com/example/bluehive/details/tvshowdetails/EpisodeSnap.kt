@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** How long the dust takes to blow away. Playback starts only after it. */
-internal const val SNAP_DURATION_MS = 2000L
+internal const val SNAP_DURATION_MS = 1000L   // the user's call, 2026-10-27 (was 2 s)
 
 /** The dust's first frames overlap the card before the card hides, so nothing blinks. */
 private const val SNAP_HIDE_DELAY_MS = 120L
