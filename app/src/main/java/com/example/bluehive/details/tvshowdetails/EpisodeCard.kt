@@ -46,6 +46,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import coil.compose.AsyncImage
 import com.example.bluehive.R
@@ -220,6 +221,28 @@ internal fun EpisodeCard(
         }
     }
 
+    // The air date sits at the card's right end, so it shows whenever that end
+    // is clear of the caps: the right half out from under the season cap, and
+    // the right edge short of the right cap. (isFullyVisible above is the
+    // row's own edges, which run under both caps.)
+    val density = LocalDensity.current
+    val leftCapCover = with(density) { (SEASON_CAP_X + SEASON_CAP_WIDTH - EPISODE_ROW_X).toPx() }
+    val rightCapCover = with(density) { (EPISODE_ROW_END - RIGHT_CAP_X).toPx() }
+    val dateEndPadding = with(density) { 4.dp.toPx() }
+    val isDateClear by remember(rowState, index, leftCapCover, rightCapCover) {
+        derivedStateOf {
+            val layoutInfo = rowState.layoutInfo
+            val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                ?: return@derivedStateOf false
+
+            val rightHalfStart = itemInfo.offset + itemInfo.size / 2f
+            val dateEnd = itemInfo.offset + itemInfo.size - dateEndPadding
+
+            rightHalfStart >= layoutInfo.viewportStartOffset + leftCapCover &&
+                dateEnd <= layoutInfo.viewportEndOffset - rightCapCover
+        }
+    }
+
     // ✅ This outer column is the "focus target"
     //    It gives the title real space UNDER the still image.
     Column(
@@ -244,9 +267,9 @@ internal fun EpisodeCard(
         // UNDER the image, so it can come and go without disturbing
         // anything; this sits ABOVE it, where appearing and disappearing
         // would shove every thumbnail up and down as the row scrolls.
-        // So isFullyVisible only HIDES it (alpha 0, read in the layer so
-        // scrolling redraws rather than recomposes): a card cut off by the
-        // caps shows no half date. A blank string still occupies its line,
+        // So isDateClear only HIDES it (alpha 0, read in the layer so
+        // scrolling redraws rather than recomposes): a card whose right end
+        // is under a cap shows no half date. A blank string still occupies its line,
         // which keeps unaired episodes (null air_date) exactly the same
         // height as aired ones.
         // Measured at its NATURAL size, then reported as zero height and
@@ -263,7 +286,7 @@ internal fun EpisodeCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(end = 4.dp)
-                    .graphicsLayer { alpha = if (isFullyVisible) 1f else 0f }
+                    .graphicsLayer { alpha = if (isDateClear) 1f else 0f }
             )
         }
 
