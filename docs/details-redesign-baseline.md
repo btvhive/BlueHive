@@ -174,3 +174,32 @@ Release builds, measured the same way as above. Each stage is its own commit.
 - **Stage 8** (five commits, v392–v396) split the TV screen's seasons and episodes into the plan's files: SeasonAvailability (the date rules and the season check), EpisodesState, TvFocusMap and UnairedGate (the state), EpisodeCard (one tile, taking plain values so unchanged tiles skip), EpisodeRow and SeasonColumn, EpisodeSourceOverlay and EpisodeAnimeButtons, and TvPlayArea, so the screen's play-area slot is one call. The TV file went from 2,808 to 902 lines. Every details method except the TV screen function is under the 2,500 / 100 budget (the largest is EpisodeCard at 2,006 / 67); the TV function, at 3,563 / 99, is now the screen's state setup and effects, which Stages 9-10 take on. The three values the row remembered per composition are file-level constants (P4), and opening a source overlay re-runs the row and the overlay, not the screen function (P1).
 - **Stage 9** (four commits, v397–v400) took what the two Activities did into shared code and per-screen Args: `DetailsIntents` builds the details-to-details launches (pinned by `DetailsIntentsTest`), `DetailsBackNavigation` holds Back and the history stack, and `TvShowDetailsArgs` / `MovieDetailsArgs` read the launch extras once. Each screen function then left its Activity's file for its own (`TvShowDetailsScreen.kt`, `MovieDetailsScreen.kt`; the `-keep` rules went with them) and takes the Args instead of one parameter per extra. That alone took the TV function from 3,540 / 96 to 2,860 / 67 and the movie function from 1,997 / 88 to 1,505 / 56: Compose checks and stores every parameter of a restartable function, and its restart call passes them all in consecutive registers. The TV function is under the register budget now; its units are Stage 10's. The Activity files are 113 and 121 lines.
 - **Stage 10** (three commits, v401–v402) locked it in. The TV function handed five blocks to the files that own their state, each called where it was, so every effect keeps its place (C5): the four label strings to `TvInfoLabels`, the 6 s unaired-press expiry to `UnairedGate`, and the first-focus retry loop, the watched-marks refresh and the season loads to `EpisodesState`. That took it from 2,860 / 67 to 2,190 / 56, and arming an unaired episode no longer re-runs the screen function. `checkMethodSizes` lost its ratchet: every details method is held to 2,500 / 100. Then the two `-keep` rules went, so R8 optimises the screen classes like the rest of the app: TV 2,142 / 57, movie 1,515 / 56, and the device verifier passes. The largest details method is the TV function at 2,142 units, down from 11,297 before the redesign, and every details file is under 760 lines. Speed has not been re-measured.
+
+## Speed after the movie peek layout (v447, onn box)
+
+Measured 2026-10-26 23:25-23:33 on the box's clock, at the user's word, with nobody using the box: profile marlan, The Nightmare Before Christmas opened from Favorites (Primetime, yesterday's movie, is no longer in that profile's favourites). v376 cannot go back on the box without wiping the sign-in, so this is v447 against yesterday's v376 numbers, not an interleaved A/B.
+
+### Opening the movie page
+
+Logcat "Displayed", 18 warm opens (first open dropped). `measure_open.sh` and `measure_open_home.sh` now match the Activity's new package (`details.moviesdetails`); they had found nothing since the redesign moved it.
+
+| | Fast group | Slow group | Median |
+|---|---|---|---|
+| v376, 2026-10-25 (Primetime, 6 opens) | 198, 210, 217, 226 | 426, 441 | 222 |
+| v447 (Nightmare Before Christmas, 18 opens) | 162-194 (5 opens) | 353-434 (13 opens) | 380 |
+
+Each group is as fast as yesterday's or faster; the slow group now comes up far more often. Whether that is today's changes or the different movie is not known without an A/B on the same movie.
+
+### Frames on the movie page (`measure_movie_page.sh`)
+
+| | Frames | Janky | p50 | p90 | p99 | Slow UI thread |
+|---|---|---|---|---|---|---|
+| Idle, 20 s | 0 | - | - | - | - | 0 |
+| Header <-> Watch buttons (4 presses) | 40 | 17.5% | 24 ms | 29 | 40 | 2 |
+| Slide to the row and back (x3) | 195 | 15.4% | 38 ms | 57 | 73 | 24 |
+| Row, 10 Rights | 241 | 8.7% | 25 ms | 32 | 44 | 8 |
+
+- The idle page draws nothing.
+- The row is lighter than the TV episode row was at baseline (p50 31 ms, p99 61).
+- The slide is the heaviest thing on the page: about 32 frames per slide at a 38 ms median, so roughly 26 fps for its 350 ms. The page moves by re-placing every element each frame (`Modifier.offset { }`); moving it as one GPU layer would be cheaper.
+

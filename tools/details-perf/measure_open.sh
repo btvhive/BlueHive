@@ -36,4 +36,4 @@ while [ $i -le "$RUNS" ]; do
 done
 wait_for FavoritesScreenActivity 40
 echo "--- Displayed since $marker"
-adb -s "$D" logcat -d -v time -T "$marker" 2>/dev/null | grep "Displayed com.bluehive.tv/com.example.bluehive.$ACT" | sed 's/.*Displayed //'
+adb -s "$D" logcat -d -v time -T "$marker" 2>/dev/null | grep "Displayed com.bluehive.tv/.*$ACT" | sed 's/.*Displayed //'
