@@ -236,6 +236,12 @@ private fun BoxScope.DetailsPage(
  * The peek layout's sliding layer: up by [DetailsPeekState.slide] while the
  * row has focus. The offset is read only while placing, so a slide re-places
  * the page without recomposing or re-measuring it.
+ *
+ * NOT A GPU LAYER, measured: moving the page with graphicsLayer translationY
+ * (v448) was no cheaper -- same-session A/B on the onn box, slide p50 34-44 ms
+ * as a layer against 26-27 ms re-placing, slow UI-thread frames alike (48-61).
+ * The slide's cost is the work that runs on the row's focus change, not the
+ * move. A layer also cannot move the trailer's SurfaceView.
  */
 @Composable
 private fun DetailsSlidingPage(peek: DetailsPeekState, content: @Composable BoxScope.() -> Unit) {

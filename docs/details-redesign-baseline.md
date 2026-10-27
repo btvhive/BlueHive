@@ -201,5 +201,18 @@ Each group is as fast as yesterday's or faster; the slow group now comes up far 
 
 - The idle page draws nothing.
 - The row is lighter than the TV episode row was at baseline (p50 31 ms, p99 61).
-- The slide is the heaviest thing on the page: about 32 frames per slide at a 38 ms median, so roughly 26 fps for its 350 ms. The page moves by re-placing every element each frame (`Modifier.offset { }`); moving it as one GPU layer would be cheaper.
+- The slide is the heaviest thing on the page: about 32 frames per slide at a 38 ms median, so roughly 26 fps for its 350 ms.
+
+### The slide as one GPU layer: tried, no better (v448 / v449)
+
+Same box, same session, two runs each of `measure_movie_page.sh`, 2026-10-27 00:00-00:20. v448 moved the page with `graphicsLayer { translationY }`; v449 is the same code with the old placement offset.
+
+| Slide to the row and back (x3) | Janky | p50 | p90 | p99 | Slow UI thread |
+|---|---|---|---|---|---|
+| v448 GPU layer, run 1 | 43.6% | 34 ms | 81 | 150 | 61 |
+| v448 GPU layer, run 2 | 36.2% | 44 ms | 69 | 77 | 54 |
+| v449 re-placing, run 1 | 37.3% | 26 ms | 81 | 97 | 56 |
+| v449 re-placing, run 2 | 29.5% | 27 ms | 65 | 73 | 48 |
+
+The layer was no cheaper (worse at the median), and both have the same slow UI-thread frames, so moving the page is not what costs: it is the work that runs when the row takes focus (the heading's 350 ms grey-to-white fade, the focused card's glow and title). The code stays on the placement offset, which also moves the trailer's SurfaceView. Last night's single v447 run (24 slow frames) was a quiet moment for the box; the v449 runs are the fair comparison. Idle (0 frames), the header D-pad (p50 19-23 ms) and the row (p50 22-27 ms) did not change.
 
