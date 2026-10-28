@@ -335,6 +335,8 @@ fun TvShowDetailsScreen(
     DetailsScaffold(
         info = DetailsInfo(
             mediaTitle          = args.mediaTitle,
+            mediaType           = args.mediaType,
+            originalLanguage    = args.originalLanguage,
             logoUrl             = args.logoUrl,
             backdropUrl         = args.backdropUrl,
             backdropDescription = "TVShowsDetailsScreenCompose backdrop",

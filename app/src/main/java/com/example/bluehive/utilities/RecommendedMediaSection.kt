@@ -82,14 +82,14 @@ class RecommendedRowEntry {
  * changes.
  */
 @Composable
-private fun RecommendedHeading(dim: () -> Boolean, fontSize: TextUnit, modifier: Modifier) {
+private fun RecommendedHeading(title: String, dim: () -> Boolean, fontSize: TextUnit, modifier: Modifier) {
     val color by animateColorAsState(
         targetValue = if (dim()) DIM_TITLE_COLOR else Color.White,
         animationSpec = tween(durationMillis = 350),
         label = "recHeadingColor"
     )
     BasicText(
-        text = "Recommended Media",
+        text = title,
         modifier = modifier,
         style = LocalTextStyle.current.merge(
             TextStyle(fontSize = fontSize, fontFamily = AppTypography.passionRegular)
@@ -118,6 +118,8 @@ fun RecommendedMediaSection(
     autoFocusFirst: Boolean = true,
     entry: RecommendedRowEntry? = null,
     onRowFocusChanged: (Boolean) -> Unit = {},
+    /** The heading's words; the details pages name the kind of title (recommendedRowTitle). */
+    title: String = "Recommended Media",
 ) {
     val backgroundPainter = painterResource(id = R.drawable.titlecard_base)
     val focusedPainter = painterResource(id = R.drawable.titlecard_focused)
@@ -160,6 +162,7 @@ fun RecommendedMediaSection(
             .height(250.dp)
     ) {
         RecommendedHeading(
+            title = title,
             dim = { dimTitleUntilFocused && !hasRowFocus },
             fontSize = titleFontSize,
             // A smaller heading moves down by its lost line height, so it keeps
