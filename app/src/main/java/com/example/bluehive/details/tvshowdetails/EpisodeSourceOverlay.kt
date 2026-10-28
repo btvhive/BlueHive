@@ -157,6 +157,17 @@ internal fun BoxScope.EpisodeSourceOverlay(
     /** The screen's snap: a Watch on ... press turns the card to dust first -- see EpisodeSnapState. */
     snap: EpisodeSnapState,
 ) {
+    // The anime flow's server choice snaps the card too, and its own failure
+    // notices give the card back -- see EpisodeSnapState.
+    DisposableEffect(anime, snap) {
+        anime.launchGate = { start -> snap.snapThenOrNow(start) }
+        snap.flowFailed = { anime.showServerError || anime.showNoDub }
+        onDispose {
+            anime.launchGate = null
+            snap.flowFailed = { false }
+        }
+    }
+
     val open = episodeOverlayOpen(extras, episodesState)
 
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {

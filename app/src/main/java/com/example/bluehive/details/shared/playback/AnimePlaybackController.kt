@@ -76,6 +76,14 @@ class AnimePlaybackController internal constructor(
     var showNoDub         by mutableStateOf(false) // transient "No dub available" toast
         internal set
 
+    /**
+     * Runs the extraction a viewer's server choice starts ("Default server",
+     * a server picked): handed the start, it may run it now or later. The TV
+     * page's episode overlay snaps its card first (EpisodeSnapState); null --
+     * the movie page -- starts at once. Failover retries are not gated.
+     */
+    var launchGate: ((start: () -> Unit) -> Unit)? = null
+
     var pendingUrl        by mutableStateOf<String?>(null)
     var pendingDub        by mutableStateOf(false)
     var serverOptions     by mutableStateOf<List<ServerOption>>(emptyList())
@@ -542,7 +550,8 @@ class AnimePlaybackController internal constructor(
     fun onDefaultServer() {
         showDefaultPrompt = false
         restoreFocus()
-        pendingUrl?.let { launchExtract(it, pendingDub, null) }
+        val dub = pendingDub
+        pendingUrl?.let { url -> gated { launchExtract(url, dub, null) } }
     }
 
     /**
@@ -580,7 +589,14 @@ class AnimePlaybackController internal constructor(
     fun onServerPicked(serverName: String) {
         showServerPicker = false
         restoreFocus()
-        pendingUrl?.let { launchExtract(it, pendingDub, serverName) }
+        val dub = pendingDub
+        pendingUrl?.let { url -> gated { launchExtract(url, dub, serverName) } }
+    }
+
+    /** [start] through [launchGate], or at once without one. */
+    private fun gated(start: () -> Unit) {
+        val gate = launchGate
+        if (gate == null) start() else gate(start)
     }
 }
 

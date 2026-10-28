@@ -27,7 +27,7 @@ class DetailsPeekTest {
 
     @Test
     fun `an extra row moves the row and the slide down by one button row`() {
-        val peek = DetailsPeekState(startFocused = false)
+        val peek = DetailsPeekState(startFocused = false, rule = PeekRule.LiftUnderShortOverview)
         assertEquals(PEEK_ROW_TOP, peek.rowTop)
         assertEquals(PEEK_SLIDE, peek.slide)
         peek.extraSourceRows = 1

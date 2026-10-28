@@ -141,6 +141,13 @@ internal class EpisodeSnapState(
     internal var bounds: Rect? = null
 
     /**
+     * A failure the playback flow reports outside the session -- the anime
+     * flow's "couldn't reach" and "no dub" notices. Read in snapshot scope,
+     * so it may read Compose state. Set by the episode overlay.
+     */
+    internal var flowFailed: () -> Boolean = { false }
+
+    /**
      * Snap the card, then run [action]. A press while a snap or its playback
      * is in progress does nothing.
      */
@@ -185,24 +192,41 @@ internal class EpisodeSnapState(
     }
 
     /**
+     * As [snapThen], but a press that arrives while a snap or its playback is
+     * still in progress runs [action] at once instead of being dropped. For
+     * the anime flow's server choice: it comes from a dialog, never twice
+     * from the card, and must never be lost.
+     */
+    fun snapThenOrNow(action: () -> Unit) {
+        if (phase == Phase.Idle) snapThen(action) else action()
+    }
+
+    /**
      * Playing: wait for the extraction to begin (or fail at once), then to
      * end, and give the card back -- but after a SUCCESSFUL extraction, not
      * until the viewer is back from the player. The player takes a moment to
      * open over this screen, and handing the card back as the extraction
      * ended flashed it between the loading screen and the player (v466). So:
-     * an error or a cancel gives it back at once; otherwise wait for the
-     * screen to be covered (paused) and then resumed. A player that never
-     * opens (the launch refused) gives it back after [SNAP_PLAYER_OPEN_WAIT_MS].
+     * an error or a cancel (or [flowFailed]) gives it back at once;
+     * otherwise wait for the screen to be covered (stopped) and then resumed.
+     * A player that never opens (the launch refused) gives it back after
+     * [SNAP_PLAYER_OPEN_WAIT_MS].
+     *
+     * STOPPED, NOT PAUSED (v481): the anime flow's on-device extractor is an
+     * activity of its own, and its result can arrive before this screen is
+     * resumed again -- already "paused", so the old check passed at once and
+     * the brief resume before the player covered the screen gave the card
+     * back for a frame. Only a full-screen activity stops this one.
      */
     suspend fun awaitPlaybackEnd(session: PlaybackSession, lifecycle: Lifecycle) {
         withTimeoutOrNull(SNAP_START_WAIT_MS) {
-            snapshotFlow { session.isExtracting || session.extractionError != null }.first { it }
+            snapshotFlow { session.isExtracting || session.extractionError != null || flowFailed() }.first { it }
         }
         snapshotFlow { session.isExtracting }.first { !it }
-        val playerOpening = session.extractionError == null && !session.extractCancelled
+        val playerOpening = session.extractionError == null && !session.extractCancelled && !flowFailed()
         if (playerOpening) {
             val covered = withTimeoutOrNull(SNAP_PLAYER_OPEN_WAIT_MS) {
-                lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.RESUMED) }
+                lifecycle.currentStateFlow.first { !it.isAtLeast(Lifecycle.State.STARTED) }
             }
             if (covered != null) {
                 lifecycle.currentStateFlow.first { it.isAtLeast(Lifecycle.State.RESUMED) }

@@ -69,10 +69,10 @@ class DetailsPeekState(
 
 /**
  * How much of the recommended row's cards peeks up from the bottom edge, per
- * page (the user's calls, 2026-10-28). 40% is the default.
+ * page (the user's calls, 2026-10-28). 40% is the movie page's default.
  */
 enum class PeekRule {
-    /** 40% always: the TV page. */
+    /** 35% always: the TV page, anime or not (the user's call, 2026-10-28; 40% before). */
     Standard,
 
     /**
@@ -87,7 +87,7 @@ enum class PeekRule {
 
     /** The share for an overview of [overviewLines] lines (null: not laid out yet). */
     fun percent(overviewLines: Int?): Int = when (this) {
-        Standard -> PEEK_PERCENT_DEFAULT
+        Standard -> PEEK_PERCENT_TV
         LiftUnderShortOverview ->
             if (overviewLines != null && overviewLines <= SHORT_OVERVIEW_LINES) PEEK_PERCENT_SHORT_OVERVIEW
             else PEEK_PERCENT_DEFAULT
@@ -95,6 +95,7 @@ enum class PeekRule {
     }
 }
 
+const val PEEK_PERCENT_TV = 35
 const val PEEK_PERCENT_DEFAULT = 40
 const val PEEK_PERCENT_SHORT_OVERVIEW = 50
 const val PEEK_PERCENT_ANIME = 60
@@ -152,9 +153,9 @@ private val PEEK_ROW_TOP_HIDDEN: Dp = 549.25.dp
 fun peekRowTop(percent: Int): Dp = PEEK_ROW_TOP_HIDDEN - PEEK_CARD_HEIGHT * percent / 100
 
 /**
- * The default row offset, ~40% showing (485.25 dp). The TV page needs it
- * this low -- its row's heading has to clear the season cap (ends 421.25) and
- * the episode titles.
+ * The movie page's default row offset, ~40% showing (485.25 dp). The TV
+ * page's 35% (493.25) sits lower still; it needs at least 40%'s depth for its
+ * heading to clear the season cap (ends 421.25) and the episode titles.
  */
 val PEEK_ROW_TOP: Dp = peekRowTop(PEEK_PERCENT_DEFAULT)
 

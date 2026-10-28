@@ -15,9 +15,10 @@ class PeekRuleTest {
     }
 
     @Test
-    fun `the TV page is 40 percent whatever its overview`() {
-        assertEquals(40, PeekRule.Standard.percent(2))
-        assertEquals(40, PeekRule.Standard.percent(null))
+    fun `the TV page is 35 percent whatever its overview`() {
+        assertEquals(35, PeekRule.Standard.percent(2))
+        assertEquals(35, PeekRule.Standard.percent(null))
+        assertEquals(493.25.dp, peekRowTop(35))
     }
 
     @Test
@@ -49,7 +50,7 @@ class PeekRuleTest {
     @Test
     fun `a short overview moves the movie row up as soon as it is laid out`() {
         val peek = DetailsPeekState(startFocused = false, rule = PeekRule.LiftUnderShortOverview)
-        assertEquals(PEEK_ROW_TOP, peek.rowTop)
+        assertEquals(PEEK_ROW_TOP, peek.rowTop)   // 40% until the overview is laid out
         peek.overviewLines = 2
         assertEquals(peekRowTop(50), peek.rowTop)
         assertEquals(peekRowTop(50) - PEEK_SLID_ROW_TOP, peek.slide)

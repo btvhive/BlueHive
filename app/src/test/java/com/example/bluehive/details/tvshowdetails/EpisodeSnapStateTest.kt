@@ -102,6 +102,33 @@ class EpisodeSnapStateTest {
     }
 
     @Test
+    fun animeServerChoiceSnapsWhenIdle() {
+        runTest {
+            var runs = 0
+            val s = snap { true }
+            s.snapThenOrNow { runs++ }
+            advanceTimeBy(SNAP_DURATION_MS - 1)
+            runCurrent()
+            assertEquals("waits for the dust like a Watch on press", 0, runs)
+            advanceTimeBy(2)
+            runCurrent()
+            assertEquals(1, runs)
+        }
+    }
+
+    @Test
+    fun animeServerChoiceIsNeverDroppedMidSnap() {
+        runTest {
+            var runs = 0
+            val s = snap { true }
+            s.snapThen { }
+            runCurrent()
+            s.snapThenOrNow { runs++ }       // a busy snap must not swallow it
+            assertEquals(1, runs)
+        }
+    }
+
+    @Test
     fun screenClosingMidSnapNeverStartsPlayback() {
         val scope = TestScope(StandardTestDispatcher())
         var runs = 0
