@@ -46,6 +46,7 @@ import com.example.bluehive.details.shared.layout.peekExtraSourceRows
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
 import com.example.bluehive.details.shared.layout.DetailsCacheStats
 import com.example.bluehive.details.shared.layout.DetailsScaffold
+import com.example.bluehive.details.shared.layout.recommendedRowTitle
 import com.example.bluehive.details.shared.layout.DetailsSearchKeyboard
 import com.example.bluehive.details.shared.layout.rememberDetailsSearch
 import com.example.bluehive.details.shared.layout.PeekRowStart
@@ -387,8 +388,6 @@ fun MovieDetailsScreen(
     DetailsScaffold(
         info = DetailsInfo(
             mediaTitle          = args.mediaTitle,
-            mediaType           = args.mediaType,
-            originalLanguage    = args.originalLanguage,
             logoUrl             = args.logoUrl,
             backdropUrl         = args.backdropUrl,
             backdropDescription = "Movie backdrop",
@@ -397,6 +396,7 @@ fun MovieDetailsScreen(
             genres              = args.genres,
             overview            = args.overview,
             genresTop           = detailsGenresTop(infoRowCount),
+            rowTitle            = recommendedRowTitle(args.mediaType, args.genres, args.originalLanguage),
         ),
         trailer = trailer,
         favorite = favorite,

@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
-import com.example.bluehive.api.isJapaneseAnimation
 import com.example.bluehive.details.shared.state.ExtrasState
 import com.example.bluehive.details.shared.state.FavoriteState
 import com.example.bluehive.details.shared.state.TrailerState
@@ -57,9 +56,8 @@ data class DetailsInfo(
     val genresTop: Dp? = null,
     /** The overview's most lines; null leaves it to its box. See OverviewLines. */
     val overviewLines: OverviewLines? = null,
-    /** The page's own type ("movie" or "tv") and language: the row's heading names the kind (recommendedRowTitle). */
-    val mediaType: String,
-    val originalLanguage: String?,
+    /** The recommended row's heading in the peek layout -- see recommendedRowTitle. */
+    val rowTitle: String = "Recommended Media",
 )
 
 /**
@@ -258,15 +256,12 @@ private fun BoxScope.DetailsPage(
         if (peek != null) {
             // Peek layout: the play area, and the row peeking up under it.
             playArea()
-            val rowTitle = remember(info.mediaType, info.genres, info.originalLanguage) {
-                recommendedRowTitle(info.mediaType, isJapaneseAnimation(info.genres, info.originalLanguage))
-            }
             DetailsPeekRecommendations(
                 extras = extras,
                 peek = peek,
+                title = info.rowTitle,
                 onOpen = onOpenRecommendation,
                 onNavigateUp = onUpFromRecommendations,
-                title = rowTitle,
             )
         } else if (!extras.isOn) {
             // ✅ Conditionally show StreamerButtons OR RecommendedMediaSection

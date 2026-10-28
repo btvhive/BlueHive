@@ -46,16 +46,16 @@ fun DetailsRecommendations(
 fun DetailsPeekRecommendations(
     extras: ExtrasState,
     peek: DetailsPeekState,
+    title: String,
     onOpen: (MediaItem) -> Unit,
     onNavigateUp: () -> Unit,
-    /** The heading -- see recommendedRowTitle. */
-    title: String,
 ) {
     if (extras.recommendations.isNotEmpty()) {
         RecommendedMediaSection(
             recommendations = extras.recommendations,
             onMediaClick = onOpen,
             onNavigateUp = onNavigateUp,
+            title = title,
             topOffset = peek.rowTop,
             titleFontSize = PEEK_TITLE_FONT_SIZE,
             titleOffsetY = PEEK_TITLE_OFFSET_Y,
@@ -63,7 +63,6 @@ fun DetailsPeekRecommendations(
             autoFocusFirst = peek.startFocused,
             entry = peek.rowEntry,
             onRowFocusChanged = { peek.isScrolled = it },
-            title = title,
         )
     }
 }
@@ -107,23 +106,4 @@ fun PeekRowStart(
         awaitFrame()   // the header's canFocus is applied on the next frame
         try { fallback.requestFocus() } catch (_: IllegalStateException) { }
     }
-}
-
-/**
- * The peek row's heading, naming the kind of title the page is about: "More
- * movies you may like" / "More shows you may like", and for Japanese
- * animation "More anime movies you may like" / "More anime series you may
- * like" (the user's test, 2026-10-28; it said "Recommended Media" before).
- * [mediaType] is the page's own ("movie", else a show). Pure, so it is
- * unit-tested.
- */
-fun recommendedRowTitle(mediaType: String, isAnime: Boolean): String {
-    val isMovie = mediaType.equals("movie", ignoreCase = true)
-    val kind = when {
-        isAnime && isMovie -> "anime movies"
-        isAnime -> "anime series"
-        isMovie -> "movies"
-        else -> "shows"
-    }
-    return "More $kind you may like"
 }

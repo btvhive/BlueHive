@@ -33,6 +33,7 @@ import com.example.bluehive.details.shared.layout.DetailsPressTiming
 import com.example.bluehive.details.shared.layout.rememberDetailsPeek
 import com.example.bluehive.details.shared.layout.DetailsCacheStats
 import com.example.bluehive.details.shared.layout.DetailsScaffold
+import com.example.bluehive.details.shared.layout.recommendedRowTitle
 import com.example.bluehive.details.shared.layout.DetailsSearchKeyboard
 import com.example.bluehive.details.shared.layout.rememberDetailsSearch
 import com.example.bluehive.details.shared.layout.PeekRowStart
@@ -335,8 +336,6 @@ fun TvShowDetailsScreen(
     DetailsScaffold(
         info = DetailsInfo(
             mediaTitle          = args.mediaTitle,
-            mediaType           = args.mediaType,
-            originalLanguage    = args.originalLanguage,
             logoUrl             = args.logoUrl,
             backdropUrl         = args.backdropUrl,
             backdropDescription = "TVShowsDetailsScreenCompose backdrop",
@@ -349,6 +348,7 @@ fun TvShowDetailsScreen(
             ),
             // Clear of the episodes' air dates.
             overviewLines       = TV_OVERVIEW_LINES,
+            rowTitle            = recommendedRowTitle(args.mediaType, args.genres, args.originalLanguage),
         ),
         trailer = trailer,
         favorite = favorite,
