@@ -45,6 +45,8 @@ object AppTypography {
     val interSemiBold = FontFamily(Font(R.font.inter_semibold))
     val interBold = FontFamily(Font(R.font.inter_bold))
     val lalezarRegular = FontFamily(Font(R.font.lalezar_regular))
+    /** Asap Condensed Bold (Google Fonts, SIL OFL 1.1), added 2026-10-28 for the details row headings. */
+    val asapCondensedBold = FontFamily(Font(R.font.asap_condensed_bold))
 
 
 }

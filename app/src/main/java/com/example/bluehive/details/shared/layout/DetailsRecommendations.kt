@@ -7,6 +7,7 @@ import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
 import com.example.bluehive.details.shared.state.ExtrasState
 import com.example.bluehive.models.MediaItem
+import com.example.bluehive.utilities.AppTypography
 import com.example.bluehive.utilities.RecommendedMediaSection
 
 /**
@@ -58,6 +59,9 @@ fun DetailsPeekRecommendations(
             title = title,
             topOffset = peek.rowTop,
             titleFontSize = PEEK_TITLE_FONT_SIZE,
+            // Trying Asap Condensed Bold in place of Passion One (the
+            // user's experiment, 2026-10-28).
+            titleFontFamily = AppTypography.asapCondensedBold,
             titleOffsetY = PEEK_TITLE_OFFSET_Y,
             dimTitleUntilFocused = true,
             autoFocusFirst = peek.startFocused,

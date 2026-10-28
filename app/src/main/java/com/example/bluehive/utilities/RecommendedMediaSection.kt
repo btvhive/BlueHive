@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.BasicText
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -82,7 +83,13 @@ class RecommendedRowEntry {
  * changes.
  */
 @Composable
-private fun RecommendedHeading(title: String, dim: () -> Boolean, fontSize: TextUnit, modifier: Modifier) {
+private fun RecommendedHeading(
+    title: String,
+    dim: () -> Boolean,
+    fontSize: TextUnit,
+    fontFamily: FontFamily,
+    modifier: Modifier,
+) {
     val color by animateColorAsState(
         targetValue = if (dim()) DIM_TITLE_COLOR else Color.White,
         animationSpec = tween(durationMillis = 350),
@@ -92,7 +99,7 @@ private fun RecommendedHeading(title: String, dim: () -> Boolean, fontSize: Text
         text = title,
         modifier = modifier,
         style = LocalTextStyle.current.merge(
-            TextStyle(fontSize = fontSize, fontFamily = AppTypography.passionRegular)
+            TextStyle(fontSize = fontSize, fontFamily = fontFamily)
         ),
         color = { color },
     )
@@ -112,6 +119,8 @@ fun RecommendedMediaSection(
     modifier: Modifier = Modifier,
     topOffset: Dp = 340.25.dp,
     titleFontSize: TextUnit = 24.sp,
+    /** The heading's font: Passion One, as it has always been, unless a screen asks for another. */
+    titleFontFamily: FontFamily = AppTypography.passionRegular,
     /** The heading's offset above the cards; null keeps it where a 24 sp heading sat. */
     titleOffsetY: Dp? = null,
     dimTitleUntilFocused: Boolean = false,
@@ -165,6 +174,7 @@ fun RecommendedMediaSection(
             title = title,
             dim = { dimTitleUntilFocused && !hasRowFocus },
             fontSize = titleFontSize,
+            fontFamily = titleFontFamily,
             // A smaller heading moves down by its lost line height, so it keeps
             // its gap to the cards.
             modifier = Modifier.offset(
