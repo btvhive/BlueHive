@@ -82,8 +82,11 @@ val PEEK_PLAY_GAP: Dp = 12.dp
  */
 val PEEK_TITLE_OFFSET_Y: Dp = (-45).dp
 
-/** The heading's size in the peek layout: 16 sp since v471 (18 before, the user's call). */
-val PEEK_TITLE_FONT_SIZE: TextUnit = 16.sp
+/**
+ * The heading's size in the peek layout, the user's calls: 18 sp until v470,
+ * 16 in v471, 14 since v479 (in Asap Condensed Bold since v478).
+ */
+val PEEK_TITLE_FONT_SIZE: TextUnit = 14.sp
 
 /**
  * The right column of play buttons (162 dp wide): its right edge on Play
