@@ -68,13 +68,15 @@ internal fun BoxScope.TvPlayArea(
 ) {
     // ===============================================================================> episode lAZY ROW DECORATIONS
     // The strip behind the season cap's right edge, where the cards come out.
+    // +0.7 dp: one screen pixel right of v451's +0.2 on the onn box (2 px per
+    // dp), the user's call, 2026-10-28 -- it looked slightly out of line.
     Image(
         painter = painterResource(id = R.drawable.extended_mini_left_lower_body),
         contentDescription = null,
         modifier = Modifier
             .align(Alignment.TopStart)
             .size(width = 9.dp, height = 115.dp)
-            .offset(x = SEASON_CAP_X + SEASON_CAP_WIDTH + 0.2.dp - 9.dp, y = 302.75.dp),
+            .offset(x = SEASON_CAP_X + SEASON_CAP_WIDTH + 0.7.dp - 9.dp, y = 302.75.dp),
         contentScale = ContentScale.Fit
     )
 
