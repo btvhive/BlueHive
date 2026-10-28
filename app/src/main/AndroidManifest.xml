@@ -164,12 +164,20 @@
              with it — that check is now the ONLY way a fielded TV learns a new
              version exists, since there is no host to orchestrate updates. -->
 
+        <!-- Live TV. No noHistory: Back from its player returns to the channel list. -->
         <activity
             android:name=".sidebarComponents.LiveTvScreenActivity"
             android:exported="false"
-            android:noHistory="true"
             android:screenOrientation="landscape"
             android:theme="@style/Theme.BlueHive" />
+
+        <activity
+            android:name=".livetv.LivePlayerActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:screenOrientation="landscape"
+            android:windowSoftInputMode="adjustNothing"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
 
         <activity
             android:name=".ProfileManageActivity"

@@ -7,39 +7,19 @@ import androidx.activity.ComponentActivity
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import com.example.bluehive.BlueHiveApplication
-import com.example.bluehive.R
-import com.example.bluehive.utilities.AppTypography
+import com.example.bluehive.livetv.LivePlayerActivity
+import com.example.bluehive.livetv.LiveTvScreen
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  Live TV — "feature in development" overlay
-//  Uses the same card/scrim pattern as the History empty-state so the visual
-//  language stays consistent across the app.
+//  Live TV. The Activity keeps the name and place the sidebar and the manifest
+//  already use; the page (design C), its data and the player live in livetv/.
 // ─────────────────────────────────────────────────────────────────────────────
 
 fun openLiveTvScreen(context: Context, profileId: Int = -1) {
@@ -50,6 +30,10 @@ fun openLiveTvScreen(context: Context, profileId: Int = -1) {
 }
 
 class LiveTvScreenActivity : ComponentActivity() {
+
+    /** Bumped each time the page comes back from the player. */
+    private var resumeTick by mutableIntStateOf(0)
+    private var resumedOnce = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -67,97 +51,16 @@ class LiveTvScreenActivity : ComponentActivity() {
             }
         })
 
-        setContent { LiveTvComingSoonScreen() }
-    }
-}
-
-@Composable
-private fun LiveTvComingSoonScreen() {
-    Box(modifier = Modifier.fillMaxSize()) {
-
-        // ── Layer 1: background image (same as history/favorites screens) ─────
-        Image(
-            painter            = painterResource(id = R.drawable.home_screen),
-            contentDescription = null,
-            contentScale       = ContentScale.Crop,
-            modifier           = Modifier.fillMaxSize(),
-        )
-
-        // ── Layer 2: primary dark scrim ───────────────────────────────────────
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.45f))
-        )
-
-        // ── Layer 3: extra-dark scrim behind the card (matches history empty-state) ──
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = 0.65f))
-        )
-
-        // ── Layer 4: centered card ────────────────────────────────────────────
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier         = Modifier.fillMaxSize(),
-        ) {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .background(
-                        color = Color(0xFF121213),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = Color(0xFF3A3737),
-                        shape = RoundedCornerShape(12.dp)
-                    )
-                    .padding(horizontal = 40.dp, vertical = 32.dp)
-                    .width(480.dp),
-            ) {
-
-                // Title
-                Text(
-                    text       = "Feature Still in Development",
-                    color      = Color.White,
-                    fontFamily = AppTypography.interBold,
-                    fontWeight = FontWeight.Bold,
-                    fontSize   = 20.sp,
-                    textAlign  = TextAlign.Center,
-                    modifier   = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 12.dp),
-                )
-
-                // Body
-                Text(
-                    text       = "Thank you for your patience. We excel in creating the most convenient platform on the market.",
-                    color      = Color(0xFFAAAAAA),
-                    fontFamily = AppTypography.interSemiBold,
-                    fontWeight = FontWeight.Normal,
-                    fontSize   = 13.sp,
-                    textAlign  = TextAlign.Center,
-                    modifier   = Modifier
-                        .fillMaxWidth()
-                        .offset(y = 8.dp),
-                )
-
-                // Dismissal hint — red, same as history empty-state
-                Text(
-                    text       = "To leave just press the back button",
-                    color      = Color(0xFFA01D1D),
-                    fontFamily = AppTypography.interBold,
-                    fontWeight = FontWeight.Normal,
-                    fontSize   = 15.sp,
-                    textAlign  = TextAlign.Center,
-                    modifier   = Modifier
-                        .fillMaxWidth()
-                        .offset(y = 36.dp)
-                        .padding(bottom = 28.dp),
-                )
+        val profileId = intent.getIntExtra("PROFILE_ID", -1)
+        setContent {
+            LiveTvScreen(profileId, resumeTick) { row, index ->
+                LivePlayerActivity.start(this, profileId, row, index)
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (resumedOnce) resumeTick++ else resumedOnce = true
     }
 }

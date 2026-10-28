@@ -555,7 +555,8 @@ val checkMethodSizes by tasks.registering {
         }
         fun inBudget(origin: String): Boolean =
             inDetails(origin) || origin.startsWith("com.example.bluehive.favorites.") ||
-                origin.startsWith("com.example.bluehive.home.")
+                origin.startsWith("com.example.bluehive.home.") ||
+                origin.startsWith("com.example.bluehive.livetv.")
 
         data class Method(val key: String, val origin: String, val units: Int, val registers: Int)
         val methods = ArrayList<Method>()
@@ -608,7 +609,7 @@ val checkMethodSizes by tasks.registering {
                     "(budget $maxUnits / $maxRegisters). Split it -- see the note above checkMethodSizes."
             }
         }
-        logger.lifecycle("checkMethodSizes: largest methods in details/, favorites/ and home/ (budget $maxUnits units / $maxRegisters registers):")
+        logger.lifecycle("checkMethodSizes: largest methods in details/, favorites/, home/ and livetv/ (budget $maxUnits units / $maxRegisters registers):")
         budgeted.sortedByDescending { it.units }.take(5).forEach { m ->
             logger.lifecycle("  %6d units %4d regs  %s".format(m.units, m.registers, m.key))
         }

@@ -1057,6 +1057,14 @@ interface BluehiveApiService {
     @GET("/api/bluehive/profiles")
     suspend fun listProfiles(): List<ProfileResponse>
 
+    // ── Live TV (bluehive-live-api, its own container) ───────────────────────
+    @GET("/api/live/channels")
+    suspend fun getLiveChannels(): LiveChannelsResponse
+
+    /** 502 {"detail": {"error": "off_air"}} when neither feed works right now. */
+    @POST("/api/live/{channelId}/session")
+    suspend fun startLiveSession(@Path("channelId") channelId: String): Response<LiveSessionResponse>
+
     /** Own profiles plus everyone else's on the same subscription licence.
      *  Separate from [listProfiles], which returns only what this account may
      *  ENTER — a distinction the picker depends on. 404s against a backend that

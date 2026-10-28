@@ -75,8 +75,9 @@ import kotlinx.coroutines.withTimeout
  * both ExoPlayer activities finish() on STATE_ENDED, and the WebView clears its
  * playing flag on the page's own media-session pause. It is NOT safe for media
  * that never ends — live streams are deliberately excluded from that STATE_ENDED
- * branch — so falling asleep on Live TV holds the slot until someone presses a
- * button. That is a known, accepted gap rather than an oversight.
+ * branch — so Live TV's player closes that gap itself: after four hours without
+ * a press it asks "Still watching?" and stops if nobody answers within two
+ * minutes (livetv/StillWatching.kt).
  *
  * TRAILERS ARE DELIBERATELY NOT REGISTERED HERE. The home-screen trailer overlay
  * and the details-screen trailer player autoplay without anyone asking, so
@@ -185,14 +186,20 @@ object IdleWatcher {
 
     // ── Playback sources ──────────────────────────────────────────────────────
     //
-    // One id per surface that plays REAL content. There are two (a third, the
-    // GeckoView viewer, went with GeckoView in v371), and missing either means
+    // One id per surface that plays REAL content. There are three (a fourth, the
+    // GeckoView viewer, went with GeckoView in v371), and missing one means
     // that player's viewers get a prompt (or a release) during a film they are
     // actually watching.
+    //
+    // Live TV never ends, so its exemption would never end either: its player
+    // asks "Still watching?" itself after four hours without a press and stops
+    // if nobody answers (livetv/StillWatching.kt), which hands the TV back to
+    // the timers here.
     const val SOURCE_HLS     = "hls"        // HlsPlayerActivity      — films / TV
     const val SOURCE_MIRURO  = "miruro"     // MiruroPlayerActivity   — anime
+    const val SOURCE_LIVE    = "live"       // LivePlayerActivity     — Live TV
 
-    private val PLAYBACK_SOURCES = setOf(SOURCE_HLS, SOURCE_MIRURO)
+    private val PLAYBACK_SOURCES = setOf(SOURCE_HLS, SOURCE_MIRURO, SOURCE_LIVE)
 
     // ── State ─────────────────────────────────────────────────────────────────
 
@@ -297,7 +304,7 @@ object IdleWatcher {
     /**
      * A playback surface started or stopped playing.
      *
-     * @param source one of [SOURCE_HLS] / [SOURCE_MIRURO] / [SOURCE_WEBVIEW].
+     * @param source one of [SOURCE_HLS] / [SOURCE_MIRURO] / [SOURCE_LIVE].
      * @param pause  how to stop this surface if the prompt times out. Stored on
      *               the transition into playing and dropped on the way out, so a
      *               dead activity's lambda is never held.
