@@ -105,7 +105,13 @@ Postgres (read, for the login check), and Caddy: +10 lines sending `/api/live/*`
 - **Decoy guard:** every new link has its first chunk checked once (unwrapped TS, ≥0.4 Mbps).
   The scraper decoy was 85 kbps, real channels 4-9 Mbps (ad breaks included).
 - **Backups:** a failed resolve or decoy on "X" tries "X Backup" before giving up.
-- Cost: one Chrome tab per channel per ~2.3 h of viewing, plus a playlist every ~4 s.
+- **Dead channels (build c, live 2026-10-28 23:02 UTC):**
+  - Every 30 min, one worker re-resolves each channel whose last try failed, least recently tried first, at most 24.
+  - That pass also covers a dead channel's backup while the backup is untried.
+  - Still dead → a fresh `off`, so it stays dimmed. Working → `ok`.
+  - A channel shows `ok` while either of its feeds works, so ESPN plays from its backup and is no longer dimmed.
+  - An unreachable upstream counts as an outage and moves on to the backup (it was a 500).
+- Cost: one Chrome tab per channel per ~2.3 h of viewing, plus a playlist every ~4 s, plus one tab per dead channel per 30 min.
 
 ## 4. TV app (new `livetv/` package)
 
@@ -163,8 +169,14 @@ Remote: Up/Down = channel list, Left/Right = category chips, Click = watch, Back
 - `/api/live/channels` gives each channel `status`: `ok` / `off` / `unknown` (last resolve
   within 6 h). The TV dims `off` channels: grey dot `#6B7080`, name `#7D8496`.
 - Kids profiles: the TV shows only the Kids row (the server does not enforce it).
-- No server-side "is this channel up" sweep yet (would cost a browser load per channel);
-  status comes from real viewing.
+- No sweep of every channel (it would cost a browser load per channel), so status comes from
+  real viewing. Since build c, channels that failed are retried every 30 min: dead ones stay
+  dimmed and light up on their own when zlive fixes them.
+- **Dead at the source, 2026-10-28** (zlive's own player failed the same way from a home IP):
+  - Fox News: frozen since 2026-10-20 12:00 UTC.
+  - ESPN and ESPN2: frozen since 2026-10-25 14:00 UTC.
+  - "FOX SPORTS NEWS" (id `foxnews`): one 35.6 s 1080p MP4 sent again on every request.
+  - A frozen feed means the playlist stopped advancing and its TikTok chunk links have expired, so the CDN refuses them for everyone.
 
 ## 5. Stages
 
