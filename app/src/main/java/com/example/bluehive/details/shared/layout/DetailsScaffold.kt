@@ -227,7 +227,12 @@ private fun BoxScope.DetailsPage(
             genresTop = info.genresTop ?: 96.dp,
             overview = info.overview,
             dongleRegular = dongleRegular,
-            onTextBottom = peek?.let { p -> { bottom -> p.overviewBottom = bottom } },
+            onTextLaidOut = peek?.let { p ->
+                { bottom, lines ->
+                    p.overviewBottom = bottom
+                    p.overviewLines = lines
+                }
+            },
             lines = info.overviewLines,
         )
 
@@ -254,6 +259,10 @@ private fun BoxScope.DetailsPage(
         )
 
         if (peek != null) {
+            // No overview counts as a short one (PeekRule).
+            if (info.overview.isNullOrBlank()) {
+                LaunchedEffect(peek) { peek.overviewLines = 0 }
+            }
             // Peek layout: the play area, and the row peeking up under it.
             playArea()
             DetailsPeekRecommendations(

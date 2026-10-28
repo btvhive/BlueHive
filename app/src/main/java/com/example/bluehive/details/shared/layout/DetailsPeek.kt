@@ -28,6 +28,8 @@ import com.example.bluehive.utilities.RecommendedRowEntry
 class DetailsPeekState(
     /** Opened from history in Extras: the row takes focus as soon as it loads. */
     startFocused: Boolean,
+    /** How much of the row's cards peeks on this page -- see PeekRule. */
+    val rule: PeekRule = PeekRule.Standard,
 ) {
     /**
      * The row takes focus as soon as it loads. Turned off for good when the
@@ -47,6 +49,9 @@ class DetailsPeekState(
     /** Where the overview's last line ends; null until it is laid out, or with no overview. */
     var overviewBottom by mutableStateOf<Dp?>(null)
 
+    /** The overview's line count: null until it is laid out, 0 with no overview. */
+    var overviewLines by mutableStateOf<Int?>(null)
+
     /** The first row of play buttons: [PEEK_PLAY_GAP] under the overview's text, never lower than [PEEK_PLAY_TOP]. */
     val playTop: Dp get() = peekPlayTop(overviewBottom)
 
@@ -56,18 +61,55 @@ class DetailsPeekState(
     /** Moves focus into the row from the play buttons. */
     val rowEntry = RecommendedRowEntry()
 
-    val rowTop: Dp get() = PEEK_ROW_TOP + PEEK_SOURCE_ROW_STEP * extraSourceRows
-    val slide: Dp get() = PEEK_SLIDE + PEEK_SOURCE_ROW_STEP * extraSourceRows
+    val rowTop: Dp get() = peekRowTop(rule.percent(overviewLines)) + PEEK_SOURCE_ROW_STEP * extraSourceRows
+
+    /** How far the page slides: the slid-up row always lands at [PEEK_SLID_ROW_TOP]. */
+    val slide: Dp get() = rowTop - PEEK_SLID_ROW_TOP
 }
 
 /**
- * The page's DetailsPeekState, made again only if [startFocused] changes.
- * Both screens call this one function, so R8 keeps it out of their method
- * budgets (checkMethodSizes).
+ * How much of the recommended row's cards peeks up from the bottom edge, per
+ * page (the user's calls, 2026-10-28). 40% is the default.
+ */
+enum class PeekRule {
+    /** 40% always: the TV page. */
+    Standard,
+
+    /**
+     * 40%, or 50% when the overview has [SHORT_OVERVIEW_LINES] lines or fewer:
+     * the movie page, whose play buttons rise under a short overview and left
+     * an empty band above the row (Buddy, 2026-10-28).
+     */
+    LiftUnderShortOverview,
+
+    /** 60% always: anime movie pages, which looked flat at 40%. */
+    Anime;
+
+    /** The share for an overview of [overviewLines] lines (null: not laid out yet). */
+    fun percent(overviewLines: Int?): Int = when (this) {
+        Standard -> PEEK_PERCENT_DEFAULT
+        LiftUnderShortOverview ->
+            if (overviewLines != null && overviewLines <= SHORT_OVERVIEW_LINES) PEEK_PERCENT_SHORT_OVERVIEW
+            else PEEK_PERCENT_DEFAULT
+        Anime -> PEEK_PERCENT_ANIME
+    }
+}
+
+const val PEEK_PERCENT_DEFAULT = 40
+const val PEEK_PERCENT_SHORT_OVERVIEW = 50
+const val PEEK_PERCENT_ANIME = 60
+
+/** An overview this many lines or shorter is short (PeekRule.LiftUnderShortOverview). */
+const val SHORT_OVERVIEW_LINES = 3
+
+/**
+ * The page's DetailsPeekState, made again only if [startFocused] or [rule]
+ * changes. Both screens call this one function, so R8 keeps it out of their
+ * method budgets (checkMethodSizes).
  */
 @Composable
-fun rememberDetailsPeek(startFocused: Boolean): DetailsPeekState =
-    remember(startFocused) { DetailsPeekState(startFocused) }
+fun rememberDetailsPeek(startFocused: Boolean, rule: PeekRule = PeekRule.Standard): DetailsPeekState =
+    remember(startFocused, rule) { DetailsPeekState(startFocused, rule) }
 
 /** The lowest the first row of play buttons sits: under the overview's full box (top 175 + height 108.25). */
 val PEEK_PLAY_TOP: Dp = 296.dp
@@ -98,19 +140,32 @@ val PEEK_RIGHT_COLUMN_X: Dp = 220.75.dp
 val PEEK_SOURCE_ROW_STEP: Dp = 55.5.dp
 
 /**
- * RecommendedMediaSection's offset that puts the cards' tops at ~476 dp, so
- * about 40% shows, on both pages (v476, the user's call: the movie page
- * matches the TV page). The TV page needs it this low -- its row's heading
- * has to clear the season cap (ends 421.25) and the episode titles. It was
- * 453.25 on the movie page (~444, ~60%) and 485.25 on the TV page since v470.
+ * The row's cards are 160 dp tall and their tops sit 9.25 dp under
+ * RecommendedMediaSection's offset, so an offset of 549.25 - 1.6 x percent
+ * shows that percent of them above the 540 dp screen edge (measured on the
+ * onn box: 453.25 showed ~60%, 485.25 ~40%).
  */
-val PEEK_ROW_TOP: Dp = 485.25.dp
+private val PEEK_CARD_HEIGHT: Dp = 160.dp
+private val PEEK_ROW_TOP_HIDDEN: Dp = 549.25.dp
+
+/** The row's offset that shows [percent] of its cards. */
+fun peekRowTop(percent: Int): Dp = PEEK_ROW_TOP_HIDDEN - PEEK_CARD_HEIGHT * percent / 100
 
 /**
- * How far the page slides up while the row has focus: the slid-up row lands
- * at 485.25 - 142 = 343.25, where the movie page's always landed (453.25 - 110).
+ * The default row offset, ~40% showing (485.25 dp). The TV page needs it
+ * this low -- its row's heading has to clear the season cap (ends 421.25) and
+ * the episode titles.
  */
-val PEEK_SLIDE: Dp = 142.dp
+val PEEK_ROW_TOP: Dp = peekRowTop(PEEK_PERCENT_DEFAULT)
+
+/**
+ * Where the row's offset lands when the page slides up for it: 343.25 dp,
+ * where the movie page's always landed (453.25 - 110), whatever its peek.
+ */
+val PEEK_SLID_ROW_TOP: Dp = 343.25.dp
+
+/** The slide at the default peek: 142 dp. */
+val PEEK_SLIDE: Dp = PEEK_ROW_TOP - PEEK_SLID_ROW_TOP
 
 /** The first play-button row for an overview ending at [overviewBottom] (null: none laid out). */
 fun peekPlayTop(overviewBottom: Dp?): Dp =

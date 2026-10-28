@@ -46,6 +46,7 @@ import com.example.bluehive.details.shared.layout.peekExtraSourceRows
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
 import com.example.bluehive.details.shared.layout.DetailsCacheStats
 import com.example.bluehive.details.shared.layout.DetailsScaffold
+import com.example.bluehive.details.shared.layout.PeekRule
 import com.example.bluehive.details.shared.layout.recommendedRowTitle
 import com.example.bluehive.details.shared.layout.DetailsSearchKeyboard
 import com.example.bluehive.details.shared.layout.rememberDetailsSearch
@@ -132,9 +133,6 @@ fun MovieDetailsScreen(
         prefetched       = null,
     )
 
-    // Opened from history in Extras: the row takes focus as it loads, so the
-    // page opens slid up on it.
-    val peek = rememberDetailsPeek(startFocused = args.startInExtras)
     // The play button Down entered the row from, for Up to return to.
     var rowEnteredFrom by remember { mutableStateOf<FocusRequester?>(null) }
 
@@ -277,6 +275,14 @@ fun MovieDetailsScreen(
         Log.d("AnimeDetect", "genres='${args.genres}' | originalLanguage='${args.originalLanguage}' | isAnime=$result")
         result
     }
+
+    // Opened from history in Extras: the row takes focus as it loads, so the
+    // page opens slid up on it. The row peeks 60% on an anime film, else 40%,
+    // or 50% under a short overview -- see PeekRule.
+    val peek = rememberDetailsPeek(
+        startFocused = args.startInExtras,
+        rule         = if (isAnime) PeekRule.Anime else PeekRule.LiftUnderShortOverview,
+    )
     val sources by produceState(
         initialValue = if (isAnime) emptyList()
         else getStreamingSources(args.mediaType, args.mediaId),

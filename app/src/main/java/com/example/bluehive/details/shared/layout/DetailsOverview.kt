@@ -46,11 +46,11 @@ fun BoxScope.DetailsOverview(
     overview: String?,
     dongleRegular: FontFamily,
     /**
-     * Where the overview's last shown line ends, in the screen's dp, each time
-     * it is laid out. The movie screen's peek layout puts its play buttons
-     * there.
+     * Each time the overview is laid out: where its last shown line ends, in
+     * the screen's dp, and how many lines it shows. The peek layout puts the
+     * movie page's play buttons there and sizes its row's peek by the count.
      */
-    onTextBottom: ((Dp) -> Unit)? = null,
+    onTextLaidOut: ((bottom: Dp, lines: Int) -> Unit)? = null,
     /**
      * The most lines shown, ending in an ellipsis; null leaves it to the
      * box's height. See OverviewLines.
@@ -79,6 +79,8 @@ fun BoxScope.DetailsOverview(
 
     // ========================================================================================================================================= > Overview text display with dynamic font sizing
     if (!overview.isNullOrBlank()) {
+        // One paragraph -- see flattenOverview.
+        val text = remember(overview) { flattenOverview(overview) }
         var fontSize by remember { mutableStateOf(18.sp) }
         var lineHeight by remember { mutableStateOf(14.sp) }
 
@@ -92,8 +94,8 @@ fun BoxScope.DetailsOverview(
         val fitted = if (lines == null) null else {
             val style = LocalTextStyle.current
             val widthPx = with(density) { OVERVIEW_WIDTH.roundToPx() }
-            remember(overview, lines, widthPx, dongleRegular, style) {
-                fitOverviewSize(overview, lines, widthPx, style, dongleRegular, textMeasurer)
+            remember(text, lines, widthPx, dongleRegular, style) {
+                fitOverviewSize(text, lines, widthPx, style, dongleRegular, textMeasurer)
             }
         }
 
@@ -102,9 +104,9 @@ fun BoxScope.DetailsOverview(
         // (2.0 on the onn box), so it sees a line ~550 dp wide where the box
         // is 400 and rarely shrinks. Kept as it is: fixing it would change
         // the movie page's text.
-        if (fitted == null) LaunchedEffect(overview) {
+        if (fitted == null) LaunchedEffect(text) {
             val textLayoutResult = textMeasurer.measure(
-                text = androidx.compose.ui.text.AnnotatedString(overview),
+                text = androidx.compose.ui.text.AnnotatedString(text),
                 style = androidx.compose.ui.text.TextStyle(
                     fontSize = 18.sp,
                     fontFamily = dongleRegular,
@@ -126,7 +128,7 @@ fun BoxScope.DetailsOverview(
         }
 
         Text(
-            text = overview,
+            text = text,
             color = Color(0xFF8B8B8B),
             fontSize = fitted?.size?.fontSize ?: fontSize,
             fontFamily = dongleRegular,
@@ -140,9 +142,9 @@ fun BoxScope.DetailsOverview(
             overflow = TextOverflow.Ellipsis,
             maxLines = fitted?.maxLines ?: Int.MAX_VALUE,
             onTextLayout = { layout ->
-                if (onTextBottom != null && layout.lineCount > 0) {
+                if (onTextLaidOut != null && layout.lineCount > 0) {
                     val bottomPx = minOf(layout.getLineBottom(layout.lineCount - 1), layout.size.height.toFloat())
-                    onTextBottom(175.dp + with(density) { bottomPx.toDp() })
+                    onTextLaidOut(175.dp + with(density) { bottomPx.toDp() }, layout.lineCount)
                 }
             },
         )
@@ -153,6 +155,18 @@ fun BoxScope.DetailsOverview(
 
 /** The overview box's width. */
 private val OVERVIEW_WIDTH: Dp = 400.dp
+
+/**
+ * The overview as one paragraph: every line break, and the spaces around it,
+ * becomes a single space. Some TMDB overviews come in paragraphs, and a blank
+ * line between them spent two of the TV page's six lines on nothing and left
+ * the ellipsis alone on the last (Bubblegum Crisis, 2026-10-28). Pure, so it
+ * is unit-tested.
+ */
+internal fun flattenOverview(overview: String): String =
+    overview.replace(LINE_BREAKS, " ").trim()
+
+private val LINE_BREAKS = Regex("\\s*\\R\\s*")
 
 /** One overview size: the font and its line height. */
 internal data class OverviewSize(val fontSize: TextUnit, val lineHeight: TextUnit)
