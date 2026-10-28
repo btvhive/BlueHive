@@ -33,7 +33,7 @@ import kotlin.math.roundToInt
  * A movie that came out in cinemas less than [WINDOW_DAYS] days ago usually only
  * exists as a cinema recording, so the card says roughly how long until a proper
  * copy is likely: a gold block with the number ("6 WKS", "10 DAYS", "1 DAY") and
- * "until / HD" beside it (was "until a / good copy"; the user found HD clearer). Movies only — TV and Japanese animation never
+ * "until / HD" beside it (was "until a / good copy"; the user found HD clearer). Movies only — TV, Japanese animation and anything on a streaming service never
  * get it — and it disappears by itself on day [WINDOW_DAYS], no data needed.
  *
  * Sizes come from the mockup (88 x 34 px badge at 92 %, 6 px under the poster's
@@ -52,6 +52,9 @@ object GoodCopyCountdown {
     fun labelFor(item: MediaItem, today: LocalDate = LocalDate.now()): Label? {
         if (item.mediaType != "movie") return null
         if (isJapaneseAnimation(item.genres?.joinToString(","), item.originalLanguage)) return null
+        // Straight to Netflix/Prime/etc. = online in HD from day one, so there is
+        // nothing to wait for. The server sets this from its US streaming list.
+        if (item.onStreaming == true) return null
         val released = item.releaseDate
             ?.takeIf { it.length >= 10 }
             ?.let { runCatching { LocalDate.parse(it.substring(0, 10)) }.getOrNull() }

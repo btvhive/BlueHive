@@ -638,7 +638,12 @@ fun TvWideLazyRow(
     // false for it, so it does nothing.  Only the genuinely-focused shelf
     // ever moves card focus.  Card focus therefore always lands in the row
     // that focusedShelfIndex points to — no drift, no lag, no overshoot.
-    LaunchedEffect(cardFocusEpoch) {
+    //
+    // ALSO KEYED ON THE FIRST CARDS ARRIVING. Moving onto a row whose first page
+    // is not back yet ticks the epoch while items is empty, so this used to
+    // return and nothing ever took focus; ShelfStack now holds focus on its
+    // parking node meanwhile, and this re-runs to take it when the cards land.
+    LaunchedEffect(cardFocusEpoch, items.isNotEmpty()) {
         if (cardFocusEpoch == 0) return@LaunchedEffect      // never triggered yet
         if (!isFocusedShelf) return@LaunchedEffect          // stale re-entry guard
         if (!stackHasFocus()) return@LaunchedEffect         // focused shelf, focus elsewhere

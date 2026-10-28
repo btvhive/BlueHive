@@ -1500,10 +1500,19 @@ abstract class SubtitlePlayerActivity : ComponentActivity() {
             // "(Miruro Dub)".
             ?.replace("(", "")?.replace(")", "")
             ?.trim()?.takeIf { it.isNotEmpty() }
+        // AND WHICH OF ITS SERVERS, for troubleshooting: "(VidNest · Beta)".
+        // The backend names it -- the VidNest picker's choice, VidLove's server
+        // key, or for a browser-extracted source the CDN the stream came from
+        // ("(VidFast · finalsignal)"), which is what matters when it buffers.
+        // Re-set by HlsPlayerActivity when a mid-play re-extraction lands on a
+        // different server. Absent on older backends and on Miruro, whose
+        // SOURCE_NAME already carries its server.
+        val server = intent.getStringExtra(HlsPlayerActivity.EXTRA_SERVER_NAME)?.trim()
+            ?.takeIf { it.isNotEmpty() && source?.contains(it, ignoreCase = true) != true }
 
         pv.findViewById<TextView>(R.id.player_title_show)?.text =
             if (source == null) show ?: "" else {
-                val tag = "($source) "
+                val tag = if (server == null) "($source) " else "($source · $server) "
                 android.text.SpannableStringBuilder(tag).append(show ?: "").apply {
                     setSpan(
                         android.text.style.ForegroundColorSpan(0xB3C6D2E8.toInt()),

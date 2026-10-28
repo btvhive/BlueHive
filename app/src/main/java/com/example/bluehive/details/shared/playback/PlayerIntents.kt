@@ -109,6 +109,10 @@ object PlayerIntents {
         PlayerExtra.Text("MEDIA_TITLE", mediaTitle),
     ) + episodeExtras(request) + listOf(
         PlayerExtra.Text("SOURCE_NAME", sourceName),
+        // Which of the site's servers served it, shown as "(VidNest · Beta)"
+        // for troubleshooting. Display only: EXTRACT_SOURCE above still routes.
+        PlayerExtra.Text(HlsPlayerActivity.EXTRA_SERVER_NAME,
+            body.servers?.firstOrNull { it.is_default }?.name),
         PlayerExtra.Text("SUBTITLE_URL", body.subtitle_url),
         PlayerExtra.Millis(HlsPlayerActivity.EXTRA_START_AT_MS, startAtMs),
     )

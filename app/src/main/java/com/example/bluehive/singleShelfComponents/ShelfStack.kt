@@ -403,6 +403,11 @@ fun ShelfStack(
         label = "stackAlpha",
     )
 
+    // Whether the parking node (below) holds focus, and whether it is being kept
+    // focusable after a handoff because the target row had no cards yet.
+    var parkingFocused by remember { mutableStateOf(false) }
+    var parkingHeld by remember { mutableStateOf(false) }
+
     // Navigation handoff.
     // The outgoing card's node churns during the swap recomposition, leaving
     // a few frames with no valid focus owner inside the stack — during which
@@ -436,6 +441,15 @@ fun ShelfStack(
         kotlinx.coroutines.android.awaitFrame()
         kotlinx.coroutines.android.awaitFrame()
         kotlinx.coroutines.android.awaitFrame()
+
+        // Still parked = the target row had no card to take focus: its first
+        // page is not back yet. Letting parking go now left focus on a node
+        // that had just stopped being focusable, and Compose handed it to the
+        // TV Shows / Movies / Anime tabs (user report, 2026-10-25). So keep
+        // holding it -- the row takes it the moment its cards arrive
+        // (TvWideLazyRow's card-focus effect re-runs on its first non-empty
+        // list), and the hold ends as soon as parking loses focus.
+        if (parkingFocused) parkingHeld = true
 
         tracker.completeNavigation()   // clears pendingTarget + parkingActive
     }
@@ -596,11 +610,29 @@ fun ShelfStack(
                 .size(1.dp)
                 .graphicsLayer { alpha = 0f }
                 .focusRequester(tracker.parkingRequester)
-                .focusProperties { canFocus = tracker.parkingActive }
+                .focusProperties { canFocus = tracker.parkingActive || parkingHeld }
+                .onFocusChanged { fs ->
+                    parkingFocused = fs.isFocused
+                    // A card took over (or focus left the stack): hold over.
+                    if (!fs.isFocused) parkingHeld = false
+                }
                 .onPreviewKeyEvent { event ->
-                    // While parked, swallow keys so a stray press during the
-                    // ~5-frame swap can't move focus anywhere.
-                    tracker.parkingActive && event.type == KeyEventType.KeyDown
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when {
+                        // While parked, swallow keys so a stray press during the
+                        // ~5-frame swap can't move focus anywhere.
+                        tracker.parkingActive -> true
+                        // Held on a row still loading: there is nothing beside
+                        // or under this node to move to, and a left/right search
+                        // from it lands on the tabs. Up/Down still change rows
+                        // (the stack's own handler sees them first), Back still
+                        // works.
+                        parkingHeld -> event.key == Key.DirectionLeft ||
+                                event.key == Key.DirectionRight ||
+                                event.key == Key.DirectionCenter ||
+                                event.key == Key.Enter
+                        else -> false
+                    }
                 }
                 .focusable(),
         )

@@ -73,7 +73,13 @@ data class MediaItem(
     val similarItems: List<MediaItem>?,
 
     @SerializedName("where_to_watch")
-    val whereToWatch: List<WatchProvider>?
+    val whereToWatch: List<WatchProvider>?,
+
+    // Movies only: true when on a US streaming service, so the "until HD"
+    // badge skips it (GoodCopyCountdown). Null from servers before 2026-10-25,
+    // and nullable because Gson would otherwise read a missing field as false.
+    @SerializedName("on_streaming")
+    val onStreaming: Boolean? = null,
 )
 
 data class GenreDto(

@@ -45,6 +45,9 @@ object DetailsLaunchExtrasGolden {
         Extra("EPISODE_NUMBER", "pendingEpisode (Int)"),
         Extra("EPISODE_NAME", "pendingEpisodeName (String?)"),
         Extra("SOURCE_NAME", "src.name"),
+        // Added 2026-10-25, after the v376 record: the server that served the
+        // stream, shown as "(VidNest · Beta)". Display only.
+        Extra(HlsPlayerActivity.EXTRA_SERVER_NAME, "body.servers?.firstOrNull { it.is_default }?.name"),
         Extra("SUBTITLE_URL", "body.subtitle_url"),
         Extra(HlsPlayerActivity.EXTRA_START_AT_MS, "startAtMs (Long): 0 for a press, the dead source's spot for a failover"),
     )
@@ -231,7 +234,8 @@ class DetailsLaunchExtrasGoldenTest {
         val counts = DetailsLaunchExtrasGolden.all.mapValues { it.value.size }
         assertEquals(
             mapOf(
-                "tvHlsPlayer" to 18, "movieHlsPlayer" to 15,
+                // +1 each for SERVER_NAME (2026-10-25).
+                "tvHlsPlayer" to 19, "movieHlsPlayer" to 16,
                 "tvMiruroOnDevice" to 14, "movieMiruroOnDevice" to 11,
                 "tvMiruroBackend" to 15, "movieMiruroBackend" to 12,
                 "extractorExtract" to 5, "extractorEnumerate" to 3,

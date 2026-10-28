@@ -71,8 +71,19 @@ class PlayerIntentsTest {
         assertEquals(PlayerExtra.Whole("EPISODE_NUMBER", 5), e.of("EPISODE_NUMBER"))
         assertEquals(PlayerExtra.Text("EPISODE_NAME", "Breakage"), e.of("EPISODE_NAME"))
         assertEquals(PlayerExtra.Text("SOURCE_NAME", "VidNest"), e.of("SOURCE_NAME"))
+        assertEquals(PlayerExtra.Text(HlsPlayerActivity.EXTRA_SERVER_NAME, null), e.of(HlsPlayerActivity.EXTRA_SERVER_NAME))
         assertEquals(PlayerExtra.Text("SUBTITLE_URL", body.subtitle_url), e.of("SUBTITLE_URL"))
         assertEquals(PlayerExtra.Millis(HlsPlayerActivity.EXTRA_START_AT_MS, 90_000L), e.of(HlsPlayerActivity.EXTRA_START_AT_MS))
+    }
+
+    @Test
+    fun `SERVER_NAME is the server the backend marked as serving`() {
+        val servers = listOf(
+            com.example.bluehive.api.ExtractServerOption("Zeta", false),
+            com.example.bluehive.api.ExtractServerOption("Beta", true),
+        )
+        assertEquals(PlayerExtra.Text(HlsPlayerActivity.EXTRA_SERVER_NAME, "Beta"),
+            hls(movie, b = body.copy(servers = servers)).of(HlsPlayerActivity.EXTRA_SERVER_NAME))
     }
 
     @Test

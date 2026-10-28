@@ -533,6 +533,7 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         loggedDuration = false
 
         recoveryLog("pre-emptive refresh: replacement verified — swapping at ${resumePositionMs}ms")
+        noteServer(body)
         startPlayback(body.m3u8)
         armRecoveryWatchdog("progressive-refresh")
     }
@@ -1510,6 +1511,16 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
      * re-prepared the same dead url indefinitely. refresh=1 bypasses the server
      * cache, which matters because the cached copy is the thing that just died.
      */
+    /**
+     * A re-extraction can land on a different server (the VidNest picker skips
+     * the one that just failed), so the title's "(VidNest · Beta)" tag follows
+     * it -- fillPlayerTitle reads the extra on every controls show.
+     */
+    private fun noteServer(body: com.example.bluehive.api.ExtractResponse) {
+        body.servers?.firstOrNull { it.is_default }?.name?.takeIf { it.isNotBlank() }
+            ?.let { intent.putExtra(EXTRA_SERVER_NAME, it) }
+    }
+
     private fun reextractViaBackend() {
         val tmdb = intent.getIntExtra("TMDB_ID", 0)
         if (tmdb <= 0) {
@@ -1620,6 +1631,7 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
 
             recoveryLog("fresh manifest received — restarting at ${resumePositionMs}ms")
             loggedDuration = false
+            noteServer(body)
             startPlayback(body.m3u8)
             // The exact gap that hid the 2026-08-17 failure: the backend answered
             // 200, this line was reached, and playback never began. Nothing
@@ -1782,6 +1794,9 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
          */
         const val EXTRA_FAILED_AT_MS = "FAILED_AT_MS"
         const val EXTRA_START_AT_MS = "START_AT_MS"
+
+        /** The server that served the stream ("Beta", "vidapi", "finalsignal"); see fillPlayerTitle. */
+        const val EXTRA_SERVER_NAME = "SERVER_NAME"
 
         /**
          * How many times to re-draw a segment CDN before giving up.
