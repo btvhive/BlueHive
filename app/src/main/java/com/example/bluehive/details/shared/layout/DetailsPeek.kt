@@ -21,18 +21,13 @@ import com.example.bluehive.utilities.RecommendedRowEntry
  * slides up [PEEK_SLIDE] so the row shows in full; leaving the row slides it
  * back.
  *
- * The TV screen uses it too since 2026-10-27, with its row lower: the season
- * cap ends further down than the movie's play buttons ([baseRowTop],
- * [baseSlide]).
+ * The TV screen uses it too since 2026-10-27, and since v476 both pages'
+ * rows peek from the same place ([PEEK_ROW_TOP]).
  */
 @Stable
 class DetailsPeekState(
     /** Opened from history in Extras: the row takes focus as soon as it loads. */
     startFocused: Boolean,
-    /** The row's top with two rows of play buttons or fewer. */
-    private val baseRowTop: Dp = PEEK_ROW_TOP,
-    /** The slide with two rows of play buttons or fewer: the row ends in the same place either way. */
-    private val baseSlide: Dp = PEEK_SLIDE,
 ) {
     /**
      * The row takes focus as soon as it loads. Turned off for good when the
@@ -61,8 +56,8 @@ class DetailsPeekState(
     /** Moves focus into the row from the play buttons. */
     val rowEntry = RecommendedRowEntry()
 
-    val rowTop: Dp get() = baseRowTop + PEEK_SOURCE_ROW_STEP * extraSourceRows
-    val slide: Dp get() = baseSlide + PEEK_SOURCE_ROW_STEP * extraSourceRows
+    val rowTop: Dp get() = PEEK_ROW_TOP + PEEK_SOURCE_ROW_STEP * extraSourceRows
+    val slide: Dp get() = PEEK_SLIDE + PEEK_SOURCE_ROW_STEP * extraSourceRows
 }
 
 /**
@@ -71,11 +66,8 @@ class DetailsPeekState(
  * budgets (checkMethodSizes).
  */
 @Composable
-fun rememberDetailsPeek(
-    startFocused: Boolean,
-    baseRowTop: Dp = PEEK_ROW_TOP,
-    baseSlide: Dp = PEEK_SLIDE,
-): DetailsPeekState = remember(startFocused) { DetailsPeekState(startFocused, baseRowTop, baseSlide) }
+fun rememberDetailsPeek(startFocused: Boolean): DetailsPeekState =
+    remember(startFocused) { DetailsPeekState(startFocused) }
 
 /** The lowest the first row of play buttons sits: under the overview's full box (top 175 + height 108.25). */
 val PEEK_PLAY_TOP: Dp = 296.dp
@@ -102,11 +94,20 @@ val PEEK_RIGHT_COLUMN_X: Dp = 220.75.dp
 /** One row of play buttons, as the grid has always spaced them. */
 val PEEK_SOURCE_ROW_STEP: Dp = 55.5.dp
 
-/** RecommendedMediaSection's offset that puts the cards' tops at ~444 dp, so about 60% shows (measured on the onn box). */
-val PEEK_ROW_TOP: Dp = 453.25.dp
+/**
+ * RecommendedMediaSection's offset that puts the cards' tops at ~476 dp, so
+ * about 40% shows, on both pages (v476, the user's call: the movie page
+ * matches the TV page). The TV page needs it this low -- its row's heading
+ * has to clear the season cap (ends 421.25) and the episode titles. It was
+ * 453.25 on the movie page (~444, ~60%) and 485.25 on the TV page since v470.
+ */
+val PEEK_ROW_TOP: Dp = 485.25.dp
 
-/** How far the page slides up while the row has focus. */
-val PEEK_SLIDE: Dp = 110.dp
+/**
+ * How far the page slides up while the row has focus: the slid-up row lands
+ * at 485.25 - 142 = 343.25, where the movie page's always landed (453.25 - 110).
+ */
+val PEEK_SLIDE: Dp = 142.dp
 
 /** The first play-button row for an overview ending at [overviewBottom] (null: none laid out). */
 fun peekPlayTop(overviewBottom: Dp?): Dp =

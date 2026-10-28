@@ -13,7 +13,9 @@ import com.example.bluehive.details.shared.layout.DetailsInfoLines
  * language. A missing one is left out, so the rest close up instead of leaving
  * its slot empty (the user's call, 2026-10-26) -- that includes a release date
  * or language the screen used to print as "N/A". The hand-tuned spacing inside
- * the strings is unchanged. Pure, so MovieInfoLabelsTest pins it.
+ * the strings is unchanged; money shows whole dollars, with no ".00" (v476,
+ * the user's call -- budgets and revenue are never fractional). Pure, so
+ * MovieInfoLabelsTest pins it.
  */
 @SuppressLint("DefaultLocale")
 internal fun movieInfoRows(
@@ -22,8 +24,8 @@ internal fun movieInfoRows(
     releaseDate: String?,
     originalLanguage: String?,
 ): List<DetailsInfoLine> = buildList {
-    if (displayRevenue > 0) add(DetailsInfoLine("Revenue:          $${"%,d".format(displayRevenue)}.00", 17))
-    if (displayBudget > 0) add(DetailsInfoLine("Budget:            $${"%,d".format(displayBudget)}.00", 17))
+    if (displayRevenue > 0) add(DetailsInfoLine("Revenue:          $${"%,d".format(displayRevenue)}", 17))
+    if (displayBudget > 0) add(DetailsInfoLine("Budget:            $${"%,d".format(displayBudget)}", 17))
     if (releaseDate != null && hasReleaseDate(releaseDate)) {
         val dateParts = releaseDate.split("-")
         val text = if (dateParts.size == 3) {

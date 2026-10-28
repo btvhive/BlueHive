@@ -13,8 +13,6 @@ import androidx.compose.ui.Alignment
 import com.example.bluehive.R
 import androidx.compose.ui.text.font.FontFamily
 import kotlinx.coroutines.CoroutineScope
-import com.example.bluehive.details.shared.layout.PEEK_ROW_TOP
-import com.example.bluehive.details.shared.layout.PEEK_SLIDE
 import com.example.bluehive.details.shared.layout.OverviewLines
 import com.example.bluehive.utilities.RecommendedRowEntry
 
@@ -36,26 +34,11 @@ private val RECOMMENDED_RIGHT_CAP_END = 925.4.dp
 internal val RIGHT_CAP_X = RECOMMENDED_RIGHT_CAP_END - 30.5.dp
 
 /**
- * How much lower the recommended row peeks here than on the movie page: the
- * season cap ends at 421.25 dp, about 25 dp under the movie's bottom play
- * buttons (~396), plus 7 dp so the heading clears the episode titles (v470;
- * v469 had 25 and the heading touched them). The slide grows by the same, so
- * the slid-up row ends where the movie's does.
- */
-private val TV_PEEK_ROW_DROP = 32.dp
-
-/**
  * The overview's most lines on the TV page: 5 at full size, so the last one
  * clears the air dates (v470; it showed 7), and 6 once the font has shrunk
  * (v473).
  */
 internal val TV_OVERVIEW_LINES = OverviewLines(atFullSize = 5, whenShrunk = 6)
-
-/** The TV page's recommended row top (DetailsPeekState.baseRowTop). */
-internal val TV_PEEK_ROW_TOP = PEEK_ROW_TOP + TV_PEEK_ROW_DROP
-
-/** How far the TV page slides up while the row has focus. */
-internal val TV_PEEK_SLIDE = PEEK_SLIDE + TV_PEEK_ROW_DROP
 
 /**
  * The TV screen's play area: the episode row between its side caps and the

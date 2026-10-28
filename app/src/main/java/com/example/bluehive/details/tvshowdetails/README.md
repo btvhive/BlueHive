@@ -11,7 +11,7 @@ The plan is in `docs/details-redesign-architecture.md`, and the sizes after each
 | TvShowDetailsScreen.kt | root: creates the state, plugs into `shared/layout/DetailsScaffold` with the peek layout (no Extras: Search, gold/bronze Favorites, recommended row under the episodes, since v469) |
 | TvFocusMap.kt | focus requesters shared between sections |
 | TvInfoLabels.kt | seasons, status, release date, language; missing ones close up (`shared/layout/DetailsInfoLines`) |
-| TvPlayArea.kt | the episode row between its caps, the season cap + accordion; the row's peek geometry (`TV_PEEK_ROW_TOP`) |
+| TvPlayArea.kt | the episode row between its caps, the season cap + accordion |
 | SeasonAvailability.kt | aired/unaired rules + season check (pure, tested) |
 | SeasonAccordion.kt | the season picker inside the left cap (gold card + wheel of slabs), since 2026-10-27; replaced SeasonColumn |
 | EpisodesState.kt | season loads, prefetch, first focus, watched markers |

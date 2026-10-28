@@ -107,9 +107,8 @@ fun TvShowDetailsScreen(
     )
 
     // Opened from history in Extras: the row takes focus as it loads, so the
-    // page opens slid up on it. The row sits lower than the movie page's,
-    // under the season cap (TV_PEEK_ROW_TOP).
-    val peek = rememberDetailsPeek(startFocused = args.startInExtras, baseRowTop = TV_PEEK_ROW_TOP, baseSlide = TV_PEEK_SLIDE)
+    // page opens slid up on it.
+    val peek = rememberDetailsPeek(startFocused = args.startInExtras)
 
     // The Search button's keyboard, over this page -- see DetailsSearchKeyboard.
     val search = rememberDetailsSearch()

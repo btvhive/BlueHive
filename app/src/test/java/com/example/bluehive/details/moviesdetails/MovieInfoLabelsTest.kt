@@ -61,9 +61,9 @@ class MovieInfoLabelsTest {
     }
 
     @Test
-    fun `money keeps its grouping and the release date its 16 sp`() {
+    fun `money keeps its grouping, drops the cents, and the release date keeps its 16 sp`() {
         val rows = movieInfoRows(75_634_409, 0, "1993-10-09", null)
-        assertEquals("Revenue:          $75,634,409.00", rows[0].text)
+        assertEquals("Revenue:          $75,634,409", rows[0].text)
         assertEquals(listOf(17, 16), rows.map { it.fontSizeSp })
     }
 }
