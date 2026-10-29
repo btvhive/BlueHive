@@ -1,6 +1,8 @@
 package com.example.bluehive.details.tvshowdetails
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.text.BasicText
@@ -229,6 +231,59 @@ private fun wheelLook(position: Float): WheelLook {
     return WheelLook(WHEEL_PLACES[i], WHEEL_PLACES[next], p - i)
 }
 
+/** The seasons on the wheel turned to [shown], each with its place: within three of the card, each season once. */
+internal fun wheelPieces(shown: Int, total: Int): List<Pair<Int, Int>> =
+    (-3..3).mapNotNull { offset ->
+        val season = wheelSeason(shown, offset, total)
+        if (wheelDistance(season, shown, total) == offset) season to offset else null
+    }
+
+/**
+ * Where every season's piece is, held for the whole wheel and rolled from
+ * here on each turn.
+ *
+ * WHY HERE AND NOT IN EACH PIECE (v492): v491 kept each position in its
+ * piece's own remember, and the pieces were drawn by a loop that skipped
+ * places with `continue` -- which makes the compiler wrap each pass of the
+ * loop in a group of its own, so on every turn each piece was thrown away
+ * and made again already at its new place. Nothing rolled: a screen
+ * recording of two turns held 7 frames. Held here, a position survives
+ * however the pieces are composed.
+ */
+@Stable
+private class WheelMotion(private val scope: CoroutineScope) {
+    private val positions = HashMap<Int, Animatable<Float, AnimationVector1D>>()
+
+    /** [season]'s position; a season new to the wheel starts in its place. */
+    fun position(season: Int, place: Int): Animatable<Float, AnimationVector1D> =
+        positions.getOrPut(season) { Animatable(place.toFloat()) }
+
+    /** Roll every piece to its place in [pieces]: the card first, each place out [WHEEL_RIPPLE_MS] later. */
+    fun turnTo(pieces: List<Pair<Int, Int>>, total: Int) {
+        val onWheel = pieces.mapTo(HashSet()) { it.first }
+        positions.keys.retainAll(onWheel)
+        for ((season, place) in pieces) {
+            val position = position(season, place)
+            val target = place.toFloat()
+            if (position.targetValue == target && !position.isRunning && position.value == target) continue
+            scope.launch {
+                if (abs(position.value - target) * 2 > total) {
+                    // Gone round the back of a short wheel (4 to 7 seasons):
+                    // reappear in the new place rather than roll across the card.
+                    position.snapTo(target)
+                } else {
+                    // A new animateTo cancels one still running, so holding
+                    // Up / Down carries on from wherever the piece is.
+                    position.animateTo(
+                        target,
+                        tween(WHEEL_MOVE_MS, delayMillis = abs(place).coerceAtMost(3) * WHEEL_RIPPLE_MS, easing = WheelSpring),
+                    )
+                }
+            }
+        }
+    }
+}
+
 /** Season [shown] turned [offset] places round a wheel of [total] seasons, past either end. Pure, so it is tested. */
 internal fun wheelSeason(shown: Int, offset: Int, total: Int): Int =
     Math.floorMod(shown - 1 + offset, total) + 1
@@ -286,6 +341,8 @@ internal fun BoxScope.SeasonAccordion(
     LaunchedEffect(loaded) { browsing = loaded }
     val shown = browsing.coerceIn(1, total)
     val focused = focusMap.seasonPickerFocused
+    val motionScope = rememberCoroutineScope()
+    val motion = remember { WheelMotion(motionScope) }
 
     Box(
         modifier = Modifier
@@ -354,15 +411,16 @@ internal fun BoxScope.SeasonAccordion(
             .focusable()
     ) {
         // Every season within three places of the card, each once, as one
-        // piece that rolls between places -- see THE ROLL.
-        for (offset in -3..3) {
-            val season = wheelSeason(shown, offset, total)
-            if (wheelDistance(season, shown, total) != offset) continue
+        // piece that rolls between places -- see THE ROLL and WheelMotion.
+        val pieces = remember(shown, total) { wheelPieces(shown, total) }
+        LaunchedEffect(pieces) { motion.turnTo(pieces, total) }
+        for ((season, place) in pieces) {
             key(season) {
                 WheelPiece(
                     season = season,
                     total = total,
-                    place = offset,
+                    place = place,
+                    position = motion.position(season, place),
                     focused = focused,
                     isOnShow = season == loaded && season != shown,
                     passionFont = passionFont,
@@ -373,8 +431,8 @@ internal fun BoxScope.SeasonAccordion(
 }
 
 /**
- * One season's piece of the wheel. [place] is where it belongs now; it rolls
- * there from wherever it is, the farther from the card the later. Every frame
+ * One season's piece of the wheel, drawn wherever WheelMotion has rolled
+ * [position] to; [place] is where it is headed (it sets the stacking). Every frame
  * of a roll is read in layout and drawing only, so a turn recomposes nothing
  * until the next press.
  */
@@ -383,24 +441,12 @@ private fun BoxScope.WheelPiece(
     season: Int,
     total: Int,
     place: Int,
+    /** Rolled by WheelMotion; read only in layout and drawing. */
+    position: Animatable<Float, AnimationVector1D>,
     focused: Boolean,
     isOnShow: Boolean,
     passionFont: FontFamily,
 ) {
-    val position = remember { Animatable(place.toFloat()) }
-    LaunchedEffect(place) {
-        val target = place.toFloat()
-        if (abs(position.value - target) * 2 > total) {
-            // Gone round the back of a short wheel (4 to 7 seasons): reappear
-            // in the new place rather than roll across the card.
-            position.snapTo(target)
-        } else {
-            position.animateTo(
-                target,
-                tween(WHEEL_MOVE_MS, delayMillis = abs(place).coerceAtMost(3) * WHEEL_RIPPLE_MS, easing = WheelSpring),
-            )
-        }
-    }
     val cardFill = if (focused) GOLD else GOLD_RESTING
     Box(
         modifier = Modifier

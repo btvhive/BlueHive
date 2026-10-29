@@ -50,6 +50,16 @@ class SeasonWheelTest {
     }
 
     @Test
+    fun `the pieces are every season within three places, each once, card included`() {
+        assertEquals(listOf(25 to -3, 26 to -2, 27 to -1, 28 to 0, 29 to 1, 1 to 2, 2 to 3), wheelPieces(28, 29))
+        assertEquals(listOf(1 to 0, 2 to 1), wheelPieces(1, 2))
+        for (total in 1..9) for (shown in 1..total) {
+            val seasons = wheelPieces(shown, total).map { it.first }
+            assertEquals("total $total shown $shown", seasons.size, seasons.toSet().size)
+        }
+    }
+
+    @Test
     fun `no season is drawn twice, and never the card's own`() {
         for (total in 1..8) {
             for (shown in 1..total) {
