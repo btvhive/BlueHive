@@ -60,6 +60,15 @@ class SeasonWheelTest {
     }
 
     @Test
+    fun `a turn waits for the last one to land`() {
+        assertEquals(560L, WHEEL_TURN_GAP_MS)
+        assertEquals(false, wheelTurnAllowed(now = 1_000 + 559, last = 1_000))
+        assertEquals(true, wheelTurnAllowed(now = 1_000 + 560, last = 1_000))
+        // The first press of all: the start value never blocks it, nor overflows.
+        assertEquals(true, wheelTurnAllowed(now = 5, last = Long.MIN_VALUE / 2))
+    }
+
+    @Test
     fun `no season is drawn twice, and never the card's own`() {
         for (total in 1..8) {
             for (shown in 1..total) {

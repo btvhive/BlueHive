@@ -1,5 +1,6 @@
 package com.example.bluehive.details.tvshowdetails
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.animation.core.AnimationVector1D
@@ -153,6 +154,16 @@ private val NoPadding = PlatformTextStyle(includeFontPadding = false)
  *     ([CARD_TILT]), as pages in a flip book.
  */
 private const val WHEEL_MOVE_MS = 560
+
+/**
+ * The least time between two turns: one roll, until the card has landed. Up /
+ * Down pressed or held sooner are swallowed with no sound -- the user asked
+ * that the wheel could not be spammed (2026-10-29).
+ */
+internal const val WHEEL_TURN_GAP_MS = WHEEL_MOVE_MS.toLong()
+
+/** A turn at [now] is allowed when the last one, at [last], has landed. Pure, so it is tested. */
+internal fun wheelTurnAllowed(now: Long, last: Long): Boolean = now - last >= WHEEL_TURN_GAP_MS
 private const val WHEEL_RIPPLE_MS = 20
 private val WheelSpring = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)
 private const val NEIGHBOUR_TILT = 25f
@@ -343,6 +354,9 @@ internal fun BoxScope.SeasonAccordion(
     val focused = focusMap.seasonPickerFocused
     val motionScope = rememberCoroutineScope()
     val motion = remember { WheelMotion(motionScope) }
+    // When the last turn was made (uptimeMillis); plain, not state, so a press
+    // recomposes nothing until it turns the wheel -- see WHEEL_TURN_GAP_MS.
+    val lastTurn = remember { longArrayOf(Long.MIN_VALUE / 2) }
 
     Box(
         modifier = Modifier
@@ -361,9 +375,14 @@ internal fun BoxScope.SeasonAccordion(
                 when (event.key) {
                     Key.DirectionUp -> {
                         if (total > 1) {
-                            // Round the wheel: Up from Season 1 is the last season.
-                            browsing = wheelSeason(shown, -1, total)
-                            BlueHiveApplication.playTitleCardNavigation()
+                            // Round the wheel: Up from Season 1 is the last season,
+                            // once the last turn has landed.
+                            val now = SystemClock.uptimeMillis()
+                            if (wheelTurnAllowed(now, lastTurn[0])) {
+                                lastTurn[0] = now
+                                browsing = wheelSeason(shown, -1, total)
+                                BlueHiveApplication.playCardFlip()
+                            }
                             true
                         } else {
                             // One season, nothing to turn: Up leaves for the header.
@@ -372,10 +391,15 @@ internal fun BoxScope.SeasonAccordion(
                         }
                     }
                     Key.DirectionDown -> {
-                        // Round the wheel: Down from the last season is Season 1.
+                        // Round the wheel: Down from the last season is Season 1,
+                        // once the last turn has landed.
                         if (total > 1) {
-                            browsing = wheelSeason(shown, 1, total)
-                            BlueHiveApplication.playTitleCardNavigation()
+                            val now = SystemClock.uptimeMillis()
+                            if (wheelTurnAllowed(now, lastTurn[0])) {
+                                lastTurn[0] = now
+                                browsing = wheelSeason(shown, 1, total)
+                                BlueHiveApplication.playCardFlip()
+                            }
                         }
                         true
                     }

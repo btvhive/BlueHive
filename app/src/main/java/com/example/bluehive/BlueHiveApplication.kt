@@ -129,6 +129,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         private var lastProfileSwapPlayTime: Long = 0L
         private var errorSoundId: Int = 0
         private var lastErrorPlayTime: Long = 0L
+        private var cardFlipSoundId: Int = 0
         // No sample id of its own: the nav sound shares
         // buttonNavigationSoundId (button_navigation.mp3) with playHoverSound.
         // Only the clock is separate — see playNavClickSound.
@@ -149,6 +150,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         private const val PROFILE_SWAP_VOLUME         = 0.45f
         private const val BACK_OUT_VOLUME             = 0.35f
         private const val ERROR_VOLUME                = 0.45f
+        private const val CARD_FLIP_VOLUME            = 0.7f
 
         /**
          * Play one sample at one volume — the ONLY place SoundPool.play is called.
@@ -206,11 +208,22 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
                 backOutSoundId             = soundPool!!.load(context, R.raw.backedout, 1)
                 profileSwapSoundId         = soundPool!!.load(context, R.raw.profile_swap, 1)
                 errorSoundId               = soundPool!!.load(context, R.raw.error, 1)
+                cardFlipSoundId            = soundPool!!.load(context, R.raw.card_flipping, 1)
             }
         }
 
         fun playTitleCardNavigation() {
             play(titleCardNavigationSoundId, TITLECARD_NAVIGATION_VOLUME, SoundPrefs.Kind.NAV)
+        }
+
+        /**
+         * A turn of the TV page's season wheel (card_flipping.mp3, 0.43 s; the
+         * user's sample, 2026-10-29). A navigation sound, so the profile's
+         * navigation switch silences it. No debounce of its own: the wheel
+         * already allows one turn per roll (SeasonAccordion's turn gate).
+         */
+        fun playCardFlip() {
+            play(cardFlipSoundId, CARD_FLIP_VOLUME, SoundPrefs.Kind.NAV)
         }
 
         /**
