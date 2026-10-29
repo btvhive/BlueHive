@@ -61,9 +61,9 @@ class SeasonWheelTest {
 
     @Test
     fun `a turn waits for the last one to land`() {
-        assertEquals(380L, WHEEL_TURN_GAP_MS)
-        assertEquals(false, wheelTurnAllowed(now = 1_000 + 379, last = 1_000))
-        assertEquals(true, wheelTurnAllowed(now = 1_000 + 380, last = 1_000))
+        assertEquals(300L, WHEEL_TURN_GAP_MS)
+        assertEquals(false, wheelTurnAllowed(now = 1_000 + 299, last = 1_000))
+        assertEquals(true, wheelTurnAllowed(now = 1_000 + 300, last = 1_000))
         // The first press of all: the start value never blocks it, nor overflows.
         assertEquals(true, wheelTurnAllowed(now = 5, last = Long.MIN_VALUE / 2))
     }

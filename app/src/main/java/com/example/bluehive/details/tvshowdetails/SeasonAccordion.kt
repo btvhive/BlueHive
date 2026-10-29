@@ -153,7 +153,7 @@ private val NoPadding = PlatformTextStyle(includeFontPadding = false)
  *     the one below its top edge, and the card leans like the one above
  *     ([CARD_TILT]), as pages in a flip book.
  */
-private const val WHEEL_MOVE_MS = 380   // 560 in v491-v495; faster, the user's call (2026-10-29)
+private const val WHEEL_MOVE_MS = 300   // 560 in v491-v495, 380 in v496; faster, the user's calls (2026-10-29)
 
 /**
  * The least time between two turns: one roll, until the card has landed. Up /
