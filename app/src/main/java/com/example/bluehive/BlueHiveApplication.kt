@@ -150,7 +150,7 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         private const val PROFILE_SWAP_VOLUME         = 0.45f
         private const val BACK_OUT_VOLUME             = 0.35f
         private const val ERROR_VOLUME                = 0.45f
-        private const val CARD_FLIP_VOLUME            = 0.05f   // the user's call (0.7 in v493, 0.35 in v494, 0.10 in v495, 0.5 in v496 by a misread)
+        private const val CARD_FLIP_VOLUME            = 0.03f   // the user's call (0.7 in v493, 0.35 in v494, 0.10 in v495, 0.5 in v496 by a misread, 0.05 in v497)
 
         /**
          * Play one sample at one volume — the ONLY place SoundPool.play is called.
