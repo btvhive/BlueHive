@@ -119,13 +119,13 @@ private val KEY_TEXT     = Color(0xFFD9DCE3)
 // which now marks Search).
 private val FOCUS        = Color.White
 private val FOCUS_INK    = Color(0xFF111111)
-// Search and Done, the keys that hand the text on: gold #D19814, dark text.
+// A Shift that is on reads gold.
 private val GOLD         = Color(0xFFD19814)
-private val HONEY_INK    = Color(0xFF2A1C00)
-// The Search key: the details pages' Search button's forest green, read from
-// it so the two cannot drift (the user's call, 2026-10-28; it was gold). Done
-// keeps the gold.
-private val SEARCH_GREEN = ExtrasButtonColors.mainDefault
+// Search and Done, the keys that hand the text on: the details pages' Search
+// button's forest green, read from it so the two cannot drift, with white on
+// it (the user's calls: Search 2026-10-28, Done -- the profile name keyboard
+// -- 2026-10-29; both were gold with dark text).
+private val FINISH_GREEN = ExtrasButtonColors.mainDefault
 private val VOICE_BLUE   = Color(0xFF4C63AC)
 private val VOICE_LIT    = Color(0xFF7C93DC)
 private val PLACEHOLDER  = Color(0x806F7482)       // the hint in the empty box, at half opacity
@@ -647,15 +647,14 @@ private fun ActionRow(
                 shape     = FIELD_SHAPE,
                 // Read only while listening, so the pulse never recomposes an idle card.
                 accent    = when {
-                    key.action == HiveAction.SEARCH -> SEARCH_GREEN
-                    HiveKeyboard.isFinish(key.action) -> GOLD
+                    HiveKeyboard.isFinish(key.action) -> FINISH_GREEN
                     key.action == HiveAction.VOICE -> lerp(
                         VOICE_BLUE, VOICE_LIT,
                         if (voice.listening) maxOf(pulse.value, voice.level) else 0f,
                     )
                     else -> null
                 },
-                accentInk = if (key.action == HiveAction.DONE) HONEY_INK else Color.White,
+                accentInk = Color.White,
                 lit       = key.action == HiveAction.SHIFT && shiftOn,
                 listening = voice.listening,
                 modifier  = Modifier.width(ACTION_W),
@@ -684,8 +683,8 @@ private fun PillRow(keyboard: HiveKeyboard, focused: HiveSpot) {
 }
 
 /**
- * Any key that is not a hexagon. Focus is white; [accent] colours Voice (blue),
- * Search (forest green) and Done (gold), with [accentInk] on it; [lit] is a Shift that is on,
+ * Any key that is not a hexagon. Focus is white; [accent] colours Voice (blue)
+ * and Search/Done (forest green), with [accentInk] on it; [lit] is a Shift that is on,
  * which reads gold even when the focus is elsewhere.
  */
 @Composable
