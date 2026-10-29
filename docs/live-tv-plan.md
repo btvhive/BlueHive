@@ -111,6 +111,24 @@ Postgres (read, for the login check), and Caddy: +10 lines sending `/api/live/*`
   - Still dead → a fresh `off`, so it stays dimmed. Working → `ok`.
   - A channel shows `ok` while either of its feeds works, so ESPN plays from its backup and is no longer dimmed.
   - An unreachable upstream counts as an outage and moves on to the backup (it was a 500).
+- **Second source, cdnlivetv.tv (build d, live 2026-10-29 08:20 UTC).** cdnlivetv is the player behind ntv.cx.
+  - **How it works:**
+    - The channel list is a public JSON API (405 channels, ~150 online).
+    - Its player page carries the playlist URL, with a signed 4 h token, as base64 pieces, so plain HTTP reads it.
+    - The token is not tied to an IP. Chunks are plain MPEG-TS from its own server and go straight to the TVs.
+  - **Matching:** a zlive channel gets the online cdnlivetv channel of the same name and country.
+    - The match ignores quality and country tags.
+    - Unflagged US rows accept only a US channel; "Sky …" channels only a UK one.
+    - Result: 52 of 240 matched, e.g. ESPN2 → "ESPN 2 FHD US", ESPN → "ESPN HD US".
+  - **Tuning order:** zlive's feed → zlive's backup → cdnlivetv, with feeds the recheck found dead moved last. ESPN2 tunes straight to cdnlivetv.
+  - **Guide:** these channels show "Backup feed ready". The TV app needed no change.
+  - **Off switch:** `LIVE_CDN=0`.
+- **One entry per channel (build e, live 2026-10-29 08:43 UTC).** zlive lists a few channels twice: its own feed, plus a copy it adds from the "TimStreams" restreamer (ids `auto-…`).
+  - **Rule:** same name with country words dropped, and no conflicting country → one guide entry. zlive's own feed comes first and the copy becomes a fallback, tried after zlive's backup and before cdnlivetv.
+  - **Merged:** CNN USA ← CNN, Sky Sports F1 FHD ← Sky Sports F1, Fox Sports 502 AU ← Fox Sports 502 (League). The guide has 237 entries.
+  - **Kept apart:** the UK and US Boomerang and Cartoon Network feeds.
+  - A TV that remembers a copy's id is tuned to the merged entry.
+  - **Matching side effect:** a country word at the end of a name now counts as the channel's country. The four Sky Sport NZ channels gained NZ backups, and an Irish channel is not backed by a UK one.
 - Cost: one Chrome tab per channel per ~2.3 h of viewing, plus a playlist every ~4 s, plus one tab per dead channel per 30 min.
 
 ## 4. TV app (new `livetv/` package)
