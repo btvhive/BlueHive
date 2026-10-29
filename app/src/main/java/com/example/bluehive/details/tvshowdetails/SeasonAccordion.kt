@@ -25,6 +25,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -62,6 +64,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.BlueHiveApplication
+import com.example.bluehive.utilities.AppTypography
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.launch
@@ -543,41 +546,60 @@ private fun BoxScope.WheelPiece(
     }
 }
 
-/** The card's own text: "Season" over "3 of 5". */
+/** The ticket band across the card's top (design 11, 2026-10-29): 22 px of the 85 px mockup card. */
+private val BAND_HEIGHT = 8.8.dp
+private val BAND_COLOR = Color(0xFF2A1C00)
+
+/**
+ * The card's own text, design 11 of the 2026-10-29 mockups (the user's pick,
+ * "29 of 29" lowered 10 px there): a dark ticket band across the top with
+ * SEASON in it, then the big number and OF N on one baseline. Sizes are the
+ * mockup's at its 2.5 px per dp. The mockup's 800 weights are the app's Bold
+ * cuts (Asap Condensed and Inter ship only Bold).
+ */
 @Composable
 private fun BoxScope.SeasonCardText(season: Int, total: Int, passionFont: FontFamily) {
-    // Paddings put the glyphs where the design has them: "Season"'s
-    // baseline just under the card's top, the number's just above its
-    // bottom (Roboto ascent 0.928 em; Passion One descent 0.266 em).
-    Text(
-        text = "Season",
-        color = GOLD_INK_SOFT,
-        fontFamily = FontFamily.Default,
-        fontSize = 10.5.sp,
-        style = TextStyle(platformStyle = NoPadding),
+    // The band sits inside the card's outline, its top corners following the card's.
+    val bandShape = RoundedCornerShape(topStart = CARD_CORNER - CARD_EDGE_WIDTH, topEnd = CARD_CORNER - CARD_EDGE_WIDTH)
+    Box(
         modifier = Modifier
             .align(Alignment.TopCenter)
-            .padding(top = 0.5.dp),
-    )
+            .padding(start = CARD_EDGE_WIDTH, top = CARD_EDGE_WIDTH, end = CARD_EDGE_WIDTH)
+            .fillMaxWidth()
+            .height(BAND_HEIGHT)
+            .background(BAND_COLOR, bandShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = "SEASON",
+            color = GOLD,
+            fontFamily = AppTypography.asapCondensedBold,
+            fontSize = 5.2.sp,
+            letterSpacing = 2.sp,
+            style = TextStyle(platformStyle = NoPadding),
+        )
+    }
+    // The number's baseline 29.1 dp under the card's top: the band, then 4 dp
+    // (the mockup's 10 px), then the number's line (Passion One ascent 0.835 em).
     Row(
         modifier = Modifier
-            .align(Alignment.BottomCenter)
-            .padding(bottom = 1.dp),
+            .align(Alignment.TopCenter)
+            .padding(top = 11.7.dp),
     ) {
         Text(
             text = "$season",
             color = GOLD_INK,
             fontFamily = passionFont,
-            fontSize = 23.5.sp,
+            fontSize = 20.8.sp,
             style = TextStyle(platformStyle = NoPadding),
             modifier = Modifier.alignByBaseline(),
         )
-        Spacer(Modifier.width(3.5.dp))
+        Spacer(Modifier.width(2.4.dp))
         Text(
-            text = "of $total",
+            text = "OF $total",
             color = GOLD_INK_SOFT,
-            fontFamily = FontFamily.Default,
-            fontSize = 10.5.sp,
+            fontFamily = AppTypography.interBold,
+            fontSize = 5.2.sp,
             style = TextStyle(platformStyle = NoPadding),
             modifier = Modifier.alignByBaseline(),
         )
