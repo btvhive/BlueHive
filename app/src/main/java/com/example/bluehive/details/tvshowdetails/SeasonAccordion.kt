@@ -129,14 +129,27 @@ private val GOLD_INK_SOFT = Color(0xFF5A3D00)
 
 private val NEAR_FILL = Color(0xFF3B3535)
 private val NEAR_EDGE = Color(0xFF585353)
-private val NEAR_INK = Color(0xFFD9D3D3)
 private val FAR_FILL = Color(0xFF2E2929)
 private val FAR_EDGE = Color(0xFF4A4444)
-private val FAR_INK = Color(0xFFB3ACAC)
 
 /** The slabs' outline, and the card's (the nearer slabs' colour since v489; focus shows as the brighter gold). */
 private val SLAB_EDGE_WIDTH = 0.5.dp
 private val CARD_EDGE_WIDTH = 1.dp
+
+/**
+ * The slabs, design A of the 2026-10-29 mockups (the user's pick, to go with
+ * the card's ticket band): a dark tab at the left edge holding the number in
+ * gold, then SEASON in spaced caps. The nearer slabs' gold and grey are the
+ * brighter; the mockup's sizes at its 2 px per dp.
+ */
+private val TAB_COLOR = Color(0xFF2A1C00)
+private val NEAR_TAB_INK = GOLD
+private val FAR_TAB_INK = GOLD_RESTING
+private val NEAR_WORD_INK = Color(0xFFD9D3D3)
+private val FAR_WORD_INK = Color(0xFF9A9494)
+private val TAB_PADDING = 3.5.dp
+private val TAB_GAP = 4.dp
+private const val NEAR_WORD_SP = 5.2f
 
 /** The slab numbers' sizes; the card's own text is drawn at its own sizes. */
 private const val NEAR_LABEL_SP = 11.5f
@@ -192,7 +205,11 @@ private class WheelPlace(
     val fill: Color,
     val edge: Color,
     val edgeWidth: Dp,
-    val ink: Color,
+    /** The slab's number, in its dark tab (design A). */
+    val tabInk: Color,
+    /** The slab's SEASON beside the tab. */
+    val wordInk: Color,
+    /** The number's size; SEASON scales with it. */
     val labelSp: Float,
     /** rotationX: negative leans the bottom edge away, positive the top. */
     val tilt: Float,
@@ -209,7 +226,8 @@ private fun slabPlace(top: Dp, near: Boolean, tilt: Float, alpha: Float) = Wheel
     fill = if (near) NEAR_FILL else FAR_FILL,
     edge = if (near) NEAR_EDGE else FAR_EDGE,
     edgeWidth = SLAB_EDGE_WIDTH,
-    ink = if (near) NEAR_INK else FAR_INK,
+    tabInk = if (near) NEAR_TAB_INK else FAR_TAB_INK,
+    wordInk = if (near) NEAR_WORD_INK else FAR_WORD_INK,
     labelSp = if (near) NEAR_LABEL_SP else FAR_LABEL_SP,
     tilt = tilt,
     alpha = alpha,
@@ -223,7 +241,7 @@ private val WHEEL_PLACES = listOf(
     slabPlace(CARD_TOP - SLAB_HEIGHT, near = true, tilt = -NEIGHBOUR_TILT, alpha = 1f),
     WheelPlace(
         top = CARD_TOP, inset = CARD_INSET, height = CARD_HEIGHT, corner = CARD_CORNER,
-        fill = GOLD, edge = NEAR_EDGE, edgeWidth = CARD_EDGE_WIDTH, ink = NEAR_INK,
+        fill = GOLD, edge = NEAR_EDGE, edgeWidth = CARD_EDGE_WIDTH, tabInk = NEAR_TAB_INK, wordInk = NEAR_WORD_INK,
         labelSp = NEAR_LABEL_SP, tilt = -CARD_TILT, alpha = 1f, cardness = 1f,
     ),
     slabPlace(CARD_TOP + CARD_HEIGHT, near = true, tilt = NEIGHBOUR_TILT, alpha = 1f),
@@ -510,28 +528,69 @@ private fun BoxScope.WheelPiece(
                     style = Stroke(stroke),
                 )
                 if (isOnShow) {
-                    // The season still on show, while browsing: a gold notch.
-                    drawRect(GOLD, size = Size(3.dp.toPx(), size.height), alpha = 1f - look.float { it.cardness })
+                    // The season still on show, while browsing: a gold notch,
+                    // at the right edge since the tab took the left (v500).
+                    val notch = 3.dp.toPx()
+                    drawRect(
+                        GOLD,
+                        topLeft = Offset(size.width - notch, 0f),
+                        size = Size(notch, size.height),
+                        alpha = 1f - look.float { it.cardness },
+                    )
                 }
             },
     ) {
-        // The slab's number, faded out as the piece becomes the card.
-        BasicText(
-            text = "$season",
-            style = TextStyle(fontFamily = passionFont, fontSize = NEAR_LABEL_SP.sp, platformStyle = NoPadding),
-            color = { wheelLook(position.value).color { it.ink } },
+        // The slab's face, design A -- the tab and SEASON -- faded out as the
+        // piece becomes the card. Inside the slab's outline, its left corners
+        // following the slab's.
+        val tabShape = RoundedCornerShape(
+            topStart = SLAB_CORNER - SLAB_EDGE_WIDTH,
+            bottomStart = SLAB_CORNER - SLAB_EDGE_WIDTH,
+        )
+        Row(
             modifier = Modifier
                 .align(Alignment.CenterStart)
-                .padding(start = 5.25.dp)
-                .graphicsLayer {
-                    val look = wheelLook(position.value)
-                    alpha = 1f - look.float { it.cardness }
-                    val scale = look.float { it.labelSp } / NEAR_LABEL_SP
+                .fillMaxHeight()
+                .padding(start = SLAB_EDGE_WIDTH, top = SLAB_EDGE_WIDTH, bottom = SLAB_EDGE_WIDTH)
+                .graphicsLayer { alpha = 1f - wheelLook(position.value).float { it.cardness } },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .background(TAB_COLOR, tabShape)
+                    .padding(horizontal = TAB_PADDING),
+                contentAlignment = Alignment.Center,
+            ) {
+                BasicText(
+                    text = "$season",
+                    style = TextStyle(fontFamily = passionFont, fontSize = NEAR_LABEL_SP.sp, platformStyle = NoPadding),
+                    color = { wheelLook(position.value).color { it.tabInk } },
+                    modifier = Modifier.graphicsLayer {
+                        val scale = wheelLook(position.value).float { it.labelSp } / NEAR_LABEL_SP
+                        scaleX = scale
+                        scaleY = scale
+                    },
+                )
+            }
+            Spacer(Modifier.width(TAB_GAP))
+            BasicText(
+                text = "SEASON",
+                style = TextStyle(
+                    fontFamily = AppTypography.asapCondensedBold,
+                    fontSize = NEAR_WORD_SP.sp,
+                    letterSpacing = 1.5.sp,
+                    platformStyle = NoPadding,
+                ),
+                color = { wheelLook(position.value).color { it.wordInk } },
+                modifier = Modifier.graphicsLayer {
+                    val scale = wheelLook(position.value).float { it.labelSp } / NEAR_LABEL_SP
                     scaleX = scale
                     scaleY = scale
                     transformOrigin = TransformOrigin(0f, 0.5f)
                 },
-        )
+            )
+        }
         // The card's own text, at the card's size and centred, faded in as
         // the piece becomes the card (clipped while it is still slab-sized).
         Box(
