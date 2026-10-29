@@ -29,6 +29,27 @@ class SeasonWheelTest {
     }
 
     @Test
+    fun `every season has one place, the short way round`() {
+        assertEquals(listOf(-2, -1, 0, 1, 2), (1..5).map { wheelDistance(it, 3, 5) })
+        assertEquals(listOf(1, 2), listOf(1, 2).map { wheelDistance(it, 29, 29) })
+        assertEquals(listOf(-1, -2), listOf(29, 28).map { wheelDistance(it, 1, 29) })
+        // An even wheel puts the far side below the card.
+        assertEquals(2, wheelDistance(3, 1, 4))
+    }
+
+    @Test
+    fun `the rolled pieces are the same seasons the slabs showed`() {
+        for (total in 1..9) {
+            for (shown in 1..total) {
+                val rolled = (-2..2).filter { o -> wheelDistance(wheelSeason(shown, o, total), shown, total) == o && o != 0 }
+                    .map { wheelSeason(shown, it, total) }.toSet()
+                val slabs = wheelOffsets(total).map { wheelSeason(shown, it, total) }.toSet()
+                assertEquals("total $total shown $shown", slabs, rolled)
+            }
+        }
+    }
+
+    @Test
     fun `no season is drawn twice, and never the card's own`() {
         for (total in 1..8) {
             for (shown in 1..total) {

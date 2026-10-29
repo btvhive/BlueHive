@@ -1,8 +1,21 @@
 package com.example.bluehive.details.tvshowdetails
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.foundation.layout.wrapContentSize
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.runtime.key
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.lerp
+import androidx.compose.ui.zIndex
+import kotlin.math.abs
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -62,8 +75,8 @@ import kotlinx.coroutines.launch
  * for the panel's 104 dp. Since v489 the wheel goes all the way round: the
  * seasons after the last are 1, 2, ... and those before Season 1 the last
  * ones, and Up / Down keep turning it past either end (see wheelSeason).
- * OK loads the season on the card, Right goes to the episodes. Each turn flips
- * the card over like a rolodex (v490, see SeasonFlip).
+ * OK loads the season on the card, Right goes to the episodes. Each turn rolls
+ * the whole wheel one place (v491, see THE ROLL).
  * While browsing, a gold notch marks the season still on show.
  *
  * The geometry is the cap image's: drawn at 4 px per dp (537 x 489 px ->
@@ -82,7 +95,8 @@ private val PANEL_Y = SEASON_CAP_Y + 10.dp
 private val PANEL_WIDTH = 104.dp
 private val PANEL_HEIGHT = 101.75.dp
 
-private val CARD_HEIGHT = 37.5.dp
+/** The card's height: 34 dp since v491 (37.5 measured from the design looked too tall; the user's call). */
+private val CARD_HEIGHT = 34.dp
 private val CARD_TOP = (PANEL_HEIGHT - CARD_HEIGHT) / 2
 
 /**
@@ -91,8 +105,11 @@ private val CARD_TOP = (PANEL_HEIGHT - CARD_HEIGHT) / 2
  */
 private val CARD_INSET = 2.75.dp
 
-/** Every slab's corners, and the card's since v489. */
+/** Every slab's corners. */
 private val SLAB_CORNER = 1.25.dp
+
+/** The card's corners: rounder than the slabs' (the user's call, 3 dp, 2026-10-29). */
+private val CARD_CORNER = 3.dp
 
 /** Every slab's height, outline included; they stack with no gaps, the nearer ones touching the card. */
 private val SLAB_HEIGHT = 12.1.dp
@@ -104,21 +121,6 @@ private val GOLD_INK = Color(0xFF2A1C00)
 /** "Season" and "of N": a lighter brown than the number. */
 private val GOLD_INK_SOFT = Color(0xFF5A3D00)
 
-/**
- * One slab of the wheel: [offset] seasons from the card, at [top] in the
- * panel, inset [inset] each side, in [fill] with a hairline [edge] and its
- * number in [ink] at [fontSp].
- */
-private class Slab(
-    val offset: Int,
-    val top: Dp,
-    val inset: Dp,
-    val fill: Color,
-    val edge: Color,
-    val ink: Color,
-    val fontSp: Float,
-)
-
 private val NEAR_FILL = Color(0xFF3B3535)
 private val NEAR_EDGE = Color(0xFF585353)
 private val NEAR_INK = Color(0xFFD9D3D3)
@@ -126,64 +128,120 @@ private val FAR_FILL = Color(0xFF2E2929)
 private val FAR_EDGE = Color(0xFF4A4444)
 private val FAR_INK = Color(0xFFB3ACAC)
 
-/**
- * The card's outline: the nearer slabs' colour (the user's call, 2026-10-29;
- * it was white while focused). Focus shows as the brighter gold.
- */
-private val CARD_EDGE = NEAR_EDGE
+/** The slabs' outline, and the card's (the nearer slabs' colour since v489; focus shows as the brighter gold). */
+private val SLAB_EDGE_WIDTH = 0.5.dp
 private val CARD_EDGE_WIDTH = 1.dp
 
-private val SLABS = listOf(
-    Slab(-2, CARD_TOP - SLAB_HEIGHT * 2, 10.25.dp, FAR_FILL, FAR_EDGE, FAR_INK, 10.5f),
-    Slab(-1, CARD_TOP - SLAB_HEIGHT, 5.5.dp, NEAR_FILL, NEAR_EDGE, NEAR_INK, 11.5f),
-    Slab(1, CARD_TOP + CARD_HEIGHT, 5.5.dp, NEAR_FILL, NEAR_EDGE, NEAR_INK, 11.5f),
-    Slab(2, CARD_TOP + CARD_HEIGHT + SLAB_HEIGHT, 10.25.dp, FAR_FILL, FAR_EDGE, FAR_INK, 10.5f),
-)
+/** The slab numbers' sizes; the card's own text is drawn at its own sizes. */
+private const val NEAR_LABEL_SP = 11.5f
+private const val FAR_LABEL_SP = 10.5f
 
 private val NoPadding = PlatformTextStyle(includeFontPadding = false)
 
-/** Each half of the card's flip: turning away, then the new season turning in. 200 ms in all, so holding Up / Down stays quick. */
-private const val FLIP_OUT_MS = 90
-private const val FLIP_IN_MS = 110
-
-/** How far the card turns before the new season takes its place: edge-on to the viewer. */
-private const val FLIP_EDGE_ON = 90f
+/**
+ * THE ROLL (v491, the user's design "A6" from the 2026-10-29 mockups, with
+ * their numbers). Every season on show is one piece that slides between the
+ * places of the wheel: a turn moves each piece one place, so the next slab
+ * grows into the gold card and the card shrinks back into a slab.
+ *   - each move takes [WHEEL_MOVE_MS] and lands with a small overshoot
+ *     ([WheelSpring], the mockup's cubic-bezier(.34, 1.56, .64, 1));
+ *   - the card moves first and each place out from it [WHEEL_RIPPLE_MS] later;
+ *   - the slab above the card leans its bottom edge away ([NEIGHBOUR_TILT]),
+ *     the one below its top edge, and the card leans like the one above
+ *     ([CARD_TILT]), as pages in a flip book.
+ */
+private const val WHEEL_MOVE_MS = 560
+private const val WHEEL_RIPPLE_MS = 20
+private val WheelSpring = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)
+private const val NEIGHBOUR_TILT = 25f
+private const val CARD_TILT = 19f
 
 /**
- * The card's flip. [displayed] is the season drawn -- on the card and, for
- * its neighbours, on the slabs -- and changes only once the card is edge-on,
- * so the old number never flips in and the slabs change with the card.
- *
- * A turn that arrives mid-flip starts from wherever the card is: the next
- * one carries on the rotation, and holding Up / Down shows only the season
- * the wheel has reached by the time each flip is edge-on.
+ * The camera for the tilts: 300 px from the panel, as the mockup's
+ * `perspective: 300px` at the same 2 px per dp. A RenderNode measures camera
+ * distance in units of 72 px (Skia's camera inches), so 300 / 72.
  */
-@Stable
-private class SeasonFlip(start: Int) {
-    var displayed by mutableIntStateOf(start)
-        private set
-    val angle = Animatable(0f)
+private const val WHEEL_CAMERA_DISTANCE = 300f / 72f
 
-    suspend fun turnTo(target: Int, total: Int) {
-        if (target == displayed) {
-            angle.animateTo(0f, tween(FLIP_IN_MS, easing = LinearOutSlowInEasing))
-            return
-        }
-        // Down (the next season, round the wheel) tips the card's top away;
-        // Up the other way.
-        val forward = wheelSeason(displayed, 1, total) == target ||
-            (target > displayed && wheelSeason(displayed, -1, total) != target)
-        val away = if (forward) -FLIP_EDGE_ON else FLIP_EDGE_ON
-        angle.animateTo(away, tween(FLIP_OUT_MS, easing = FastOutLinearInEasing))
-        displayed = target
-        angle.snapTo(-away)
-        angle.animateTo(0f, tween(FLIP_IN_MS, easing = LinearOutSlowInEasing))
-    }
+/**
+ * One place of the wheel, [offset] places from the card (0): where a piece
+ * sits there and how it looks. A piece between two places takes a mix of the
+ * two (see [wheelLook]).
+ */
+private class WheelPlace(
+    val top: Dp,
+    val inset: Dp,
+    val height: Dp,
+    val corner: Dp,
+    val fill: Color,
+    val edge: Color,
+    val edgeWidth: Dp,
+    val ink: Color,
+    val labelSp: Float,
+    /** rotationX: negative leans the bottom edge away, positive the top. */
+    val tilt: Float,
+    val alpha: Float,
+    /** 1 on the card, 0 on a slab: how much of the card's own text shows instead of the slab's number. */
+    val cardness: Float,
+)
+
+private fun slabPlace(top: Dp, near: Boolean, tilt: Float, alpha: Float) = WheelPlace(
+    top = top,
+    inset = if (near) 5.5.dp else 10.25.dp,
+    height = SLAB_HEIGHT,
+    corner = SLAB_CORNER,
+    fill = if (near) NEAR_FILL else FAR_FILL,
+    edge = if (near) NEAR_EDGE else FAR_EDGE,
+    edgeWidth = SLAB_EDGE_WIDTH,
+    ink = if (near) NEAR_INK else FAR_INK,
+    labelSp = if (near) NEAR_LABEL_SP else FAR_LABEL_SP,
+    tilt = tilt,
+    alpha = alpha,
+    cardness = 0f,
+)
+
+/** The places from offset -3 to 3. At +/-3 a piece is out of sight (alpha 0), on its way in or out. */
+private val WHEEL_PLACES = listOf(
+    slabPlace(CARD_TOP - SLAB_HEIGHT * 3, near = false, tilt = 0f, alpha = 0f),
+    slabPlace(CARD_TOP - SLAB_HEIGHT * 2, near = false, tilt = 0f, alpha = 1f),
+    slabPlace(CARD_TOP - SLAB_HEIGHT, near = true, tilt = -NEIGHBOUR_TILT, alpha = 1f),
+    WheelPlace(
+        top = CARD_TOP, inset = CARD_INSET, height = CARD_HEIGHT, corner = CARD_CORNER,
+        fill = GOLD, edge = NEAR_EDGE, edgeWidth = CARD_EDGE_WIDTH, ink = NEAR_INK,
+        labelSp = NEAR_LABEL_SP, tilt = -CARD_TILT, alpha = 1f, cardness = 1f,
+    ),
+    slabPlace(CARD_TOP + CARD_HEIGHT, near = true, tilt = NEIGHBOUR_TILT, alpha = 1f),
+    slabPlace(CARD_TOP + CARD_HEIGHT + SLAB_HEIGHT, near = false, tilt = 0f, alpha = 1f),
+    slabPlace(CARD_TOP + CARD_HEIGHT + SLAB_HEIGHT * 2, near = false, tilt = 0f, alpha = 0f),
+)
+
+/** How a piece at (fractional) [position] looks: the two nearest places, mixed. */
+private class WheelLook(val place: WheelPlace, val next: WheelPlace, val t: Float) {
+    fun dp(f: (WheelPlace) -> Dp): Dp = lerp(f(place), f(next), t)
+    fun float(f: (WheelPlace) -> Float): Float = androidx.compose.ui.util.lerp(f(place), f(next), t)
+    fun color(f: (WheelPlace) -> Color): Color = androidx.compose.ui.graphics.lerp(f(place), f(next), t)
+}
+
+private fun wheelLook(position: Float): WheelLook {
+    val p = position.coerceIn(-3f, 3f) + 3f
+    val i = p.toInt().coerceIn(0, WHEEL_PLACES.lastIndex)
+    val next = (i + 1).coerceAtMost(WHEEL_PLACES.lastIndex)
+    return WheelLook(WHEEL_PLACES[i], WHEEL_PLACES[next], p - i)
 }
 
 /** Season [shown] turned [offset] places round a wheel of [total] seasons, past either end. Pure, so it is tested. */
 internal fun wheelSeason(shown: Int, offset: Int, total: Int): Int =
     Math.floorMod(shown - 1 + offset, total) + 1
+
+/**
+ * Where [season] sits on a wheel of [total] seasons turned to [shown]: its
+ * place from the card, the short way round -- in (-total/2, total/2], so every
+ * season has exactly one. Pure, so it is tested.
+ */
+internal fun wheelDistance(season: Int, shown: Int, total: Int): Int {
+    val ahead = Math.floorMod(season - shown, total)
+    return if (ahead * 2 > total) ahead - total else ahead
+}
 
 /**
  * The slabs drawn for [total] seasons, nearest first: each of the other
@@ -228,12 +286,6 @@ internal fun BoxScope.SeasonAccordion(
     LaunchedEffect(loaded) { browsing = loaded }
     val shown = browsing.coerceIn(1, total)
     val focused = focusMap.seasonPickerFocused
-
-    // The card flips to each new season -- see SeasonFlip. What is drawn
-    // follows it; what Up / Down / OK act on is [shown], at once.
-    val flip = remember { SeasonFlip(shown) }
-    LaunchedEffect(shown, total) { flip.turnTo(shown, total) }
-    val drawn = flip.displayed
 
     Box(
         modifier = Modifier
@@ -301,113 +353,163 @@ internal fun BoxScope.SeasonAccordion(
             }
             .focusable()
     ) {
-        val offsets = remember(total) { wheelOffsets(total) }
-        SLABS.forEach { slab ->
-            if (slab.offset in offsets) {
-                val season = wheelSeason(drawn, slab.offset, total)
-                SeasonSlab(
+        // Every season within three places of the card, each once, as one
+        // piece that rolls between places -- see THE ROLL.
+        for (offset in -3..3) {
+            val season = wheelSeason(shown, offset, total)
+            if (wheelDistance(season, shown, total) != offset) continue
+            key(season) {
+                WheelPiece(
                     season = season,
-                    slab = slab,
-                    isOnShow = season == loaded && season != drawn,
+                    total = total,
+                    place = offset,
+                    focused = focused,
+                    isOnShow = season == loaded && season != shown,
                     passionFont = passionFont,
                 )
             }
         }
-        SeasonCard(season = drawn, total = total, focused = focused, flipAngle = flip.angle::value, passionFont = passionFont)
     }
 }
 
-/** A numbered slab in the wheel; [isOnShow] adds the gold notch while browsing. */
+/**
+ * One season's piece of the wheel. [place] is where it belongs now; it rolls
+ * there from wherever it is, the farther from the card the later. Every frame
+ * of a roll is read in layout and drawing only, so a turn recomposes nothing
+ * until the next press.
+ */
 @Composable
-private fun BoxScope.SeasonSlab(season: Int, slab: Slab, isOnShow: Boolean, passionFont: FontFamily) {
-    val shape = RoundedCornerShape(SLAB_CORNER)
-    Box(
-        modifier = Modifier
-            .align(Alignment.TopStart)
-            .offset(x = slab.inset, y = slab.top)
-            .size(width = PANEL_WIDTH - slab.inset * 2, height = SLAB_HEIGHT)
-            .background(slab.fill, shape)
-            .border(BorderStroke(0.5.dp, slab.edge), shape),
-        contentAlignment = Alignment.CenterStart,
-    ) {
-        if (isOnShow) {
-            Box(
-                Modifier
-                    .width(3.dp)
-                    .fillMaxHeight()
-                    .background(GOLD, RoundedCornerShape(1.dp))
-            )
-        }
-        Text(
-            text = "$season",
-            color = slab.ink,
-            fontFamily = passionFont,
-            fontSize = slab.fontSp.sp,
-            style = TextStyle(platformStyle = NoPadding),
-            modifier = Modifier.padding(start = 5.25.dp),
-        )
-    }
-}
-
-/** The gold card: "Season / 3 of 5", bright gold while the accordion has focus, resting gold otherwise. */
-@Composable
-private fun BoxScope.SeasonCard(
+private fun BoxScope.WheelPiece(
     season: Int,
     total: Int,
+    place: Int,
     focused: Boolean,
-    /** The flip's rotation in degrees; read only while drawing, so a flip never recomposes the card. */
-    flipAngle: () -> Float,
+    isOnShow: Boolean,
     passionFont: FontFamily,
 ) {
-    val shape = RoundedCornerShape(SLAB_CORNER)
+    val position = remember { Animatable(place.toFloat()) }
+    LaunchedEffect(place) {
+        val target = place.toFloat()
+        if (abs(position.value - target) * 2 > total) {
+            // Gone round the back of a short wheel (4 to 7 seasons): reappear
+            // in the new place rather than roll across the card.
+            position.snapTo(target)
+        } else {
+            position.animateTo(
+                target,
+                tween(WHEEL_MOVE_MS, delayMillis = abs(place).coerceAtMost(3) * WHEEL_RIPPLE_MS, easing = WheelSpring),
+            )
+        }
+    }
+    val cardFill = if (focused) GOLD else GOLD_RESTING
     Box(
         modifier = Modifier
             .align(Alignment.TopStart)
-            .offset(x = CARD_INSET, y = CARD_TOP)
-            .size(width = PANEL_WIDTH - CARD_INSET * 2, height = CARD_HEIGHT)
-            .graphicsLayer {
-                rotationX = flipAngle()
-                // A far camera keeps the near edge from swelling over the slabs.
-                cameraDistance = 16f * density
+            .zIndex(10f - abs(place))
+            .layout { measurable, _ ->
+                val look = wheelLook(position.value)
+                val width = (PANEL_WIDTH - look.dp { it.inset } * 2).roundToPx().coerceAtLeast(0)
+                val height = look.dp { it.height }.roundToPx().coerceAtLeast(0)
+                val placeable = measurable.measure(Constraints.fixed(width, height))
+                layout(width, height) {
+                    placeable.place(look.dp { it.inset }.roundToPx(), look.dp { it.top }.roundToPx())
+                }
             }
-            .background(if (focused) GOLD else GOLD_RESTING, shape)
-            .border(BorderStroke(CARD_EDGE_WIDTH, CARD_EDGE), shape),
+            .graphicsLayer {
+                val look = wheelLook(position.value)
+                rotationX = look.float { it.tilt }
+                alpha = look.float { it.alpha }
+                cameraDistance = WHEEL_CAMERA_DISTANCE
+                clip = true
+            }
+            .drawBehind {
+                val look = wheelLook(position.value)
+                val radius = CornerRadius(look.dp { it.corner }.toPx())
+                // The card's place is bright gold while focused, resting gold otherwise.
+                val fill = look.color { if (it.cardness == 1f) cardFill else it.fill }
+                drawRoundRect(color = fill, cornerRadius = radius)
+                val stroke = look.dp { it.edgeWidth }.toPx()
+                drawRoundRect(
+                    color = look.color { it.edge },
+                    topLeft = Offset(stroke / 2, stroke / 2),
+                    size = Size(size.width - stroke, size.height - stroke),
+                    cornerRadius = radius,
+                    style = Stroke(stroke),
+                )
+                if (isOnShow) {
+                    // The season still on show, while browsing: a gold notch.
+                    drawRect(GOLD, size = Size(3.dp.toPx(), size.height), alpha = 1f - look.float { it.cardness })
+                }
+            },
     ) {
-        // Paddings put the glyphs where the design has them: "Season"'s
-        // baseline 10.2 dp under the card's top, the number's 7.3 dp above
-        // its bottom (Roboto ascent 0.928 em; Passion One descent 0.266 em).
+        // The slab's number, faded out as the piece becomes the card.
+        BasicText(
+            text = "$season",
+            style = TextStyle(fontFamily = passionFont, fontSize = NEAR_LABEL_SP.sp, platformStyle = NoPadding),
+            color = { wheelLook(position.value).color { it.ink } },
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 5.25.dp)
+                .graphicsLayer {
+                    val look = wheelLook(position.value)
+                    alpha = 1f - look.float { it.cardness }
+                    val scale = look.float { it.labelSp } / NEAR_LABEL_SP
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin(0f, 0.5f)
+                },
+        )
+        // The card's own text, at the card's size and centred, faded in as
+        // the piece becomes the card (clipped while it is still slab-sized).
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .wrapContentSize(unbounded = true)
+                .size(width = PANEL_WIDTH - CARD_INSET * 2, height = CARD_HEIGHT)
+                .graphicsLayer { alpha = wheelLook(position.value).float { it.cardness } },
+        ) {
+            SeasonCardText(season = season, total = total, passionFont = passionFont)
+        }
+    }
+}
+
+/** The card's own text: "Season" over "3 of 5". */
+@Composable
+private fun BoxScope.SeasonCardText(season: Int, total: Int, passionFont: FontFamily) {
+    // Paddings put the glyphs where the design has them: "Season"'s
+    // baseline just under the card's top, the number's just above its
+    // bottom (Roboto ascent 0.928 em; Passion One descent 0.266 em).
+    Text(
+        text = "Season",
+        color = GOLD_INK_SOFT,
+        fontFamily = FontFamily.Default,
+        fontSize = 10.5.sp,
+        style = TextStyle(platformStyle = NoPadding),
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .padding(top = 0.5.dp),
+    )
+    Row(
+        modifier = Modifier
+            .align(Alignment.BottomCenter)
+            .padding(bottom = 1.dp),
+    ) {
         Text(
-            text = "Season",
+            text = "$season",
+            color = GOLD_INK,
+            fontFamily = passionFont,
+            fontSize = 23.5.sp,
+            style = TextStyle(platformStyle = NoPadding),
+            modifier = Modifier.alignByBaseline(),
+        )
+        Spacer(Modifier.width(3.5.dp))
+        Text(
+            text = "of $total",
             color = GOLD_INK_SOFT,
             fontFamily = FontFamily.Default,
             fontSize = 10.5.sp,
             style = TextStyle(platformStyle = NoPadding),
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .padding(top = 0.5.dp),
+            modifier = Modifier.alignByBaseline(),
         )
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 1.dp),
-        ) {
-            Text(
-                text = "$season",
-                color = GOLD_INK,
-                fontFamily = passionFont,
-                fontSize = 23.5.sp,
-                style = TextStyle(platformStyle = NoPadding),
-                modifier = Modifier.alignByBaseline(),
-            )
-            Spacer(Modifier.width(3.5.dp))
-            Text(
-                text = "of $total",
-                color = GOLD_INK_SOFT,
-                fontFamily = FontFamily.Default,
-                fontSize = 10.5.sp,
-                style = TextStyle(platformStyle = NoPadding),
-                modifier = Modifier.alignByBaseline(),
-            )
-        }
     }
 }
