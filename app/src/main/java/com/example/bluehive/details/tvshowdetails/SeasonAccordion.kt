@@ -67,6 +67,7 @@ import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.utilities.AppTypography
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /*
@@ -180,6 +181,16 @@ internal const val WHEEL_TURN_GAP_MS = WHEEL_MOVE_MS.toLong()
 
 /** A turn at [now] is allowed when the last one, at [last], has landed. Pure, so it is tested. */
 internal fun wheelTurnAllowed(now: Long, last: Long): Boolean = now - last >= WHEEL_TURN_GAP_MS
+
+/**
+ * OK picks the gold card up (the user's mockup, 2026-10-29): it rises
+ * [PICKUP_LIFT] and grows [PICKUP_GROW], keeping its tilt, holds
+ * [PICKUP_HOLD_MS], then drops back -- both ways on the wheel's own roll
+ * (WHEEL_MOVE_MS with WheelSpring). The wheel does not turn while it is up.
+ */
+private val PICKUP_LIFT = 8.dp
+private const val PICKUP_GROW = 0.05f
+private const val PICKUP_HOLD_MS = 350L
 private const val WHEEL_RIPPLE_MS = 20
 private val WheelSpring = CubicBezierEasing(0.34f, 1.56f, 0.64f, 1f)
 private const val NEIGHBOUR_TILT = 25f
@@ -378,6 +389,10 @@ internal fun BoxScope.SeasonAccordion(
     // When the last turn was made (uptimeMillis); plain, not state, so a press
     // recomposes nothing until it turns the wheel -- see WHEEL_TURN_GAP_MS.
     val lastTurn = remember { longArrayOf(Long.MIN_VALUE / 2) }
+    // The card's pick-up on OK: 0 resting, 1 lifted; read only in drawing.
+    val pickup = remember { Animatable(0f) }
+    // Up while the card is lifted (plain, as lastTurn): the wheel stays put.
+    val pickingUp = remember { booleanArrayOf(false) }
 
     Box(
         modifier = Modifier
@@ -399,7 +414,7 @@ internal fun BoxScope.SeasonAccordion(
                             // Round the wheel: Up from Season 1 is the last season,
                             // once the last turn has landed.
                             val now = SystemClock.uptimeMillis()
-                            if (wheelTurnAllowed(now, lastTurn[0])) {
+                            if (!pickingUp[0] && wheelTurnAllowed(now, lastTurn[0])) {
                                 lastTurn[0] = now
                                 browsing = wheelSeason(shown, -1, total)
                                 BlueHiveApplication.playCardFlip()
@@ -416,7 +431,7 @@ internal fun BoxScope.SeasonAccordion(
                         // once the last turn has landed.
                         if (total > 1) {
                             val now = SystemClock.uptimeMillis()
-                            if (wheelTurnAllowed(now, lastTurn[0])) {
+                            if (!pickingUp[0] && wheelTurnAllowed(now, lastTurn[0])) {
                                 lastTurn[0] = now
                                 browsing = wheelSeason(shown, 1, total)
                                 BlueHiveApplication.playCardFlip()
@@ -444,6 +459,19 @@ internal fun BoxScope.SeasonAccordion(
                     }
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter -> {
                         BlueHiveApplication.playClickSound()
+                        if (!pickingUp[0]) {
+                            pickingUp[0] = true
+                            motionScope.launch {
+                                try {
+                                    pickup.animateTo(1f, tween(WHEEL_MOVE_MS, easing = WheelSpring))
+                                    delay(PICKUP_HOLD_MS)
+                                } finally {
+                                    // Even if the page goes mid-lift: the wheel never stays locked.
+                                    pickingUp[0] = false
+                                }
+                                pickup.animateTo(0f, tween(WHEEL_MOVE_MS, easing = WheelSpring))
+                            }
+                        }
                         if (episodesState.selectedSeason != shown) {
                             episodesState.selectedSeason = shown
                             episodesState.loadSeasonEpisodes(shown)
@@ -466,6 +494,7 @@ internal fun BoxScope.SeasonAccordion(
                     total = total,
                     place = place,
                     position = motion.position(season, place),
+                    pickup = pickup,
                     focused = focused,
                     isOnShow = season == loaded && season != shown,
                     passionFont = passionFont,
@@ -488,6 +517,8 @@ private fun BoxScope.WheelPiece(
     place: Int,
     /** Rolled by WheelMotion; read only in layout and drawing. */
     position: Animatable<Float, AnimationVector1D>,
+    /** The card's pick-up (0 to 1); lifts this piece only as far as it is the card. */
+    pickup: Animatable<Float, AnimationVector1D>,
     focused: Boolean,
     isOnShow: Boolean,
     passionFont: FontFamily,
@@ -512,6 +543,11 @@ private fun BoxScope.WheelPiece(
                 alpha = look.float { it.alpha }
                 cameraDistance = WHEEL_CAMERA_DISTANCE
                 clip = true
+                // Picked up: the card rises and grows, its tilt kept.
+                val lift = pickup.value * look.float { it.cardness }
+                translationY = -PICKUP_LIFT.toPx() * lift
+                scaleX = 1f + PICKUP_GROW * lift
+                scaleY = 1f + PICKUP_GROW * lift
             }
             .drawBehind {
                 val look = wheelLook(position.value)
