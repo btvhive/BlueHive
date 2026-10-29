@@ -49,12 +49,14 @@ import kotlinx.coroutines.launch
  * replacing the season column (approved mockup, 2026-10-27; the design comes
  * from the 2026-10-17 season-box sessions -- wheel + accordion + box-set).
  *
- * A gold card for one season ("Season 3 of 5") fills the width of the cap's
- * recessed panel, in its middle; up to two numbered slabs above and below it
- * make a wheel, the nearer ones wider and lighter, so any number of seasons
- * stays readable. Measured from the user's chosen design (2026-10-29, the
- * wheel of the 2026-10-17 mockups) at its scale, 172 px for the panel's 104 dp.
- * Up / Down move the card, OK loads that season, Right goes to the episodes.
+ * A gold card for one season ("Season 3 of 5") sits in the middle of the
+ * cap's recessed panel; up to two numbered slabs above and below it make a
+ * wheel, the nearer ones wider and lighter. Measured from the user's chosen
+ * design (2026-10-29, the wheel of the 2026-10-17 mockups) at its scale, 172 px
+ * for the panel's 104 dp. Since v489 the wheel goes all the way round: the
+ * seasons after the last are 1, 2, ... and those before Season 1 the last
+ * ones, and Up / Down keep turning it past either end (see wheelSeason).
+ * OK loads the season on the card, Right goes to the episodes.
  * While browsing, a gold notch marks the season still on show.
  *
  * The geometry is the cap image's: drawn at 4 px per dp (537 x 489 px ->
@@ -75,6 +77,15 @@ private val PANEL_HEIGHT = 101.75.dp
 
 private val CARD_HEIGHT = 37.5.dp
 private val CARD_TOP = (PANEL_HEIGHT - CARD_HEIGHT) / 2
+
+/**
+ * The card's inset each side: narrower than the panel, wider than the nearer
+ * slabs (inset 5.5) -- the user's call, 2026-10-29 (v488 filled the panel).
+ */
+private val CARD_INSET = 2.75.dp
+
+/** Every slab's corners, and the card's since v489. */
+private val SLAB_CORNER = 1.25.dp
 
 /** Every slab's height, outline included; they stack with no gaps, the nearer ones touching the card. */
 private val SLAB_HEIGHT = 12.1.dp
@@ -108,6 +119,13 @@ private val FAR_FILL = Color(0xFF2E2929)
 private val FAR_EDGE = Color(0xFF4A4444)
 private val FAR_INK = Color(0xFFB3ACAC)
 
+/**
+ * The card's outline: the nearer slabs' colour (the user's call, 2026-10-29;
+ * it was white while focused). Focus shows as the brighter gold.
+ */
+private val CARD_EDGE = NEAR_EDGE
+private val CARD_EDGE_WIDTH = 1.dp
+
 private val SLABS = listOf(
     Slab(-2, CARD_TOP - SLAB_HEIGHT * 2, 10.25.dp, FAR_FILL, FAR_EDGE, FAR_INK, 10.5f),
     Slab(-1, CARD_TOP - SLAB_HEIGHT, 5.5.dp, NEAR_FILL, NEAR_EDGE, NEAR_INK, 11.5f),
@@ -116,6 +134,18 @@ private val SLABS = listOf(
 )
 
 private val NoPadding = PlatformTextStyle(includeFontPadding = false)
+
+/** Season [shown] turned [offset] places round a wheel of [total] seasons, past either end. Pure, so it is tested. */
+internal fun wheelSeason(shown: Int, offset: Int, total: Int): Int =
+    Math.floorMod(shown - 1 + offset, total) + 1
+
+/**
+ * The slabs drawn for [total] seasons, nearest first: each of the other
+ * seasons once, at most two each side. With 4 or fewer there are not enough
+ * to fill both sides without repeating one, so the extra places stay empty.
+ */
+internal fun wheelOffsets(total: Int): List<Int> =
+    listOf(1, -1, 2, -2).take((total - 1).coerceIn(0, 4))
 
 /**
  * Focus the accordion, waiting for it to be on screen: on the Continue
@@ -169,20 +199,21 @@ internal fun BoxScope.SeasonAccordion(
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 when (event.key) {
                     Key.DirectionUp -> {
-                        if (shown > 1) {
-                            browsing = shown - 1
+                        if (total > 1) {
+                            // Round the wheel: Up from Season 1 is the last season.
+                            browsing = wheelSeason(shown, -1, total)
                             BlueHiveApplication.playTitleCardNavigation()
                             true
                         } else {
-                            // Season 1: Up leaves for the header, as it did from the column.
+                            // One season, nothing to turn: Up leaves for the header.
                             BlueHiveApplication.playHoverSound()
                             false
                         }
                     }
                     Key.DirectionDown -> {
-                        // The last season: nothing below, no sound, no move.
-                        if (shown < total) {
-                            browsing = shown + 1
+                        // Round the wheel: Down from the last season is Season 1.
+                        if (total > 1) {
+                            browsing = wheelSeason(shown, 1, total)
                             BlueHiveApplication.playTitleCardNavigation()
                         }
                         true
@@ -218,9 +249,10 @@ internal fun BoxScope.SeasonAccordion(
             }
             .focusable()
     ) {
+        val offsets = remember(total) { wheelOffsets(total) }
         SLABS.forEach { slab ->
-            val season = shown + slab.offset
-            if (season in 1..total) {
+            if (slab.offset in offsets) {
+                val season = wheelSeason(shown, slab.offset, total)
                 SeasonSlab(
                     season = season,
                     slab = slab,
@@ -236,7 +268,7 @@ internal fun BoxScope.SeasonAccordion(
 /** A numbered slab in the wheel; [isOnShow] adds the gold notch while browsing. */
 @Composable
 private fun BoxScope.SeasonSlab(season: Int, slab: Slab, isOnShow: Boolean, passionFont: FontFamily) {
-    val shape = RoundedCornerShape(1.25.dp)
+    val shape = RoundedCornerShape(SLAB_CORNER)
     Box(
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -265,19 +297,17 @@ private fun BoxScope.SeasonSlab(season: Int, slab: Slab, isOnShow: Boolean, pass
     }
 }
 
-/** The gold card: "Season / 3 of 5", bordered white while the accordion has focus, resting gold otherwise. */
+/** The gold card: "Season / 3 of 5", bright gold while the accordion has focus, resting gold otherwise. */
 @Composable
 private fun BoxScope.SeasonCard(season: Int, total: Int, focused: Boolean, passionFont: FontFamily) {
-    val shape = RoundedCornerShape(6.dp)
+    val shape = RoundedCornerShape(SLAB_CORNER)
     Box(
         modifier = Modifier
             .align(Alignment.TopStart)
-            // The panel's full width, inside it (the 2026-10-29 design; it
-            // used to slide 4 dp out past the panel's left edge).
-            .offset(y = CARD_TOP)
-            .size(width = PANEL_WIDTH, height = CARD_HEIGHT)
+            .offset(x = CARD_INSET, y = CARD_TOP)
+            .size(width = PANEL_WIDTH - CARD_INSET * 2, height = CARD_HEIGHT)
             .background(if (focused) GOLD else GOLD_RESTING, shape)
-            .then(if (focused) Modifier.border(BorderStroke(1.25.dp, Color.White), shape) else Modifier),
+            .border(BorderStroke(CARD_EDGE_WIDTH, CARD_EDGE), shape),
     ) {
         // Paddings put the glyphs where the design has them: "Season"'s
         // baseline 10.2 dp under the card's top, the number's 7.3 dp above
