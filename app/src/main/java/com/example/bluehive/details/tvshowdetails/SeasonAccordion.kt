@@ -1,5 +1,9 @@
 package com.example.bluehive.details.tvshowdetails
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +31,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -56,7 +62,8 @@ import kotlinx.coroutines.launch
  * for the panel's 104 dp. Since v489 the wheel goes all the way round: the
  * seasons after the last are 1, 2, ... and those before Season 1 the last
  * ones, and Up / Down keep turning it past either end (see wheelSeason).
- * OK loads the season on the card, Right goes to the episodes.
+ * OK loads the season on the card, Right goes to the episodes. Each turn flips
+ * the card over like a rolodex (v490, see SeasonFlip).
  * While browsing, a gold notch marks the season still on show.
  *
  * The geometry is the cap image's: drawn at 4 px per dp (537 x 489 px ->
@@ -135,6 +142,45 @@ private val SLABS = listOf(
 
 private val NoPadding = PlatformTextStyle(includeFontPadding = false)
 
+/** Each half of the card's flip: turning away, then the new season turning in. 200 ms in all, so holding Up / Down stays quick. */
+private const val FLIP_OUT_MS = 90
+private const val FLIP_IN_MS = 110
+
+/** How far the card turns before the new season takes its place: edge-on to the viewer. */
+private const val FLIP_EDGE_ON = 90f
+
+/**
+ * The card's flip. [displayed] is the season drawn -- on the card and, for
+ * its neighbours, on the slabs -- and changes only once the card is edge-on,
+ * so the old number never flips in and the slabs change with the card.
+ *
+ * A turn that arrives mid-flip starts from wherever the card is: the next
+ * one carries on the rotation, and holding Up / Down shows only the season
+ * the wheel has reached by the time each flip is edge-on.
+ */
+@Stable
+private class SeasonFlip(start: Int) {
+    var displayed by mutableIntStateOf(start)
+        private set
+    val angle = Animatable(0f)
+
+    suspend fun turnTo(target: Int, total: Int) {
+        if (target == displayed) {
+            angle.animateTo(0f, tween(FLIP_IN_MS, easing = LinearOutSlowInEasing))
+            return
+        }
+        // Down (the next season, round the wheel) tips the card's top away;
+        // Up the other way.
+        val forward = wheelSeason(displayed, 1, total) == target ||
+            (target > displayed && wheelSeason(displayed, -1, total) != target)
+        val away = if (forward) -FLIP_EDGE_ON else FLIP_EDGE_ON
+        angle.animateTo(away, tween(FLIP_OUT_MS, easing = FastOutLinearInEasing))
+        displayed = target
+        angle.snapTo(-away)
+        angle.animateTo(0f, tween(FLIP_IN_MS, easing = LinearOutSlowInEasing))
+    }
+}
+
 /** Season [shown] turned [offset] places round a wheel of [total] seasons, past either end. Pure, so it is tested. */
 internal fun wheelSeason(shown: Int, offset: Int, total: Int): Int =
     Math.floorMod(shown - 1 + offset, total) + 1
@@ -182,6 +228,12 @@ internal fun BoxScope.SeasonAccordion(
     LaunchedEffect(loaded) { browsing = loaded }
     val shown = browsing.coerceIn(1, total)
     val focused = focusMap.seasonPickerFocused
+
+    // The card flips to each new season -- see SeasonFlip. What is drawn
+    // follows it; what Up / Down / OK act on is [shown], at once.
+    val flip = remember { SeasonFlip(shown) }
+    LaunchedEffect(shown, total) { flip.turnTo(shown, total) }
+    val drawn = flip.displayed
 
     Box(
         modifier = Modifier
@@ -252,16 +304,16 @@ internal fun BoxScope.SeasonAccordion(
         val offsets = remember(total) { wheelOffsets(total) }
         SLABS.forEach { slab ->
             if (slab.offset in offsets) {
-                val season = wheelSeason(shown, slab.offset, total)
+                val season = wheelSeason(drawn, slab.offset, total)
                 SeasonSlab(
                     season = season,
                     slab = slab,
-                    isOnShow = season == loaded && season != shown,
+                    isOnShow = season == loaded && season != drawn,
                     passionFont = passionFont,
                 )
             }
         }
-        SeasonCard(season = shown, total = total, focused = focused, passionFont = passionFont)
+        SeasonCard(season = drawn, total = total, focused = focused, flipAngle = flip.angle::value, passionFont = passionFont)
     }
 }
 
@@ -299,13 +351,25 @@ private fun BoxScope.SeasonSlab(season: Int, slab: Slab, isOnShow: Boolean, pass
 
 /** The gold card: "Season / 3 of 5", bright gold while the accordion has focus, resting gold otherwise. */
 @Composable
-private fun BoxScope.SeasonCard(season: Int, total: Int, focused: Boolean, passionFont: FontFamily) {
+private fun BoxScope.SeasonCard(
+    season: Int,
+    total: Int,
+    focused: Boolean,
+    /** The flip's rotation in degrees; read only while drawing, so a flip never recomposes the card. */
+    flipAngle: () -> Float,
+    passionFont: FontFamily,
+) {
     val shape = RoundedCornerShape(SLAB_CORNER)
     Box(
         modifier = Modifier
             .align(Alignment.TopStart)
             .offset(x = CARD_INSET, y = CARD_TOP)
             .size(width = PANEL_WIDTH - CARD_INSET * 2, height = CARD_HEIGHT)
+            .graphicsLayer {
+                rotationX = flipAngle()
+                // A far camera keeps the near edge from swelling over the slabs.
+                cameraDistance = 16f * density
+            }
             .background(if (focused) GOLD else GOLD_RESTING, shape)
             .border(BorderStroke(CARD_EDGE_WIDTH, CARD_EDGE), shape),
     ) {
