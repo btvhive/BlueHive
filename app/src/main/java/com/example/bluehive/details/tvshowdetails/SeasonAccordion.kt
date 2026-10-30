@@ -332,7 +332,12 @@ internal fun BoxScope.SeasonAccordion(
             }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
-                if (choosing) {
+                if (choosing && event.key == Key.DirectionRight) {
+                    // Right goes straight to the episodes, choosing or not (v509);
+                    // losing focus ends the choosing. Held here while none are loaded.
+                    focusEpisodes(episodesState, coroutineScope)
+                    true
+                } else if (choosing) {
                     onChoosingKey(event.key, shown, total, lastTurn, onMove = { browsing = it }, onBack = ::stopChoosing) {
                         BlueHiveApplication.playClickSound()
                         motionScope.launch {
@@ -394,7 +399,7 @@ internal fun BoxScope.SeasonAccordion(
 /**
  * A key while choosing: Up / Down move the white tile (stopping at either
  * end, once the last move has landed), OK runs [onPlay], Back runs [onBack];
- * every other key is held here, so choosing ends only by Back.
+ * Left is held here. (Right, to the episodes, is the caller's.)
  */
 private fun onChoosingKey(
     key: Key,
@@ -420,7 +425,7 @@ private fun onChoosingKey(
             BlueHiveApplication.playBackOutSound()
             onBack()
         }
-        Key.DirectionLeft, Key.DirectionRight -> Unit
+        Key.DirectionLeft -> Unit
         else -> return false
     }
     return true
