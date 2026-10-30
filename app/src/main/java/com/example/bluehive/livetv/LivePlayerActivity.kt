@@ -27,8 +27,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.analytics.AnalyticsListener
+import androidx.media3.exoplayer.source.LoadEventInfo
+import androidx.media3.exoplayer.source.MediaLoadData
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.bluehive.BlueHiveApplication
@@ -40,6 +44,7 @@ import com.example.bluehive.webview.exoplayer_resources.ExoPlayerConfig
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.io.IOException
 
 /**
  * Live TV's player.
@@ -56,6 +61,10 @@ import kotlinx.coroutines.launch
  *
  * Remote: Up/Down change channel (a run of presses settles for 600 ms and tunes
  * once), Click opens the channel list, Back leaves. Any key shows the banner.
+ *
+ * A channel that freezes without ExoPlayer raising an error (Comedy Central,
+ * 2026-10-29: a broken source, a stall loop, a frozen picture until a press), or
+ * a tune that never shows a picture, gets a fresh session from [stallTick].
  */
 @UnstableApi
 class LivePlayerActivity : ComponentActivity() {
@@ -87,6 +96,10 @@ class LivePlayerActivity : ComponentActivity() {
     private var stoppedInBackground = false
     private var lastKeyAt = SystemClock.elapsedRealtime()
     private val recoveries = ArrayDeque<Long>()
+    private val stall = StallWatch()
+    private val timelineWindow = Timeline.Window()
+    /** When the current tune's media source was prepared; 0 once a picture shows. */
+    private var preparedAt = 0L
 
     /**
      * Built per session: the headers come from the server's answer. zlive's own
@@ -101,6 +114,7 @@ class LivePlayerActivity : ComponentActivity() {
         override fun onRenderedFirstFrame() {
             if (phase != Phase.TUNING) return
             phase = Phase.PLAYING
+            preparedAt = 0L
             showBanner()
         }
 
@@ -108,7 +122,21 @@ class LivePlayerActivity : ComponentActivity() {
             IdleWatcher.setPlaying(IdleWatcher.SOURCE_LIVE, isPlaying)
         }
 
+        override fun onPositionDiscontinuity(
+            oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int,
+        ) = stall.reset()
+
         override fun onPlayerError(error: PlaybackException) = recover(error)
+    }
+
+    /** Playlist and chunk load failures, so the next stall shows its cause in logcat. */
+    private val loadErrors = object : AnalyticsListener {
+        override fun onLoadError(
+            eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo,
+            mediaLoadData: MediaLoadData, error: IOException, wasCanceled: Boolean,
+        ) {
+            Log.w(TAG, "live ${channels[shown].id}: load error from ${loadEventInfo.uri.host}: $error")
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -124,7 +152,10 @@ class LivePlayerActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).hide(WindowInsetsCompat.Type.systemBars())
 
-        player = ExoPlayerConfig.buildPlayer(this).also { it.addListener(listener) }
+        player = ExoPlayerConfig.buildPlayer(this).also {
+            it.addListener(listener)
+            it.addAnalyticsListener(loadErrors)
+        }
         ExoPlayerConfig.keepScreenOnWhilePlaying(this, player)
         setContent { PlayerScreen() }
         tune(shown)
@@ -133,6 +164,7 @@ class LivePlayerActivity : ComponentActivity() {
                 while (true) {
                     delay(1_000)
                     stillWatchingTick()
+                    stallTick()
                 }
             }
         }
@@ -175,6 +207,8 @@ class LivePlayerActivity : ComponentActivity() {
         tuneJob?.cancel()
         shown = index
         phase = Phase.TUNING
+        preparedAt = 0L
+        stall.reset()
         bannerVisible = false
         player.stop()
         val channel = channels[index]
@@ -198,6 +232,7 @@ class LivePlayerActivity : ComponentActivity() {
             )
             player.prepare()
             player.playWhenReady = true
+            preparedAt = SystemClock.elapsedRealtime()
             LiveTvData.noteWatched(this@LivePlayerActivity, profileId, channel.id)
         }
     }
@@ -210,6 +245,7 @@ class LivePlayerActivity : ComponentActivity() {
         player.stop()
         shown = (shown + delta).mod(channels.size)
         phase = Phase.TUNING
+        preparedAt = 0L
         zapJob?.cancel()
         zapJob = lifecycleScope.launch {
             delay(ZAP_SETTLE_MS)
@@ -219,8 +255,7 @@ class LivePlayerActivity : ComponentActivity() {
 
     /**
      * A playing channel failed. Falling behind the live window just rejoins the
-     * edge; anything else asks for a fresh session (the server re-resolves, or
-     * moves to the backup feed), at most [MAX_RECOVERIES] times a minute.
+     * edge; anything else gets a fresh session ([retune]).
      */
     private fun recover(error: PlaybackException) {
         Log.e(TAG, "live ${channels[shown].id}: ${error.errorCodeName}")
@@ -229,6 +264,15 @@ class LivePlayerActivity : ComponentActivity() {
             player.prepare()
             return
         }
+        retune()
+    }
+
+    /**
+     * Asks for a fresh session for the channel on screen (the server re-resolves,
+     * or moves to a backup feed), at most [MAX_RECOVERIES] times a minute; past
+     * that the channel is off air. [notice] says why, when the viewer saw nothing.
+     */
+    private fun retune(notice: String? = null) {
         val now = SystemClock.elapsedRealtime()
         while (recoveries.isNotEmpty() && now - recoveries.first() > RECOVERY_WINDOW_MS) recoveries.removeFirst()
         if (recoveries.size >= MAX_RECOVERIES) {
@@ -236,12 +280,50 @@ class LivePlayerActivity : ComponentActivity() {
             return
         }
         recoveries.addLast(now)
+        notice?.let(::showNotice)
         tune(shown, afterDrop = true)
+    }
+
+    /**
+     * Once a second: a channel stuck while "playing" ([StallWatch]; ExoPlayer
+     * raised no error, so [recover] never ran), or a tune with no picture
+     * [TUNE_TIMEOUT_MS] after its source was prepared, is re-tuned -- what Up/Down
+     * and back did by hand for Comedy Central.
+     */
+    private fun stallTick() {
+        val now = SystemClock.elapsedRealtime()
+        val channel = channels[shown]
+        when {
+            phase == Phase.TUNING && preparedAt > 0 && now - preparedAt > TUNE_TIMEOUT_MS -> {
+                Log.w(TAG, "live ${channel.id}: no picture ${TUNE_TIMEOUT_MS / 1000} s after tuning")
+                retune("${channel.name} isn't starting, trying again")
+            }
+            phase == Phase.PLAYING && player.playWhenReady ->
+                if (stall.stuck(now, periodPosition(), renderedFrames())) {
+                    Log.w(TAG, "live ${channel.id}: stuck for ${StallWatch.WINDOW_MS / 1000} s")
+                    retune("${channel.name} froze, reconnecting")
+                }
+            else -> stall.reset()
+        }
+    }
+
+    /** Where playback is in the stream's period; does not jump back as a live window slides. */
+    private fun periodPosition(): Long {
+        val timeline = player.currentTimeline
+        if (timeline.isEmpty) return player.currentPosition
+        return player.currentPosition +
+            timeline.getWindow(player.currentMediaItemIndex, timelineWindow).positionInFirstPeriodMs
+    }
+
+    private fun renderedFrames(): Int? = player.videoDecoderCounters?.let {
+        it.ensureUpdated()
+        it.renderedOutputBufferCount
     }
 
     private fun offAir() {
         player.stop()
         tuned = -1
+        preparedAt = 0L
         phase = Phase.OFF_AIR
         offAirButton = 0
         bannerVisible = false
@@ -410,6 +492,8 @@ class LivePlayerActivity : ComponentActivity() {
         private const val ZAP_SETTLE_MS = 600L
         private const val RECOVERY_WINDOW_MS = 60_000L
         private const val MAX_RECOVERIES = 2
+        /** A tune with no picture this long after its source was prepared is retried. */
+        private const val TUNE_TIMEOUT_MS = 15_000L
 
         /** For a session answer that names no headers (a server before the "b" image). */
         private val SITE_HEADERS = mapOf("Origin" to "https://zlive.st", "Referer" to "https://zlive.st/")
