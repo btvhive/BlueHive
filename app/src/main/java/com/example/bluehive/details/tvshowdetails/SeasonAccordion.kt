@@ -64,7 +64,7 @@ import kotlin.math.abs
  * Two steps since v505, so Up / Down never pick a season by accident (the
  * user's flow and the 2026-10-29/30 mockups):
  *   - FOCUSED: a thin glowing white line rings the black panel and the season
- *     on show is a raised BRIGHT WHITE tile. Up goes to the header, Down to
+ *     on show stays the DULL WHITE tile (v508). Up goes to the header, Down to
  *     the recommended row, Right to the episodes; OK starts CHOOSING.
  *   - CHOOSING: the line goes (v506), the season on show turns GREY, and a
  *     bright white tile with the gold arrow beside it moves between seasons
@@ -144,7 +144,7 @@ private val GREY_TILE = TilePaint(
     label = Color(0xFFC9C9D2),
 )
 
-/** The season being chosen, and the season on show while the picker has focus: bright white. */
+/** The season being chosen: bright white. */
 private val BRIGHT_TILE = TilePaint(
     face = listOf(Color(0xFFFAFAFC), Color(0xFFDCDDE2), Color(0xFFC3C4CB)),
     lip = Color(0xFF6B6C74),
@@ -153,7 +153,7 @@ private val BRIGHT_TILE = TilePaint(
     label = Color(0xFF3C3C46),
 )
 
-/** The season on show with focus elsewhere: a slightly dull white (the user's mockup, 2026-10-30). */
+/** The season on show when not choosing: a slightly dull white (the user's mockup, 2026-10-30). */
 private val DULL_TILE = TilePaint(
     face = listOf(Color(0xFFC9CACF), Color(0xFFB1B2B9), Color(0xFF9D9EA6)),
     lip = Color(0xFF4F5057),
@@ -473,8 +473,9 @@ private fun DrawScope.drawSeasonList(text: SeasonListText, frame: SeasonListFram
     // The line shows while focused, and goes while choosing (v506).
     val line = frame.focus * (1f - frame.choosing)
     if (line > 0f) drawFocusLine(line)
-    // The season on show: dull white, bright white while focused, grey while choosing.
-    val playing = lerpTile(lerpTile(DULL_TILE, BRIGHT_TILE, frame.focus), GREY_TILE, frame.choosing)
+    // The season on show: dull white, focused or not (v508); grey while choosing,
+    // and bright white only under the white tile.
+    val playing = lerpTile(DULL_TILE, GREY_TILE, frame.choosing)
     clipRect(left = left, top = top, right = right, bottom = bottom) {
         for (season in 1..frame.total) {
             val y = rowTop(season - 1f)
