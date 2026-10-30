@@ -71,8 +71,7 @@ internal fun BoxScope.EpisodeRow(
             // the mini cap) and ends 17 dp under the right cap (EPISODE_ROW_END).
             .offset(x = EPISODE_ROW_X, y = 299.5.dp)
             .width(EPISODE_ROW_END - EPISODE_ROW_X)
-            .height(260.dp) //122.25
-        //.background(Color.Red)
+            .height(260.dp)
     ) {
         when {
             episodesState.isLoadingEpisodes -> {

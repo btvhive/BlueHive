@@ -5,21 +5,17 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.Dp
 import com.example.bluehive.utilities.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.media3.common.util.UnstableApi
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.repository.RecommendationsRepository
-import com.example.bluehive.searchBarComponent.hiveBackdropBlur
-import com.example.bluehive.searchBarComponent.openSearchScreen
+import com.example.bluehive.details.shared.layout.detailsBackdropBlur
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.input.key.*
-import androidx.compose.ui.focus.focusRequester
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.SourceCatalog
 import com.example.bluehive.api.isJapaneseAnimation
@@ -28,7 +24,6 @@ import com.example.bluehive.webview.BeeLogo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.android.awaitFrame
 import com.example.bluehive.BlueHiveApplication
-import com.example.bluehive.R
 import com.example.bluehive.details.shared.playback.AnimeServerOverlays
 import com.example.bluehive.details.shared.playback.PlaybackErrorOverlay
 import com.example.bluehive.details.shared.playback.PlaybackLoadingOverlay
@@ -40,11 +35,8 @@ import com.example.bluehive.details.shared.playback.rememberSourcePlayback
 import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.rememberDetailsPeek
-import com.example.bluehive.details.shared.layout.PEEK_RIGHT_COLUMN_X
-import com.example.bluehive.details.shared.layout.PEEK_SOURCE_ROW_STEP
 import com.example.bluehive.details.shared.layout.peekExtraSourceRows
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
-import com.example.bluehive.details.shared.layout.DetailsCacheStats
 import com.example.bluehive.details.shared.layout.DetailsScaffold
 import com.example.bluehive.details.shared.layout.PeekRule
 import com.example.bluehive.details.shared.layout.recommendedRowTitle
@@ -119,18 +111,15 @@ fun MovieDetailsScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // The recommendations row -- see ExtrasState. This screen has no Extras
-    // switch any more: the peek layout (DetailsPeekState) shows the row under
-    // the play buttons from the start, so it loads on open, on a background
-    // thread. Extras itself never turns on here.
+    // The recommendations row -- see ExtrasState. The peek layout
+    // (DetailsPeekState) shows it under the play buttons from the start, so
+    // it loads on open, on a background thread.
     val extras = rememberExtrasState(
-        scope            = coroutineScope,
-        repository       = recommendationsRepository,
-        tmdbId           = args.mediaId,
-        mediaType        = args.mediaType,
-        startInExtras    = false,
-        loadInBackground = true,
-        prefetched       = null,
+        scope      = coroutineScope,
+        repository = recommendationsRepository,
+        tmdbId     = args.mediaId,
+        mediaType  = args.mediaType,
+        prefetched = null,
     )
 
     // The play button Down entered the row from, for Up to return to.
@@ -165,7 +154,6 @@ fun MovieDetailsScreen(
 
     // Focus requesters
     val favoriteFocusRequester = remember { FocusRequester() }
-    val extrasFocusRequester = remember { FocusRequester() }
     val trailerFocusRequester = remember { FocusRequester() }
 
     // The page's loading screen, shared by the source chain and the anime
@@ -251,11 +239,10 @@ fun MovieDetailsScreen(
     )
 
 
-    // Back: Extras collapses, the server prompt closes, an extraction cancels
-    // -- one call, after every holder, registered in that order (C2). See
-    // DetailsBackHandlers.
+    // Back: the server prompt closes, an extraction cancels, a server check
+    // stops -- one call, after every holder, registered in that order (C2).
+    // See DetailsBackHandlers.
     DetailsBackHandlers(
-        extras  = extras,
         anime   = anime,
         session = session,
         onExtractionCancelled = {
@@ -364,8 +351,6 @@ fun MovieDetailsScreen(
     }
 
 
-    // The image-cache stats -- see DetailsCacheStats.
-    DetailsCacheStats("MoviesDetailsScreen", extras.recommendations)
 
 
     // The row loads; opened in it, the header waits for its titles -- see PeekRowStart.
@@ -411,7 +396,6 @@ fun MovieDetailsScreen(
             pressTiming            = MovieHeaderPressTiming,
             enableFocus            = headerGate.isOpen,
             favoriteFocusRequester = favoriteFocusRequester,
-            extrasFocusRequester   = extrasFocusRequester,
             trailerFocusRequester  = trailerFocusRequester,
             search                 = search,
         ),
@@ -444,7 +428,7 @@ fun MovieDetailsScreen(
                 isAnime                = isAnime,
                 sources                = sources,
                 fontFamily             = passionFont,
-                playTop                = peek.playTop,
+                playTop                = { peek.playTop },
                 animeDubFocusRequester = animeDubFocusRequester,
                 animeSubFocusRequester = animeSubFocusRequester,
                 streamerFocus          = streamerFocus,
@@ -516,14 +500,6 @@ fun MovieDetailsScreen(
             DetailsSearchKeyboard(search, favoriteProfileId)
         },
         peek = peek,
-        modifier = Modifier.hiveBackdropBlur(search.isOpen),
+        modifier = Modifier.detailsBackdropBlur { search.isOpen },
     )
 }   // ← MovieDetailsScreen closes here
-
-
-//0x33000000 = 20% opacity (very light)
-//0x50000000 = 31% opacity (your current - too light)
-//0x20000000 = 50% opacity (medium)
-//0xCC000000 = 80% opacity (recommended)
-//0xE6000000 = 90% opacity (strong)
-//0xFF000000 = 100% opacity (full black)

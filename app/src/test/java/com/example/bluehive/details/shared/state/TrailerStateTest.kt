@@ -162,13 +162,4 @@ class TrailerStateTest {
         trailer.fastForward()
         assertTrue(trailer.isPlaying)
     }
-
-    @Test
-    fun playbackReport_setsPlaying() {
-        val trailer = TrailerState(url)
-        trailer.onPlaybackStateChanged(true)
-        assertTrue(trailer.isPlaying)
-        trailer.onPlaybackStateChanged(false)
-        assertFalse(trailer.isPlaying)
-    }
 }

@@ -26,8 +26,8 @@ import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.utilities.AppShapes
 
 /**
- * The bottom layers of both details screens, in the order they are drawn: the
- * page background, the content rating, the star and score, and the backdrop
+ * The bottom layers of both details screens, in the order they are drawn
+ * (over DetailsPageBackground): the content rating, the star and score, and the backdrop
  * picture -- hidden once the trailer has played, so the trailer player drawn
  * next shows in its place. The gradient goes on top of the trailer
  * ([DetailsGradient]), so it is a separate call.
@@ -48,10 +48,8 @@ fun BoxScope.DetailsBackdrop(
     /** The picture's accessibility label. The two screens word it differently. */
     backdropDescription: String,
     dongleRegular: FontFamily,
-    /** False in the movie screen's peek layout, which draws the background behind the sliding page. */
-    drawBackground: Boolean = true,
 ) {
-    if (drawBackground) DetailsPageBackground()
+    // The page background is drawn under the sliding page (DetailsScaffold).
 
 
     // ========================================================================================================================================= > // Content Rating

@@ -41,7 +41,6 @@ fun DetailsTrailerPlayer(
     isPlaying: Boolean,
     showPlayerView: Boolean,                 // 👈 NEW: controls visibility of PlayerView
     shouldExtract: Boolean,
-    onPlaybackStateChanged: (Boolean) -> Unit,
     onPlayerReady: (ExoPlayer?) -> Unit = {},  // Expose player to parent
     onExtractionFailed: () -> Unit = {},       // No stream: no video id, or every extractor failed
     modifier: Modifier = Modifier,
@@ -134,7 +133,7 @@ fun DetailsTrailerPlayer(
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         Log.d("DetailsTrailerPlayer", "isPlaying changed in player: $isPlaying")
-                        // 🚫 Don't call onPlaybackStateChanged(isPlaying) anymore
+                        // Not reported: the screen's TrailerState owns isPlaying.
                     }
 
                     override fun onPlayerError(error: PlaybackException) {

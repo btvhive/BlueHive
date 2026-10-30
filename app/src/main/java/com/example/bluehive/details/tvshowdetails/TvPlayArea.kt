@@ -87,7 +87,6 @@ internal fun BoxScope.TvPlayArea(
             .align(Alignment.TopStart)
             .size(width = 7.75.dp, height = 115.dp)
             .offset(x = RIGHT_CAP_X, y = 302.75.dp),
-        //.padding(start = 240.75.dp, top = 299.dp),
         contentScale = ContentScale.Fit
     )
 
@@ -121,7 +120,6 @@ internal fun BoxScope.TvPlayArea(
 
     SeasonAccordion(
         listedSeasons   = listedSeasons,
-        numberOfSeasons = numberOfSeasons,
         episodesState   = episodesState,
         focusMap        = focusMap,
         passionFont     = passionFont,
@@ -136,7 +134,6 @@ internal fun BoxScope.TvPlayArea(
             .align(Alignment.TopStart)
             .size(width = 30.5.dp, height = 122.25.dp)
             .offset(x = RIGHT_CAP_X, y = 299.dp),
-        //.padding(start = 240.75.dp, top = 299.dp),
         contentScale = ContentScale.Fit
     )
     // ===============================================================================> episode lAZY ROW DECORATIONS

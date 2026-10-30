@@ -24,12 +24,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
-import com.example.bluehive.details.shared.state.ExtrasState
 import com.example.bluehive.details.shared.state.FavoriteState
 import com.example.bluehive.details.shared.state.TrailerState
+import com.example.bluehive.utilities.ButtonLabelShadow
 import com.example.bluehive.utilities.ExtrasButtonColors
+import com.example.bluehive.utilities.FavoriteLabelHighlight
 import com.example.bluehive.utilities.FavoriteBronzeButtonColors
-import com.example.bluehive.utilities.FavoriteButtonColors
 import com.example.bluehive.utilities.FavoriteGoldButtonColors
 import com.example.bluehive.utilities.ModularButton
 import com.example.bluehive.utilities.ModularButtonAnimationConfig
@@ -47,9 +47,10 @@ import com.example.bluehive.utilities.TrailerControlButtonColors
 data class DetailsPressTiming(val durationMillis: Int, val bounceBackDelayMillis: Int)
 
 /**
- * The five buttons across the top of both details screens -- Favorites, Extras,
- * Play/Pause Trailer, Rewind and Fast-forward -- with the "Loading trailer..."
- * line between the trailer button and Rewind, drawn in that order.
+ * The buttons across the top of both details screens -- Favorites, Search,
+ * Rewind, Play/Pause Trailer and Fast-forward -- with the "Loading trailer..."
+ * line, drawn in that order. (The Extras button went with the peek layout:
+ * movie v417, TV v469; its code was removed in v515.)
  *
  * Each screen had its own copy of all five, identical except for how long a
  * press takes, which stays per screen through [pressTiming] (architecture §10,
@@ -69,36 +70,28 @@ fun BoxScope.DetailsHeaderButtons(
     /** False while the screen keeps first focus off the header. */
     enableFocus: Boolean,
     favoriteFocusRequester: FocusRequester,
-    extrasFocusRequester: FocusRequester,
     trailerFocusRequester: FocusRequester,
     favorite: FavoriteState,
-    extras: ExtrasState,
     trailer: TrailerState,
     /**
-     * False in the movie screen's peek layout: no Extras button, and the
-     * trailer controls become Rewind | Play Trailer | Forward, with Rewind's
-     * left edge on the metadata's (258.25 dp) and the trailer button 90 dp
-     * wide, not 100, in a 104.5 dp glow so less of it shows at the sides (the
-     * user's calls, 2026-10-26: 80 dp, then 88, 92 and 90 in the same glow).
-     */
-    showExtras: Boolean = true,
-    /**
-     * The peek layout's Search button, in Extras' old place and size: a
-     * magnifying glass on Extras' forest green. Null shows none.
+     * The Search button, in Extras' old place and size: a magnifying glass on
+     * Extras' forest green. Null shows none.
      */
     onSearch: (() -> Unit)? = null,
-    /** A shadow behind the trailer label and the Search and seek icons; null draws none. See ButtonLabelShadow. */
-    labelShadow: Shadow? = null,
-    /** The same for the Favorites label, which takes a highlight. See FavoriteLabelHighlight. */
-    favoriteLabelShadow: Shadow? = null,
 ) {
-    // Peek layout: Rewind at the metadata's left edge, then the trailer
-    // button and Forward, PEEK_TRAILER_GAP apart.
-    val rewindX = if (showExtras) 367.25.dp else 258.25.dp
-    val trailerX = if (showExtras) 256.25.dp else rewindX + SEEK_BUTTON_WIDTH + PEEK_TRAILER_GAP
-    val trailerWidth = if (showExtras) 100.dp else 90.dp
-    val trailerGlowWidth = if (showExtras) 116.5.dp else 104.5.dp
-    val forwardX = if (showExtras) 400.25.dp else trailerX + trailerWidth + PEEK_TRAILER_GAP
+    // The trailer controls are Rewind | Play Trailer | Forward: Rewind's left
+    // edge on the metadata's (258.25 dp), then the trailer button and Forward,
+    // PEEK_TRAILER_GAP apart. The trailer button is 90 dp in a 104.5 dp glow
+    // so less of it shows at the sides (the user's calls, 2026-10-26: 80 dp,
+    // then 88, 92 and 90 in the same glow).
+    val rewindX = 258.25.dp
+    val trailerX = rewindX + SEEK_BUTTON_WIDTH + PEEK_TRAILER_GAP
+    val trailerWidth = 90.dp
+    val trailerGlowWidth = 104.5.dp
+    val forwardX = trailerX + trailerWidth + PEEK_TRAILER_GAP
+    // The labels carry a shadow, like the Watch buttons; Favorites' dark
+    // label a light highlight instead.
+    val labelShadow = ButtonLabelShadow
 
     // Favorite Button - Uses internal offset for positioning
     DetailsFavoriteButton(
@@ -107,21 +100,11 @@ fun BoxScope.DetailsHeaderButtons(
         pressTiming = pressTiming,
         enableFocus = enableFocus,
         isFavorited = favorite.isFavorited,
-        goldAndBronze = !showExtras,
-        labelShadow = favoriteLabelShadow,
+        labelShadow = FavoriteLabelHighlight,
         onToggle = { favorite.toggle() }
     )
 
-    if (showExtras) {
-        DetailsExtrasButton(
-            fontFamily = fontFamily,
-            focusRequester = extrasFocusRequester,
-            pressTiming = pressTiming,
-            isToggled = extras.isOn,
-            enableFocus = enableFocus,
-            onClick = { extras.toggle() }
-        )
-    } else if (onSearch != null) {
+    if (onSearch != null) {
         DetailsSearchButton(
             fontFamily = fontFamily,
             pressTiming = pressTiming,
@@ -196,29 +179,17 @@ private fun DetailsFavoriteButton(
     offsetY: Dp = 139.dp,
     enableFocus: Boolean = true,
     isFavorited: Boolean = false,
-    /**
-     * The peek layout: a plain button, gold until the title is a favourite and
-     * bronze after, with the label set from outside (as Extras did) -- no held
-     * "toggled" look. False: the steel-blue toggle the TV screen keeps.
-     */
-    goldAndBronze: Boolean = false,
     labelShadow: Shadow? = null,
     onToggle: () -> Unit = {}
 ) {
+    // A plain button, gold until the title is a favourite and bronze after,
+    // with the label set from outside -- no held "toggled" look.
     ModularButton(
-        textConfig = if (goldAndBronze) {
-            ModularButtonTextConfig(
-                text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites",
-                shadow = labelShadow,
-            )
-        } else {
-            ModularButtonTextConfig(
-                text = "+ Add to Favorites",
-                toggledText = "- Remove from Favorites",
-                shadow = labelShadow,
-            )
-        },
-        isToggleable = !goldAndBronze,
+        textConfig = ModularButtonTextConfig(
+            text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites",
+            shadow = labelShadow,
+        ),
+        isToggleable = false,
         fontFamily = fontFamily,
         focusRequester = focusRequester,
         modifier = Modifier
@@ -250,12 +221,8 @@ private fun DetailsFavoriteButton(
             mainCornerRadius = 7f,
             secondCornerRadius = 8f,
         ),
-        // Shared — see FavoriteButtonColors in utilities/ModularButton.kt.
-        colors = when {
-            !goldAndBronze -> FavoriteButtonColors
-            isFavorited    -> FavoriteBronzeButtonColors
-            else           -> FavoriteGoldButtonColors
-        },
+        // Shared — see FavoriteGoldButtonColors in utilities/ModularButton.kt.
+        colors = if (isFavorited) FavoriteBronzeButtonColors else FavoriteGoldButtonColors,
         glowConfig = ModularButtonGlowConfig(
             enabled = true,
             defaultRes = R.drawable.button_focus_wide_glow,
@@ -273,87 +240,11 @@ private fun DetailsFavoriteButton(
         // 🔇 Disable internal pop sound (we'll use SoundPool instead)
         externalToggled = isFavorited,
         onClick = {
-            BlueHiveApplication.playClickSound()
             onToggle()
         }
     )
 }
 
-@Composable
-private fun DetailsExtrasButton(
-    fontFamily: FontFamily,
-    focusRequester: FocusRequester,
-    pressTiming: DetailsPressTiming,
-    isToggled: Boolean,                 // 🔹 NEW PARAM
-    offsetX: Dp = 182.dp,
-    offsetY: Dp = 139.dp,
-    enableFocus: Boolean = true,
-    onClick: () -> Unit = {},
-) {
-    ModularButton(
-        textConfig = ModularButtonTextConfig(
-            // NOT a toggle any more — the label is driven from outside, exactly
-            // like the trailer button's "Play/Pause Trailer". ModularButton only
-            // consults toggledText when isToggleable is true, so setting one here
-            // would be dead config; the state has to arrive through `text`.
-            text = if (isToggled) "Providers" else "Extras"
-        ),
-        // false, so this behaves as a plain button: press animation, a brief
-        // pressed flash, then back to rest. Previously true, which parked it in a
-        // permanently "held down" visual state whenever providers were showing.
-        isToggleable = false,
-        fontFamily = fontFamily,
-        focusRequester = focusRequester,
-        modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
-            .focusProperties { canFocus = enableFocus }
-            .onKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    (event.key == Key.DirectionLeft ||
-                            event.key == Key.DirectionRight ||
-                            event.key == Key.DirectionDown)
-                ) {
-                    BlueHiveApplication.playHoverSound()
-                }
-                false
-            },
-        dimensions = ModularButtonDimensions(
-            mainWidth = 49.5.dp,
-            mainHeight = 24.dp,
-            mainYOffset = 0.5.dp,
-            secondWidth = 49.5.dp,
-            secondHeight = 22.dp,
-            secondYOffset = 7.dp,
-            shadowHeight = 6.dp,
-            glowWidth = 71.6.dp,
-            glowHeight = 44.dp,
-            mainCornerRadius = 7f,
-            secondCornerRadius = 6f,
-        ),
-        // Shared — see ExtrasButtonColors in utilities/ModularButton.kt.
-        colors = ExtrasButtonColors,
-        glowConfig = ModularButtonGlowConfig(
-            enabled = true,
-            defaultRes = R.drawable.button_focus_narrow_glow,
-            toggledRes = R.drawable.button_focus_narrow_nonglow,
-            offsetX = (49.5.dp - 71.6.dp) / 2,
-            offsetY = (-4).dp
-        ),
-        animationConfig = ModularButtonAnimationConfig(
-            pressOffset = 2.5.dp,
-            textOffsetDefault = 1.dp,
-            textOffsetPressed = 2.4.dp,
-            durationMillis = pressTiming.durationMillis,
-            bounceBackDelayMillis = pressTiming.bounceBackDelayMillis
-        ),
-        onClick = {
-            BlueHiveApplication.playClickSound()
-            onClick()
-        }
-    )
-}
-
-/** Search: the Extras button's size, place, glow and forest green, with a magnifying glass instead of a label. */
 @Composable
 private fun DetailsSearchButton(
     fontFamily: FontFamily,
@@ -418,7 +309,6 @@ private fun DetailsSearchButton(
             bounceBackDelayMillis = pressTiming.bounceBackDelayMillis
         ),
         onClick = {
-            BlueHiveApplication.playClickSound()
             onClick()
         }
     )
@@ -493,7 +383,6 @@ private fun DetailsTrailerButton(
             bounceBackDelayMillis = pressTiming.bounceBackDelayMillis
         ),
         onClick = {
-            BlueHiveApplication.playClickSound()
             onClick()
         }
     )
@@ -577,7 +466,6 @@ private fun DetailsRewindButton(
             bounceBackDelayMillis = pressTiming.bounceBackDelayMillis
         ),
         onClick = {
-            BlueHiveApplication.playClickSound()
             onClick()
         }
     )
@@ -664,7 +552,6 @@ private fun DetailsFastForwardButton(
             bounceBackDelayMillis = pressTiming.bounceBackDelayMillis
         ),
         onClick = {
-            BlueHiveApplication.playClickSound()
             onClick()
         }
     )

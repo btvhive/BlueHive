@@ -19,7 +19,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.withContext
 import com.example.bluehive.BlueHiveApplication
-import com.example.bluehive.R
 import com.example.bluehive.details.shared.playback.AnimeServerOverlays
 import com.example.bluehive.details.shared.playback.PlaybackErrorOverlay
 import com.example.bluehive.details.shared.playback.PlaybackLoadingOverlay
@@ -31,7 +30,6 @@ import com.example.bluehive.details.shared.layout.DetailsHeaderSpec
 import com.example.bluehive.details.shared.layout.DetailsInfo
 import com.example.bluehive.details.shared.layout.DetailsPressTiming
 import com.example.bluehive.details.shared.layout.rememberDetailsPeek
-import com.example.bluehive.details.shared.layout.DetailsCacheStats
 import com.example.bluehive.details.shared.layout.DetailsScaffold
 import com.example.bluehive.details.shared.layout.recommendedRowTitle
 import com.example.bluehive.details.shared.layout.DetailsSearchKeyboard
@@ -39,7 +37,6 @@ import com.example.bluehive.details.shared.layout.rememberDetailsSearch
 import com.example.bluehive.details.shared.layout.PeekRowStart
 import com.example.bluehive.details.shared.layout.rememberDetailsHeaderGate
 import com.example.bluehive.details.shared.layout.detailsGenresTop
-import com.example.bluehive.searchBarComponent.openSearchScreen
 import com.example.bluehive.details.shared.layout.DetailsToast
 import com.example.bluehive.details.shared.layout.TimedDetailsToast
 import com.example.bluehive.details.shared.layout.rememberTimedNotice
@@ -49,7 +46,7 @@ import com.example.bluehive.details.shared.state.rememberExtrasState
 import com.example.bluehive.details.shared.state.rememberFavoriteState
 import com.example.bluehive.details.shared.state.rememberTrailerState
 import androidx.compose.ui.Modifier
-import com.example.bluehive.searchBarComponent.hiveBackdropBlur
+import com.example.bluehive.details.shared.layout.detailsBackdropBlur
 
 
 /**
@@ -71,7 +68,6 @@ fun TvShowDetailsScreen(
     args: TvShowDetailsArgs,
     recommendationsRepository: RecommendationsRepository,
     episodesRepository: EpisodesRepository,
-    onEpisodeSelected: (season: Int, episode: Int, episodeName: String?) -> Unit = { _, _, _ -> },
     onMediaClick: (MediaItem) -> Unit
 ) {
     // Load custom fonts
@@ -92,19 +88,16 @@ fun TvShowDetailsScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // The recommendations row -- see ExtrasState. This screen has no Extras
-    // switch any more: the peek layout (DetailsPeekState) shows the row under
-    // the episodes from the start, so it loads on open, on a background
-    // thread, unless the page opened with another show's prefetched row.
-    // Extras itself never turns on here.
+    // The recommendations row -- see ExtrasState. The peek layout
+    // (DetailsPeekState) shows it under the episodes from the start, so it
+    // loads on open, on a background thread, unless the page opened with
+    // another show's prefetched row.
     val extras = rememberExtrasState(
-        scope            = coroutineScope,
-        repository       = recommendationsRepository,
-        tmdbId           = args.mediaId,
-        mediaType        = args.mediaType,
-        startInExtras    = false,
-        loadInBackground = false,
-        prefetched       = prefetch?.recommendations,
+        scope      = coroutineScope,
+        repository = recommendationsRepository,
+        tmdbId     = args.mediaId,
+        mediaType  = args.mediaType,
+        prefetched = prefetch?.recommendations,
     )
 
     // Opened from history in Extras: the row takes focus as it loads, so the
@@ -137,7 +130,7 @@ fun TvShowDetailsScreen(
     val trailer = rememberTrailerState(args.trailerUrl)
 
     /**
-     * Silence the backdrop trailer, then record the episode being watched.
+     * Silence the backdrop trailer before a launch.
      *
      * EVERY PLAYBACK LAUNCH ON THIS SCREEN GOES THROUGH HERE, and that is the
      * point: the reset used to be missing entirely, so starting a trailer and
@@ -149,15 +142,15 @@ fun TvShowDetailsScreen(
      *
      * The movies screen has always reset both flags inline at each of its five
      * launch sites. This screen has five launch sites too and reset at none of
-     * them. Wrapping rather than copying that pattern means a sixth path cannot
-     * quietly forget: onEpisodeSelected is what a launch path must call anyway.
+     * them. One function every launch path calls means a sixth path cannot
+     * quietly forget. (It also reported the episode to the Activity, which
+     * never read it; that went in v515.)
      *
      * trailer.stop() clears isPlaying, which DetailsTrailerPlayer pauses on,
      * and hasPlayed, which hides the player view so the backdrop image returns.
      */
-    fun stopTrailerAndSelectEpisode(season: Int, episode: Int, epName: String?) {
+    fun stopTrailerForLaunch() {
         trailer.stop()
-        onEpisodeSelected(season, episode, epName)
     }
 
     // A first press on an unaired episode stays armed for
@@ -204,7 +197,7 @@ fun TvShowDetailsScreen(
 
     // The watched marks, read on open and on every resume -- see
     // WatchedEpisodesEffects.
-    WatchedEpisodesEffects(episodesState, args.mediaId, favoriteProfileId, coroutineScope)
+    WatchedEpisodesEffects(episodesState, args.mediaId, favoriteProfileId)
 
     // ════════════════════════════════════════════════════════════════════════
     //  Anime DuB / SuB extraction flow (ported from MoviesDetailsScreenCompose).
@@ -294,15 +287,14 @@ fun TvShowDetailsScreen(
         mediaType  = args.mediaType,
         mediaTitle = args.mediaTitle,
         request    = { PlaybackRequest.Episode(args.mediaId, episodesState.pendingSeason, episodesState.pendingEpisode, episodesState.pendingEpisodeName) },
-        onStart    = { stopTrailerAndSelectEpisode(episodesState.pendingSeason, episodesState.pendingEpisode, episodesState.pendingEpisodeName) },
+        onStart    = { stopTrailerForLaunch() },
     )
 
 
-    // Back: Extras collapses, the server prompt closes, an extraction cancels
-    // -- one call, after every holder, registered in that order (C2). See
-    // DetailsBackHandlers.
+    // Back: the server prompt closes, an extraction cancels, a server check
+    // stops -- one call, after every holder, registered in that order (C2).
+    // See DetailsBackHandlers.
     DetailsBackHandlers(
-        extras  = extras,
         anime   = anime,
         session = session,
         onExtractionCancelled = {
@@ -325,8 +317,6 @@ fun TvShowDetailsScreen(
         listedSeasons   = listedSeasons,
     )
 
-    // The image-cache stats -- see DetailsCacheStats.
-    DetailsCacheStats("TVShowsDetailsScreenCompose", extras.recommendations)
 
 
 
@@ -357,7 +347,6 @@ fun TvShowDetailsScreen(
             pressTiming            = TvHeaderPressTiming,
             enableFocus            = headerGate.isOpen,
             favoriteFocusRequester = focusMap.favorite,
-            extrasFocusRequester   = focusMap.extras,
             trailerFocusRequester  = focusMap.trailer,
             search                 = search,
         ),
@@ -430,7 +419,6 @@ fun TvShowDetailsScreen(
             // first so the loading and anime overlays below still cover it --
             // see EpisodeSourceOverlay.
             EpisodeSourceOverlay(
-                extras                      = extras,
                 episodesState               = episodesState,
                 focusMap                    = focusMap,
                 anime                       = anime,
@@ -442,9 +430,7 @@ fun TvShowDetailsScreen(
                 backdropUrl                 = args.backdropUrl,
                 passionFont                 = passionFont,
                 dongleRegular               = dongleRegular,
-                stopTrailerAndSelectEpisode = { season, episode, epName ->
-                    stopTrailerAndSelectEpisode(season, episode, epName)
-                },
+                stopTrailer                 = { stopTrailerForLaunch() },
                 onUnavailable               = { notYetAvailable.show() },
                 snap                        = episodeSnap,
             )
@@ -499,7 +485,7 @@ fun TvShowDetailsScreen(
         // (API 31+; older boxes get their dark scrims instead) -- the overlays
         // themselves stay sharp.
         pageModifier = Modifier
-            .hiveBackdropBlur(search.isOpen || episodeOverlayOpen(extras, episodesState))
+            .detailsBackdropBlur { search.isOpen || episodeOverlayOpen(episodesState) }
             .blockFocusWhileSnapping(episodeSnap),
     )
 }

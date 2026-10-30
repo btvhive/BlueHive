@@ -103,16 +103,39 @@ private const val SEASON_CHECK_TIMEOUT_MS = 3_000L
  */
 @Composable
 internal fun rememberResumeCount(): Int {
-    var count by remember { mutableIntStateOf(0) }
+    val returns = remember { ReturnCounter() }
     val owner = LocalLifecycleOwner.current
     DisposableEffect(owner) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) count++
-        }
+        val observer = LifecycleEventObserver { _, event -> returns.onEvent(event) }
         owner.lifecycle.addObserver(observer)
         onDispose { owner.lifecycle.removeObserver(observer) }
     }
-    return count
+    return returns.count
+}
+
+/**
+ * Counts the screen's RETURNS: a resume after it went away (paused). The
+ * observer is added after the first frame, when the screen is already
+ * resumed, and Lifecycle replays ON_CREATE / ON_START / ON_RESUME to it on
+ * the spot -- counting that replay restarted the season check (cancelling
+ * the first, in flight) and recomposed the screen as it opened (v515). A
+ * replay never holds an ON_PAUSE, so it counts nothing. Plain, so it is tested.
+ */
+internal class ReturnCounter {
+    var count by mutableIntStateOf(0)
+        private set
+    private var away = false
+
+    fun onEvent(event: Lifecycle.Event) {
+        when (event) {
+            Lifecycle.Event.ON_PAUSE -> away = true
+            Lifecycle.Event.ON_RESUME -> if (away) {
+                away = false
+                count++
+            }
+            else -> Unit
+        }
+    }
 }
 
 /**

@@ -389,7 +389,6 @@ private fun RetryButton(
             mainToggled = Color(0xFF535C67),
             secondDefault = Color(0xFF2E2C37),
             secondFocused = Color(0xFF52505A),
-            shadowColor = Color(0x50000000),
             textFocused = Color.White,
             textUnfocused = Color(0xFFBEBEBE),
         ),

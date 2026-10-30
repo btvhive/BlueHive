@@ -37,8 +37,11 @@ import com.exjunk.lib.thanos.vanish.VanishGLSurfaceView
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 /** How long the snap holds the press. Playback starts only after it. */
@@ -235,7 +238,17 @@ internal class EpisodeSnapState(
         finish()
     }
 
-    private fun finish() {
+    /**
+     * Runs [whilePlaying] each time the phase turns Playing, cancelling it if
+     * the phase leaves Playing first. Read in a flow, so the composable that
+     * starts it never recomposes on a phase change.
+     */
+    suspend fun followPlayback(whilePlaying: suspend () -> Unit) {
+        snapshotFlow { phase == Phase.Playing }.collectLatest { playing -> if (playing) whilePlaying() }
+    }
+
+    /** Back to Idle, the card shown. Internal so a test can end a playback. */
+    internal fun finish() {
         try {
             renderer?.resetAnimation()
         } catch (t: Throwable) {
@@ -255,8 +268,11 @@ internal class EpisodeSnapState(
         if (box.width < 1f || box.height < 1f) return false
         var bitmap = layer.toImageBitmap().asAndroidBitmap()
         // The renderer uploads it as a GL texture, which a HARDWARE bitmap cannot be.
+        // The copy reads the card back from the GPU (~2 MB): off the main thread,
+        // which is drawing the press (v515).
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && bitmap.config == Bitmap.Config.HARDWARE) {
-            bitmap = bitmap.copy(Bitmap.Config.ARGB_8888, false) ?: return false
+            val hardware = bitmap
+            bitmap = withContext(Dispatchers.Default) { hardware.copy(Bitmap.Config.ARGB_8888, false) } ?: return false
         }
         gl.startAnimationWithBitmap(
             bitmap,
@@ -279,9 +295,9 @@ internal fun rememberEpisodeSnap(session: PlaybackSession): EpisodeSnapState {
     val snap = remember { EpisodeSnapState(scope) }
     snap.layer = rememberGraphicsLayer()
     val lifecycle = LocalLifecycleOwner.current.lifecycle
-    LaunchedEffect(snap.phase == EpisodeSnapState.Phase.Playing) {
-        if (snap.phase == EpisodeSnapState.Phase.Playing) snap.awaitPlaybackEnd(session, lifecycle)
-    }
+    // Followed in a flow, not read here: this runs in the screen function, and
+    // reading the phase recomposed the whole screen three times a press (v515).
+    LaunchedEffect(snap) { snap.followPlayback { snap.awaitPlaybackEnd(session, lifecycle) } }
     return snap
 }
 

@@ -29,8 +29,6 @@ import com.example.bluehive.details.shared.state.FavoriteState
 import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.utilities.AppTypography
-import com.example.bluehive.utilities.ButtonLabelShadow
-import com.example.bluehive.utilities.FavoriteLabelHighlight
 import kotlinx.coroutines.flow.collectLatest
 import kotlin.math.roundToInt
 
@@ -49,11 +47,8 @@ data class DetailsInfo(
     val voteAverage: Double,
     val genres: String?,
     val overview: String?,
-    /**
-     * Where the genres line goes. Null keeps 96 dp, under all four metadata
-     * lines; the movie screen passes the top under the lines it actually has.
-     */
-    val genresTop: Dp? = null,
+    /** Where the genres line goes: under the metadata lines the page has (detailsGenresTop). */
+    val genresTop: Dp,
     /** The overview's most lines; null leaves it to its box. See OverviewLines. */
     val overviewLines: OverviewLines? = null,
     /** The recommended row's heading in the peek layout -- see recommendedRowTitle. */
@@ -89,7 +84,6 @@ data class DetailsHeaderSpec(
     /** False while the screen keeps first focus off the header. */
     val enableFocus: Boolean,
     val favoriteFocusRequester: FocusRequester,
-    val extrasFocusRequester: FocusRequester,
     val trailerFocusRequester: FocusRequester,
     /** The peek layout's Search button opens this keyboard; null shows no Search button. */
     val search: DetailsSearchState? = null,
@@ -98,13 +92,12 @@ data class DetailsHeaderSpec(
 /**
  * The frame both details screens draw around their own content: the
  * background, rating, backdrop, trailer and gradient; the logo or title, the
- * genres and the overview; the five header buttons; and the Extras switch,
- * which shows the screen's play area while Extras is off and the
- * recommendations row while it is on.
+ * genres and the overview; the header buttons; the play area and the
+ * recommended row peeking up under it.
  *
  * Each screen plugs in only what is its own (docs/details-redesign-architecture.md §4):
  *   - [labels]: the metadata labels under the rating;
- *   - [playArea]: everything under the header while Extras is off;
+ *   - [playArea]: everything under the header, above the row;
  *   - [overlays]: its overlay stack, in its own order (the two orders differ,
  *     §10 #14), drawn last so it covers everything;
  *   - what picking a recommendation and pressing Up from the row do.
@@ -117,10 +110,10 @@ data class DetailsHeaderSpec(
  * Each slot is its own recomposition scope: a change that only the play area
  * or only the overlays read re-runs that slot, not the whole screen.
  *
- * With a [peek] (both screens since 2026-10-27) the page is the peek layout instead: no
- * Extras button, the play area and the recommended row both shown, and
- * everything but the background on a layer that slides up while the row has
- * focus. The overlays stay put. See DetailsPeekState.
+ * The page is the peek layout (both screens since 2026-10-27; the Extras
+ * switch it replaced was removed in v515): the play area and the recommended
+ * row both shown, and everything but the background on a layer that slides up
+ * while the row has focus. The overlays stay put. See DetailsPeekState.
  */
 @UnstableApi
 @Composable
@@ -137,7 +130,7 @@ fun DetailsScaffold(
     labels: @Composable BoxScope.() -> Unit,
     playArea: @Composable BoxScope.() -> Unit,
     overlays: @Composable BoxScope.() -> Unit,
-    peek: DetailsPeekState? = null,
+    peek: DetailsPeekState,
     /** On the whole page: the movie screen blurs it behind its search keyboard. */
     modifier: Modifier = Modifier,
     /**
@@ -152,22 +145,13 @@ fun DetailsScaffold(
     Box(
         modifier = Modifier.fillMaxSize().then(modifier)
     ) {
-        if (peek == null) {
-            Box(Modifier.fillMaxSize().then(pageModifier)) {
+        Box(Modifier.fillMaxSize().then(pageModifier)) {
+            DetailsPageBackground()
+            DetailsSlidingPage(peek) {
                 DetailsPage(
                     info, trailer, favorite, extras, header, releaseTrailerOnLeave,
-                    onOpenRecommendation, onUpFromRecommendations, labels, playArea, null, dongleRegular,
+                    onOpenRecommendation, onUpFromRecommendations, labels, playArea, peek, dongleRegular,
                 )
-            }
-        } else {
-            Box(Modifier.fillMaxSize().then(pageModifier)) {
-                DetailsPageBackground()
-                DetailsSlidingPage(peek) {
-                    DetailsPage(
-                        info, trailer, favorite, extras, header, releaseTrailerOnLeave,
-                        onOpenRecommendation, onUpFromRecommendations, labels, playArea, peek, dongleRegular,
-                    )
-                }
             }
         }
 
@@ -193,12 +177,12 @@ private fun BoxScope.DetailsPage(
     onUpFromRecommendations: () -> Unit,
     labels: @Composable BoxScope.() -> Unit,
     playArea: @Composable BoxScope.() -> Unit,
-    peek: DetailsPeekState?,
+    peek: DetailsPeekState,
     dongleRegular: FontFamily,
 ) {
-        // Background, content rating, star and score, and the backdrop picture
-        // (hidden once the trailer has played) -- see DetailsBackdrop. In the
-        // peek layout the background is drawn under the sliding page instead.
+        // Content rating, star and score, and the backdrop picture (hidden once
+        // the trailer has played) -- see DetailsBackdrop. The background is
+        // drawn under the sliding page (DetailsPageBackground).
         DetailsBackdrop(
             contentRating       = info.contentRating,
             voteAverage         = info.voteAverage,
@@ -206,7 +190,6 @@ private fun BoxScope.DetailsPage(
             trailer             = trailer,
             backdropDescription = info.backdropDescription,
             dongleRegular       = dongleRegular,
-            drawBackground      = peek == null,
         )
 
         // This renders BEHIND the gradient overlay due to Box ordering.
@@ -224,64 +207,44 @@ private fun BoxScope.DetailsPage(
         labels()
         DetailsOverview(
             genres = info.genres,
-            genresTop = info.genresTop ?: 96.dp,
+            genresTop = info.genresTop,
             overview = info.overview,
             dongleRegular = dongleRegular,
-            onTextLaidOut = peek?.let { p ->
-                { bottom, lines ->
-                    p.overviewBottom = bottom
-                    p.overviewLines = lines
-                }
+            onTextLaidOut = { bottom, lines ->
+                peek.overviewBottom = bottom
+                peek.overviewLines = lines
             },
             lines = info.overviewLines,
         )
 
-        // Favorites, Extras, Trailer, "Loading trailer...", Rewind, Fast-forward:
+        // Favorites, Search, the trailer controls and "Loading trailer...":
         // see DetailsHeaderButtons. Each press runs a state holder's method.
         DetailsHeaderButtons(
             fontFamily = AppTypography.passionRegular,
             pressTiming = header.pressTiming,
             enableFocus = header.enableFocus,
             favoriteFocusRequester = header.favoriteFocusRequester,
-            extrasFocusRequester = header.extrasFocusRequester,
             trailerFocusRequester = header.trailerFocusRequester,
             favorite = favorite,
-            extras = extras,
             trailer = trailer,
-            showExtras = peek == null,
             // Search: the trailer stops, as it does when a recommendation
             // opens, and the keyboard opens over the page.
             onSearch = header.search?.let { search -> { trailer.stop(); search.open() } },
-            // The peek layout's labels carry a shadow, like its Watch buttons;
-            // Favorites' dark label a light highlight instead.
-            labelShadow = if (peek != null) ButtonLabelShadow else null,
-            favoriteLabelShadow = if (peek != null) FavoriteLabelHighlight else null,
         )
 
-        if (peek != null) {
-            // No overview counts as a short one (PeekRule).
-            if (info.overview.isNullOrBlank()) {
-                LaunchedEffect(peek) { peek.overviewLines = 0 }
-            }
-            // Peek layout: the play area, and the row peeking up under it.
-            playArea()
-            DetailsPeekRecommendations(
-                extras = extras,
-                peek = peek,
-                title = info.rowTitle,
-                onOpen = onOpenRecommendation,
-                onNavigateUp = onUpFromRecommendations,
-            )
-        } else if (!extras.isOn) {
-            // ✅ Conditionally show StreamerButtons OR RecommendedMediaSection
-            playArea()
-        } else {
-            DetailsRecommendations(
-                extras = extras,
-                onOpen = onOpenRecommendation,
-                onNavigateUp = onUpFromRecommendations,
-            )
+        // No overview counts as a short one (PeekRule).
+        if (info.overview.isNullOrBlank()) {
+            LaunchedEffect(peek) { peek.overviewLines = 0 }
         }
+        // The play area, and the row peeking up under it.
+        playArea()
+        DetailsPeekRecommendations(
+            extras = extras,
+            peek = peek,
+            title = info.rowTitle,
+            onOpen = onOpenRecommendation,
+            onNavigateUp = onUpFromRecommendations,
+        )
 }
 
 /**

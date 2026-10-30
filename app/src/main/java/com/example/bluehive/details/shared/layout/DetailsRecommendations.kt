@@ -3,45 +3,26 @@ package com.example.bluehive.details.shared.layout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
 import com.example.bluehive.details.shared.state.ExtrasState
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.utilities.AppTypography
 import com.example.bluehive.utilities.RecommendedMediaSection
-
-/**
- * The Extras row, shown in place of the play area while Extras is on. Nothing
- * shows until the recommendations arrive.
- *
- * What picking a title and pressing Up do stay each screen's own (architecture
- * §10, #4 and #11): the TV screen prefetches the picked title's first season
- * and row for a second before opening it, the movie screen opens it at once,
- * and Up from the movie row asks for focus on Extras twice.
- *
- * Moved here from both screens in Stage 4 of the details redesign.
- */
-@Composable
-fun DetailsRecommendations(
-    extras: ExtrasState,
-    onOpen: (MediaItem) -> Unit,
-    onNavigateUp: () -> Unit,
-) {
-    // ✅ Show recommended media section
-    if (extras.recommendations.isNotEmpty()) {
-        RecommendedMediaSection(
-            recommendations = extras.recommendations,
-            onMediaClick = onOpen,
-            onNavigateUp = onNavigateUp
-        )
-    }
-}
+import com.example.bluehive.utilities.offsetWithY
 
 /**
  * The details screens' peek row (DetailsPeekState): always under the play
  * area, from the moment its titles arrive. Its heading is smaller and grey
  * until the row has focus; it does not take focus on load unless the page
- * opened in Extras; and its focus slides the page.
+ * opened in the row; and its focus slides the page.
+ *
+ * What picking a title and pressing Up do stay each screen's own (architecture
+ * §10, #4 and #11): the TV screen prefetches the picked title's first season
+ * and row for a second before opening it, the movie screen opens it at once.
+ * (The old Extras row, shown in place of the play area, was removed in v515.)
  */
 @Composable
 fun DetailsPeekRecommendations(
@@ -57,7 +38,9 @@ fun DetailsPeekRecommendations(
             onMediaClick = onOpen,
             onNavigateUp = onNavigateUp,
             title = title,
-            topOffset = peek.rowTop,
+            // Read while placing (v515): the row's top waits on the overview's
+            // first layout, and reading it here recomposed the row as it arrived.
+            modifier = Modifier.offsetWithY(0.dp) { peek.rowTop },
             titleFontSize = PEEK_TITLE_FONT_SIZE,
             // Trying Asap Condensed Bold in place of Passion One (the
             // user's experiment, 2026-10-28).

@@ -74,7 +74,6 @@ data class ModularButtonColors(
     val secondDefault: Color = Color(0xFF2E2C37),
     val secondFocused: Color = Color(0xFF52505A),
     val secondToggled: Color = Color(0xFF372B67),
-    val shadowColor: Color = Color(0x50000000),
     val textFocused: Color = Color.White,
     val textUnfocused: Color = Color(0xFF8A8F97),
     val textUnfocusedToggled: Color = Color(0xFF918181),
@@ -130,7 +129,6 @@ val AnimeDubButtonColors = ModularButtonColors(
     // green or blue button the moment it was toggled.
     secondToggled = Color(0xFF4A0000),
     textUnfocusedToggled = Color(0xFF9E3939),
-    shadowColor   = Color(0x60000000),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFD6D6D6),
 )
@@ -159,7 +157,6 @@ val AnimeSubButtonColors = ModularButtonColors(
     secondFocused = Color(0xFF781BBB),
     secondToggled = Color(0xFF2E0A4A),
     textUnfocusedToggled = Color(0xFF61388B),
-    shadowColor   = Color(0x60000000),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFD6D6D6),
 )
@@ -213,7 +210,6 @@ val StreamSourceButtonColors = ModularButtonColors(
     // place a purple strip was ever in-family, but it should be ITS violet.
     secondToggled = Color(0xFF2F1C54),
     textUnfocusedToggled = Color(0xFF3C3A61),
-    shadowColor   = Color(0x60000000),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFD6D6D6),
 )
@@ -270,7 +266,6 @@ val TrailerControlButtonColors = ModularButtonColors(
     secondFocused = Color(0xFF6B2224),
     secondToggled = Color(0xFF250D0E),
     textUnfocusedToggled = Color(0xFF804444),
-    shadowColor   = Color(0x50000000),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFBEBEBE),
 )
@@ -293,32 +288,18 @@ val ExtrasButtonColors = ModularButtonColors(
     secondFocused = Color(0xFF276E3E),
     secondToggled = Color(0xFF0D2715),
     textUnfocusedToggled = Color(0xFF316141),
-    shadowColor   = Color(0x50000000),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFBEBEBE),
 )
 
 /**
- * Add to Favorites — steel blue.
+ * Add to Favorites on both details pages (peek layout; movie 2026-10-26, TV
+ * v469): gold while the title is not a favourite, bronze once it is. Not a
+ * toggle -- the colour says which, and a press only dips.
  *
- * A DIFFERENT BLUE FROM THE WATCH BUTTONS, on purpose. Those are hue 241 at 70-100%
- * saturation (0xFF2926D9 / 0xFF0004FF) -- the loudest colour in the app, because starting
- * playback is the loudest action. This is hue 210 at 55%: recognisably the same
- * family, clearly not the same job. Putting the vivid blue here would make
- * "favourite this" look like "play this".
- *
- * Also the best label contrast of the four palettes on these screens. The gold
- * this replaced was the worst — white on a bright gold face is thin, and it got
- * thinner as focus lifted it.
- */
-/**
- * The movie page's Add to Favorites (peek layout, 2026-10-26): gold while the
- * title is not a favourite, bronze once it is. Not a toggle -- the colour says
- * which, and a press only dips.
- *
- * DARK TEXT ON THE GOLD. White on gold is what retired the old gold palette
- * (see FavoriteButtonColors), so this takes the honeycomb keyboard's gold
- * Search key's answer instead: a near-black brown label, about 6:1 on the idle
+ * DARK TEXT ON THE GOLD. White on a bright gold face is thin, and got thinner
+ * as focus lifted it -- what retired the first gold palette -- so this takes
+ * the honeycomb keyboard's gold Search key's answer instead: a near-black brown label, about 6:1 on the idle
  * face. The bronze wears the same label (the user's pick, 2026-10-26): about
  * 4.4:1 on its focused face, 2.7:1 on the idle one.
  */
@@ -331,7 +312,6 @@ val FavoriteGoldButtonColors = ModularButtonColors(
     secondDefault = Color(0xFF6E4F0A),
     secondFocused = Color(0xFF9A6F10),
     secondToggled = Color(0xFF4A3507),
-    shadowColor   = Color(0x50000000),
     textFocused   = Color(0xFF2A1C00),
     textUnfocused = Color(0xFF3A2905),
 )
@@ -346,33 +326,8 @@ val FavoriteBronzeButtonColors = ModularButtonColors(
     secondDefault = Color(0xFF4A2C12),
     secondFocused = Color(0xFF6B4220),
     secondToggled = Color(0xFF331E0C),
-    shadowColor   = Color(0x50000000),
     textFocused   = FavoriteGoldButtonColors.textFocused,
     textUnfocused = FavoriteGoldButtonColors.textUnfocused,
-)
-
-val FavoriteButtonColors = ModularButtonColors(
-    // Idle face: steel blue.                     HSL 210°, 55%, 40%
-    mainDefault   = Color(0xFF2E669E),
-    // Focused face: same hue, lifted.            HSL 210°, 55%, 54%
-    mainFocused   = Color(0xFF498ACA),
-    mainToggled   = Color(0xFF16304A),
-    secondDefault = Color(0xFF16304A),
-    secondFocused = Color(0xFF2A5C8C),
-    secondToggled = Color(0xFF0E2032),
-    // THE SELECTED-BUT-NOT-FOCUSED LABEL. Left unset, this fell back to
-    // ModularButtonColors' default 0xFF918181 -- a warm grey that belongs to
-    // no palette here, so every toggled button wore the same washed-out
-    // label whatever colour its face was.
-    //
-    // Each is now a lighter tone of that palette's OWN toggled face, sitting
-    // near 1.7:1 against it: deliberately faint, sunk into the face
-    // rather than on top of it. A selected control
-    // the cursor has left should read as settled, not as shouting.
-    textUnfocusedToggled = Color(0xFF355373),
-    shadowColor   = Color(0x50000000),
-    textFocused   = Color.White,
-    textUnfocused = Color(0xFFBEBEBE),
 )
 
 @Immutable
@@ -416,15 +371,8 @@ data class ModularButtonGlowConfig(
     val offsetX: Dp = 0.dp,
     val offsetY: Dp = (-10).dp,
 
-//The red background IS rounded — you can see it in the screenshot. The clip is working correctly. The problem is simply that your glow PNG is larger than the clip bounds, so the glow image is rendering outside/beyond the clipped area and you're seeing the unclipped overflow.
-//The glow image overflows because it's a soft light bloom — its visible pixels extend beyond the declared glowWidth x glowHeight size, so the corners you're trying to clip are actually transparent in the PNG already, and the visible glow parts are within the bounds.
-//This means cornerRadius on the clip will never visually round the glow because the glow PNG doesn't have hard rectangular edges to begin with — it's already a soft oval/blob shape.
-//So the question is: what are you actually trying to achieve with cornerRadius?
-//
-//If you want to constrain the glow to not bleed outside a rounded container, the clip is already working (red bg proves it)
-//If you want the glow itself to have a different shape, you need a different glow PNG that has harder rectangular edges that can actually be clipped
-//
-//Can you show me what you're trying to achieve visually? Because based on what I can see, the cornerRadius parameter may simply not be applicable to your current glow PNG's shape.
+    // The glow PNGs are soft blooms, so this clip only shows on a glow with
+    // hard edges; on the current ones it changes nothing visible.
     val cornerRadius: Dp = 0.dp,          // controls glow roundness
     val fadeOutDurationMillis: Int = 80,   // how fast glow fades out on press/toggle
     val fadeInDurationMillis: Int = 150,   // how fast glow fades back in on release
@@ -530,7 +478,9 @@ fun ModularButton(
         label = "mainYOffset"
     )
 
-    val textYOffset by animateDpAsState(
+    // Read while placing (offsetWithY), never while composing: a press
+    // re-placed the label but recomposed the whole button every frame (v515).
+    val textYOffset = animateDpAsState(
         targetValue = if ((isToggleable && effectiveToggled) || (!isToggleable && pressWave % 2 == 1))
             animationConfig.textOffsetPressed else animationConfig.textOffsetDefault,
         animationSpec = tween(durationMillis = animationConfig.durationMillis),
@@ -833,7 +783,7 @@ fun ModularButton(
                             colorFilter = ColorFilter.tint(iconShadow.color),
                             modifier = Modifier
                                 .size(textConfig.iconSize)
-                                .offset(y = textYOffset + dy, x = textConfig.offsetX + dx)
+                                .offsetWithY(textConfig.offsetX + dx) { textYOffset.value + dy }
                                 .blur(blur, BlurredEdgeTreatment.Unbounded)
                         )
                     }
@@ -843,7 +793,7 @@ fun ModularButton(
                         colorFilter = ColorFilter.tint(labelColor),
                         modifier = Modifier
                             .size(textConfig.iconSize)
-                            .offset(y = textYOffset, x = textConfig.offsetX)
+                            .offsetWithY(textConfig.offsetX) { textYOffset.value }
                     )
                 } else {
                     Text(
@@ -854,7 +804,7 @@ fun ModularButton(
                         textAlign = TextAlign.Center,
                         style = LocalTextStyle.current.let { base -> if (textConfig.shadow != null) base.copy(shadow = textConfig.shadow) else base },
                         modifier = Modifier
-                            .offset(y = textYOffset, x = textConfig.offsetX)
+                            .offsetWithY(textConfig.offsetX) { textYOffset.value }
                             .semantics { contentDescription = labelText }
                     )
                 }

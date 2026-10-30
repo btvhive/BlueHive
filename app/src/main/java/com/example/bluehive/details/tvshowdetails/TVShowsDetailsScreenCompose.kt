@@ -20,14 +20,6 @@ class TVShowsDetailsScreenCompose: ComponentActivity() {
 
 
     private lateinit var args: TvShowDetailsArgs
-    internal var currentSeasonForWatch: Int = 1
-    internal var currentEpisodeForWatch: Int = 1
-    internal var currentEpisodeNameForWatch: String? = null
-
-
-    companion object {
-        private const val TAG = "TVShowsDetailsScreenCompose"
-    }
 
     fun openMediaDetails(media: MediaItem) {
         DetailsBackNavigation.pushCurrent(
@@ -80,11 +72,6 @@ class TVShowsDetailsScreenCompose: ComponentActivity() {
                 args = args,
                 recommendationsRepository = recommendationsRepository,
                 episodesRepository = episodesRepository,
-                onEpisodeSelected = { season, episode, epName ->
-                    currentSeasonForWatch       = season
-                    currentEpisodeForWatch      = episode
-                    currentEpisodeNameForWatch  = epName
-                },
                 onMediaClick = { media ->
                     openMediaDetails(media)
                 }

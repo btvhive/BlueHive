@@ -19,7 +19,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.CacheDrawScope
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
@@ -31,6 +32,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -55,6 +58,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 
 /*
  * The season list: the season picker inside extended_mini_left_upper_body
@@ -117,7 +122,7 @@ private val SLOT_SHADE_DEPTH = 3.dp
 private val SLOT_LIGHT = Color(0x0DFFFFFF)
 
 /** A raised tile: a three-stop gradient on a darker lip, lit along its top, and its text. */
-private class TilePaint(
+internal class TilePaint(
     val face: List<Color>,
     val lip: Color,
     val shine: Color,
@@ -126,7 +131,7 @@ private class TilePaint(
 )
 
 /** Blends two tiles' paint, [t] of the way from [a] to [b]. */
-private fun lerpTile(a: TilePaint, b: TilePaint, t: Float): TilePaint =
+internal fun lerpTile(a: TilePaint, b: TilePaint, t: Float): TilePaint =
     if (t <= 0f) a else if (t >= 1f) b else TilePaint(
         face = a.face.indices.map { lerp(a.face[it], b.face[it], t) },
         lip = lerp(a.lip, b.lip, t),
@@ -136,7 +141,7 @@ private fun lerpTile(a: TilePaint, b: TilePaint, t: Float): TilePaint =
     )
 
 /** The season on show while choosing another: mockup F's "lit charcoal" grey (the user's pick, 2026-10-30). */
-private val GREY_TILE = TilePaint(
+internal val GREY_TILE = TilePaint(
     face = listOf(Color(0xFF4A4A54), Color(0xFF36363E), Color(0xFF2C2C33)),
     lip = Color(0xFF151518),
     shine = Color(0x66FFFFFF),
@@ -145,7 +150,7 @@ private val GREY_TILE = TilePaint(
 )
 
 /** The season being chosen: bright white. */
-private val BRIGHT_TILE = TilePaint(
+internal val BRIGHT_TILE = TilePaint(
     face = listOf(Color(0xFFFAFAFC), Color(0xFFDCDDE2), Color(0xFFC3C4CB)),
     lip = Color(0xFF6B6C74),
     shine = Color(0xE6FFFFFF),
@@ -154,7 +159,7 @@ private val BRIGHT_TILE = TilePaint(
 )
 
 /** The season on show when not choosing: a slightly dull white (the user's mockup, 2026-10-30). */
-private val DULL_TILE = TilePaint(
+internal val DULL_TILE = TilePaint(
     face = listOf(Color(0xFFC9CACF), Color(0xFFB1B2B9), Color(0xFF9D9EA6)),
     lip = Color(0xFF4F5057),
     shine = Color(0x59FFFFFF),
@@ -162,6 +167,9 @@ private val DULL_TILE = TilePaint(
     label = Color(0xFF45454F),
 )
 private val TILE_FACE_STOPS = floatArrayOf(0f, 0.55f, 1f)
+
+/** The three tiles the list ever rests on; their faces are made once (SeasonListBrushes). */
+private val FIXED_TILES = listOf(DULL_TILE, GREY_TILE, BRIGHT_TILE)
 private val TILE_LIP_DEPTH = 2.5.dp
 private val TILE_SHINE_DEPTH = 0.6.dp
 
@@ -237,6 +245,14 @@ internal fun seasonListScroll(shown: Int, total: Int): Float =
         (shown - 1 - (LIST_VISIBLE_ROWS - 1) / 2f).coerceIn(0f, (total - LIST_VISIBLE_ROWS).toFloat())
     }
 
+/**
+ * The seasons any part of which is in the window with the list scrolled
+ * [scroll] rows: the only ones drawn, so a long show's frame costs what a
+ * short one's does. Pure, so it is tested.
+ */
+internal fun seasonsInView(scroll: Float, total: Int): IntRange =
+    (floor(scroll).toInt().coerceAtLeast(0) + 1)..(ceil(scroll).toInt() + LIST_VISIBLE_ROWS).coerceAtMost(total)
+
 /** How far the list is from its last scroll, in rows: 0 at the bottom. */
 private fun rowsBelow(scroll: Float, total: Int): Float = total - LIST_VISIBLE_ROWS - scroll
 
@@ -276,7 +292,6 @@ private class SeasonListFrame(
 @Composable
 internal fun BoxScope.SeasonAccordion(
     listedSeasons: Int?,
-    numberOfSeasons: Int,
     episodesState: EpisodesState,
     focusMap: TvFocusMap,
     passionFont: FontFamily,
@@ -286,7 +301,7 @@ internal fun BoxScope.SeasonAccordion(
     // Waits for the season check, as the column did, so a season with
     // nothing aired yet never shows.
     val total = listedSeasons ?: 0
-    if (numberOfSeasons <= 0 || total <= 0) return
+    if (total <= 0) return
 
     val loaded = episodesState.selectedSeason.coerceIn(1, total)
     var browsing by remember { mutableIntStateOf(loaded) }
@@ -385,9 +400,17 @@ internal fun BoxScope.SeasonAccordion(
                 }
             }
             .focusable()
-            .drawBehind {
+            // Its own layer (v515): the list's frames -- a move, a fade, the
+            // press -- redraw the list alone, not the page around it, and the
+            // page's slide doesn't redraw the list.
+            .graphicsLayer()
+            .drawWithCache {
+                // Everything that never changes is made once per size (v515).
+                val paint = seasonListPaint()
+                onDrawBehind {
                 drawSeasonList(
                     text,
+                    paint,
                     SeasonListFrame(
                         total = total,
                         loaded = loaded,
@@ -399,6 +422,7 @@ internal fun BoxScope.SeasonAccordion(
                         lineOff = lineOff,
                     ),
                 )
+                }
             }
     )
 }
@@ -472,7 +496,7 @@ private fun rememberSeasonListText(total: Int, passionFont: FontFamily): SeasonL
 }
 
 /** The whole list, drawn from [frame], so a move redraws and recomposes nothing. */
-private fun DrawScope.drawSeasonList(text: SeasonListText, frame: SeasonListFrame) {
+private fun DrawScope.drawSeasonList(text: SeasonListText, paint: SeasonListPaint, frame: SeasonListFrame) {
     val step = ROW_STEP.toPx()
     val rowHeight = step - ROW_GAP.toPx()
     val left = LIST_LEFT.toPx()
@@ -484,22 +508,23 @@ private fun DrawScope.drawSeasonList(text: SeasonListText, frame: SeasonListFram
 
     // The line shows while focused, and goes while choosing (v506).
     val line = if (frame.lineOff) 0f else frame.focus * (1f - frame.choosing)
-    if (line > 0f) drawFocusLine(line)
+    if (line > 0f) drawFocusLine(paint, line)
     // The season on show: dull white, focused or not (v508); grey while choosing,
     // and bright white only under the white tile.
     val playing = lerpTile(DULL_TILE, GREY_TILE, frame.choosing)
     clipRect(left = left, top = top, right = right, bottom = bottom) {
-        for (season in 1..frame.total) {
+        val inView = seasonsInView(frame.scroll, frame.total)
+        for (season in inView) {
             val y = rowTop(season - 1f)
             if (y > bottom || y + rowHeight < top) continue
-            drawSlot(left, y, right - left, rowHeight)
+            drawSlot(paint.brushes, left, y, right - left, rowHeight)
         }
-        drawTile(playing, left, rowTop(frame.loaded - 1f), right - left, rowHeight, sink)
+        drawTile(paint.brushes, playing, left, rowTop(frame.loaded - 1f), right - left, rowHeight, sink)
         if (frame.choosing > 0f) {
             // OK presses in the season just played, which is the white tile's (v507).
-            drawTile(BRIGHT_TILE, left, rowTop(frame.cursor), right - left, rowHeight, sink, frame.choosing)
+            drawTile(paint.brushes, BRIGHT_TILE, left, rowTop(frame.cursor), right - left, rowHeight, sink, frame.choosing)
         }
-        for (season in 1..frame.total) {
+        for (season in inView) {
             val y = rowTop(season - 1f)
             if (y > bottom || y + rowHeight < top) continue
             val isLoaded = season == frame.loaded
@@ -520,116 +545,166 @@ private fun DrawScope.drawSeasonList(text: SeasonListText, frame: SeasonListFram
             )
         }
     }
-    drawListFades(left, top, right, bottom, frame.scroll, frame.total)
+    drawListFades(paint.brushes, left, top, right, bottom, frame.scroll, frame.total)
     if (frame.choosing > 0f && frame.total > 1) {
-        drawArrow(rowTop(frame.cursor) + rowHeight / 2, frame.choosing)
+        drawArrow(paint, rowTop(frame.cursor) + rowHeight / 2, frame.choosing)
     }
     // The carets, while choosing: gold while there are more seasons that way, grey at an end.
     val more = { amount: Float -> lerp(CARET_OFF, GOLD, amount.coerceIn(0f, 1f) * frame.choosing) }
-    drawCaret(CARET_UP_TOP.toPx(), up = true, color = more(frame.scroll))
-    drawCaret(CARET_DOWN_TOP.toPx(), up = false, color = more(rowsBelow(frame.scroll, frame.total)))
+    drawPath(paint.caretUp, more(frame.scroll))
+    drawPath(paint.caretDown, more(rowsBelow(frame.scroll, frame.total)))
 }
 
-private fun DrawScope.drawSlot(x: Float, y: Float, width: Float, height: Float) {
+/**
+ * The list's gradients, made once per size: a slot's and a tile's are made
+ * at the top of a row (y 0) and drawn translated to it, the fades where they
+ * sit. A frame allocates none of them; only a tile blending between two of
+ * [FIXED_TILES] (a 120 ms fade) gets its face made on the spot. Plain values,
+ * so it is tested.
+ */
+internal class SeasonListBrushes(private val rowHeight: Float, shadeDepth: Float, top: Float, bottom: Float, fadeDepth: Float) {
+    val slot: Brush = Brush.verticalGradient(listOf(SLOT_TOP, SLOT_BOTTOM), startY = 0f, endY = rowHeight)
+    val slotShade: Brush = Brush.verticalGradient(listOf(SLOT_SHADE, Color.Transparent), startY = 0f, endY = shadeDepth)
+    val fadeAbove: Brush = Brush.verticalGradient(listOf(PANEL_BLACK, Color.Transparent), startY = top, endY = top + fadeDepth)
+    val fadeBelow: Brush = Brush.verticalGradient(listOf(Color.Transparent, PANEL_BLACK), startY = bottom - fadeDepth, endY = bottom)
+    // TilePaint has no equals, so this matches the three tiles themselves.
+    private val faces: Map<TilePaint, Brush> = FIXED_TILES.associateWith { tileFace(it, rowHeight) }
+
+    /** [paint]'s face, from y 0 to the row's height. */
+    fun face(paint: TilePaint): Brush = faces[paint] ?: tileFace(paint, rowHeight)
+}
+
+/** A tile's face gradient from y 0 to [height]. */
+internal fun tileFace(paint: TilePaint, height: Float): Brush =
+    Brush.verticalGradient(*Array(TILE_FACE_STOPS.size) { TILE_FACE_STOPS[it] to paint.face[it] }, startY = 0f, endY = height)
+
+/** Everything the list draws with that never changes; see [seasonListPaint]. */
+private class SeasonListPaint(
+    val brushes: SeasonListBrushes,
+    /** The arrow pointing right with its middle at y 0; drawn translated to the white tile. */
+    val arrow: Path,
+    val caretUp: Path,
+    val caretDown: Path,
+    val glowStrokes: List<Pair<Stroke, Float>>,
+    val lineStroke: Stroke,
+)
+
+private fun CacheDrawScope.seasonListPaint(): SeasonListPaint {
+    val step = ROW_STEP.toPx()
+    val top = LIST_INSET_V.toPx()
+    val bottom = size.height - LIST_INSET_V.toPx()
+    val x = ARROW_X.toPx()
+    val half = ARROW_HEIGHT.toPx() / 2
+    return SeasonListPaint(
+        brushes = SeasonListBrushes(
+            rowHeight = step - ROW_GAP.toPx(),
+            shadeDepth = SLOT_SHADE_DEPTH.toPx(),
+            top = top,
+            bottom = bottom,
+            fadeDepth = FADE_DEPTH.toPx(),
+        ),
+        arrow = Path().apply {
+            moveTo(x, -half)
+            lineTo(x + ARROW_WIDTH.toPx(), 0f)
+            lineTo(x, half)
+            close()
+        },
+        caretUp = caretPath(CARET_UP_TOP.toPx(), up = true),
+        caretDown = caretPath(CARET_DOWN_TOP.toPx(), up = false),
+        glowStrokes = FOCUS_GLOW.map { (width, glow) -> Stroke(width.toPx()) to glow },
+        lineStroke = Stroke(FOCUS_LINE_WIDTH.toPx()),
+    )
+}
+
+/** A caret at the top or bottom of the arrow's track, its box's top at [y]. */
+private fun CacheDrawScope.caretPath(y: Float, up: Boolean): Path {
+    val centre = CARET_X.toPx()
+    val half = CARET_WIDTH.toPx() / 2
+    val height = CARET_HEIGHT.toPx()
+    val tip = if (up) y else y + height
+    val base = if (up) y + height else y
+    return Path().apply {
+        moveTo(centre, tip)
+        lineTo(centre + half, base)
+        lineTo(centre - half, base)
+        close()
+    }
+}
+
+private fun DrawScope.drawSlot(brushes: SeasonListBrushes, x: Float, y: Float, width: Float, height: Float) {
     val radius = CornerRadius(ROW_CORNER.toPx())
-    drawRoundRect(
-        brush = Brush.verticalGradient(listOf(SLOT_TOP, SLOT_BOTTOM), startY = y, endY = y + height),
-        topLeft = Offset(x, y),
-        size = Size(width, height),
-        cornerRadius = radius,
-    )
-    // Shaded inside the top edge, as if sunk into the panel.
-    drawRoundRect(
-        brush = Brush.verticalGradient(listOf(SLOT_SHADE, Color.Transparent), startY = y, endY = y + SLOT_SHADE_DEPTH.toPx()),
-        topLeft = Offset(x, y),
-        size = Size(width, height),
-        cornerRadius = radius,
-    )
+    translate(top = y) {
+        drawRoundRect(brush = brushes.slot, topLeft = Offset(x, 0f), size = Size(width, height), cornerRadius = radius)
+        // Shaded inside the top edge, as if sunk into the panel.
+        drawRoundRect(brush = brushes.slotShade, topLeft = Offset(x, 0f), size = Size(width, height), cornerRadius = radius)
+    }
     val light = 0.6.dp.toPx()
     drawRect(SLOT_LIGHT, topLeft = Offset(x + radius.x, y + height - light), size = Size(width - radius.x * 2, light))
 }
 
 /** A raised tile at [y], its face pressed [sink] px onto its lip. */
-private fun DrawScope.drawTile(paint: TilePaint, x: Float, y: Float, width: Float, height: Float, sink: Float, alpha: Float = 1f) {
+private fun DrawScope.drawTile(
+    brushes: SeasonListBrushes,
+    paint: TilePaint,
+    x: Float,
+    y: Float,
+    width: Float,
+    height: Float,
+    sink: Float,
+    alpha: Float = 1f,
+) {
     val radius = CornerRadius(ROW_CORNER.toPx())
     // The lip stays put; the face sinks onto it.
     drawRoundRect(paint.lip, Offset(x, y + TILE_LIP_DEPTH.toPx()), Size(width, height), radius, alpha = alpha)
     val faceY = y + sink
     drawRoundRect(paint.shine, Offset(x, faceY), Size(width, height), radius, alpha = alpha)
     val shine = TILE_SHINE_DEPTH.toPx()
-    val stops = TILE_FACE_STOPS.indices.map { TILE_FACE_STOPS[it] to paint.face[it] }
-    drawRoundRect(
-        brush = Brush.verticalGradient(*stops.toTypedArray(), startY = faceY, endY = faceY + height),
-        topLeft = Offset(x, faceY + shine),
-        size = Size(width, height - shine),
-        cornerRadius = radius,
-        alpha = alpha,
-    )
+    translate(top = faceY) {
+        drawRoundRect(
+            brush = brushes.face(paint),
+            topLeft = Offset(x, shine),
+            size = Size(width, height - shine),
+            cornerRadius = radius,
+            alpha = alpha,
+        )
+    }
 }
 
 /** The focus line round the black panel, its glow faked with wider, fainter strokes under it. */
-private fun DrawScope.drawFocusLine(alpha: Float) {
+private fun DrawScope.drawFocusLine(paint: SeasonListPaint, alpha: Float) {
     val outset = FOCUS_LINE_OUTSET.toPx()
     val topLeft = Offset(-outset, -outset)
     val ring = Size(size.width + outset * 2, size.height + outset * 2)
     val radius = CornerRadius(FOCUS_LINE_CORNER.toPx())
-    for ((width, glow) in FOCUS_GLOW) {
-        drawRoundRect(Color.White, topLeft, ring, radius, style = Stroke(width.toPx()), alpha = glow * alpha)
+    for ((stroke, glow) in paint.glowStrokes) {
+        drawRoundRect(Color.White, topLeft, ring, radius, style = stroke, alpha = glow * alpha)
     }
-    drawRoundRect(Color.White, topLeft, ring, radius, style = Stroke(FOCUS_LINE_WIDTH.toPx()), alpha = alpha)
+    drawRoundRect(Color.White, topLeft, ring, radius, style = paint.lineStroke, alpha = alpha)
 }
 
 /** Fades into the panel's black over whichever ends of the list are cut off. */
-private fun DrawScope.drawListFades(left: Float, top: Float, right: Float, bottom: Float, scroll: Float, total: Int) {
+private fun DrawScope.drawListFades(
+    brushes: SeasonListBrushes,
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float,
+    scroll: Float,
+    total: Int,
+) {
     val depth = FADE_DEPTH.toPx()
     val above = scroll.coerceIn(0f, 1f)
     val below = rowsBelow(scroll, total).coerceIn(0f, 1f)
     if (above > 0f) {
-        drawRect(
-            brush = Brush.verticalGradient(listOf(PANEL_BLACK, Color.Transparent), startY = top, endY = top + depth),
-            topLeft = Offset(left, top),
-            size = Size(right - left, depth),
-            alpha = above,
-        )
+        drawRect(brush = brushes.fadeAbove, topLeft = Offset(left, top), size = Size(right - left, depth), alpha = above)
     }
     if (below > 0f) {
-        drawRect(
-            brush = Brush.verticalGradient(listOf(Color.Transparent, PANEL_BLACK), startY = bottom - depth, endY = bottom),
-            topLeft = Offset(left, bottom - depth),
-            size = Size(right - left, depth),
-            alpha = below,
-        )
+        drawRect(brush = brushes.fadeBelow, topLeft = Offset(left, bottom - depth), size = Size(right - left, depth), alpha = below)
     }
 }
 
 /** The gold arrow, pointing right at the white tile's middle ([centreY]), with a small drop shadow. */
-private fun DrawScope.drawArrow(centreY: Float, alpha: Float) {
-    val x = ARROW_X.toPx()
-    val half = ARROW_HEIGHT.toPx() / 2
-    fun arrow(dy: Float) = Path().apply {
-        moveTo(x, centreY - half + dy)
-        lineTo(x + ARROW_WIDTH.toPx(), centreY + dy)
-        lineTo(x, centreY + half + dy)
-        close()
-    }
-    drawPath(arrow(0.6.dp.toPx()), Color.Black, alpha = 0.6f * alpha)
-    drawPath(arrow(0f), GOLD, alpha = alpha)
-}
-
-/** A caret at the top or bottom of the arrow's track, its box's top at [y]. */
-private fun DrawScope.drawCaret(y: Float, up: Boolean, color: Color) {
-    val centre = CARET_X.toPx()
-    val half = CARET_WIDTH.toPx() / 2
-    val height = CARET_HEIGHT.toPx()
-    val tip = if (up) y else y + height
-    val base = if (up) y + height else y
-    drawPath(
-        Path().apply {
-            moveTo(centre, tip)
-            lineTo(centre + half, base)
-            lineTo(centre - half, base)
-            close()
-        },
-        color,
-    )
+private fun DrawScope.drawArrow(paint: SeasonListPaint, centreY: Float, alpha: Float) {
+    translate(top = centreY + 0.6.dp.toPx()) { drawPath(paint.arrow, Color.Black, alpha = 0.6f * alpha) }
+    translate(top = centreY) { drawPath(paint.arrow, GOLD, alpha = alpha) }
 }

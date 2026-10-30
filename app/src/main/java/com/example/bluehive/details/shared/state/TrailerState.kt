@@ -112,14 +112,6 @@ class TrailerState internal constructor(
         }
     }
 
-    /**
-     * Play/pause reported by DetailsTrailerPlayer. It no longer calls this (see
-     * its onIsPlayingChanged); kept, as the screens always passed it.
-     */
-    fun onPlaybackStateChanged(playing: Boolean) {
-        isPlaying = playing
-    }
-
     /** DetailsTrailerPlayer has made its player: the extraction is over. */
     fun onPlayerReady(player: ExoPlayer?) {
         this.player = player

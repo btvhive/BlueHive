@@ -22,20 +22,13 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.ColorMatrix
@@ -43,15 +36,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import coil.compose.AsyncImage
 import com.example.bluehive.R
 import com.example.bluehive.models.Episode
-import kotlinx.coroutines.delay
 
 /**
  * Measures [content] at its natural size, reports ZERO height to the parent, and
@@ -271,7 +261,7 @@ internal fun EpisodeCard(
         // placed above the baseline — see ZeroHeightAbove.
         ZeroHeightAbove {
             Text(
-                text = formatEpisodeAirDate(episode.airDate),
+                text = remember(episode.airDate) { formatEpisodeAirDate(episode.airDate) },
                 fontFamily = dongleRegular,
                 fontSize = 11.sp,          // episode title is 13.sp
                 maxLines = 1,
@@ -398,8 +388,10 @@ internal fun EpisodeCard(
 
 
         // ✅ Episode title under each respective image
-        // Darken state whenever the episode isn't focused
-        val titleYOffset by animateDpAsState(
+        // Darken state whenever the episode isn't focused. The bounce is read
+        // while placing (offsetWithY), so it moves the title without
+        // recomposing the card on every frame (v515).
+        val titleYOffset = animateDpAsState(
             targetValue = if (isEpisodeFocused) 1.5.dp else (-1.5).dp,
             label = "episodeTitleYOffset"
         )
@@ -413,7 +405,7 @@ internal fun EpisodeCard(
                 overflow = TextOverflow.Ellipsis,
                 color = if (!isEpisodeFocused) Color(0xFF737373) else Color.White,
                 modifier = Modifier
-                    .offset(x = 4.dp, y = titleYOffset)
+                    .offsetWithY(4.dp) { titleYOffset.value }
             )
         }
 

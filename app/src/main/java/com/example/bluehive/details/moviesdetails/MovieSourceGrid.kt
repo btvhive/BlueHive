@@ -1,7 +1,6 @@
 package com.example.bluehive.details.moviesdetails
 
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -35,8 +34,12 @@ internal fun BoxScope.MovieSourceGrid(
     isAnime: Boolean,
     sources: List<StreamSource>,
     fontFamily: FontFamily,
-    /** The first row's top, just under the overview (DetailsPeekState.playTop). */
-    playTop: Dp,
+    /**
+     * The first row's top, just under the overview (DetailsPeekState.playTop).
+     * Read while placing (v515): it arrives with the overview's first layout,
+     * and reading it while composing recomposed every button as the page opened.
+     */
+    playTop: () -> Dp,
     animeDubFocusRequester: FocusRequester,
     animeSubFocusRequester: FocusRequester,
     /** One per source, in order. */
@@ -84,7 +87,7 @@ internal fun BoxScope.MovieSourceGrid(
                 fontFamily = fontFamily,
                 focusRequester = streamerFocus[i],
                 offsetX = if (aloneInRow) (colX[0] + colX[1]) / 2f else colX[col],
-                offsetY = playTop + PEEK_SOURCE_ROW_STEP * row,
+                offsetY = { playTop() + PEEK_SOURCE_ROW_STEP * row },
                 disableLeftSound  = aloneInRow || col == 0, // left column / lone centered → mute left edge
                 disableRightSound = aloneInRow || col == 1, // right column / lone centered → mute right edge
                 disableDownSound  = i + 2 >= sources.size,  // no button directly below → mute down
@@ -103,13 +106,13 @@ fun MoviesStreamerButton(
     fontFamily: FontFamily,
     focusRequester: FocusRequester,
     offsetX: Dp,
-    offsetY: Dp,
+    /** Read while placing -- see MovieSourceGrid's playTop. */
+    offsetY: () -> Dp,
     disableLeftSound: Boolean = false,
     disableRightSound: Boolean = false,
-    disableUpSound: Boolean = false,
     disableDownSound: Boolean = false,
     /** Down on a bottom-row button; true when it moved focus (into the recommended row). */
-    onDownFromBottom: (() -> Boolean)? = null,
+    onDownFromBottom: () -> Boolean,
     onClick: () -> Unit
 ) {
     ModularButton(
@@ -123,7 +126,7 @@ fun MoviesStreamerButton(
         fontFamily = fontFamily,
         focusRequester = focusRequester,
         modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
+            .offsetWithY(offsetX, offsetY)
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
@@ -146,20 +149,16 @@ fun MoviesStreamerButton(
                             }
                         }
                         Key.DirectionUp -> {
-                            if (disableUpSound) {
-                                true
-                            } else {
-                                BlueHiveApplication.playHoverSound()
-                                false
-                            }
+                            BlueHiveApplication.playHoverSound()
+                            false
                         }
                         Key.DirectionDown -> {
                             if (disableDownSound) {
                                 // Bottom row: into the recommended row, with a
                                 // sound only when it moved; without a row,
                                 // nothing below and no sound.
-                                if (onDownFromBottom?.invoke() == true) BlueHiveApplication.playHoverSound()
-                                onDownFromBottom != null
+                                if (onDownFromBottom()) BlueHiveApplication.playHoverSound()
+                                true
                             } else {
                                 BlueHiveApplication.playHoverSound()
                                 false
@@ -206,16 +205,8 @@ fun MoviesStreamerButton(
 }
 
 
-/**
- * Down on Watch in English / Japanese. Without [onDown], as before: a sound,
- * and the focus system moves on. With it (the peek layout), Down enters the
- * recommended row, sounding only when it moved.
- */
-private fun animeDown(onDown: (() -> Boolean)?): Boolean {
-    if (onDown == null) {
-        BlueHiveApplication.playHoverSound()
-        return false
-    }
+/** Down on Watch in English / Japanese: into the recommended row, sounding only when it moved. */
+private fun animeDown(onDown: () -> Boolean): Boolean {
     if (onDown()) BlueHiveApplication.playHoverSound()
     return true
 }
@@ -224,10 +215,11 @@ private fun animeDown(onDown: (() -> Boolean)?): Boolean {
 fun AnimeDubButton(
     fontFamily: FontFamily,
     focusRequester: FocusRequester,
-    offsetX: Dp = 27.75.dp,
-    offsetY: Dp = 332.5.dp,
+    offsetX: Dp,
+    /** Read while placing -- see MovieSourceGrid's playTop. */
+    offsetY: () -> Dp,
     /** Down; true when it moved focus (into the recommended row). */
-    onDown: (() -> Boolean)? = null,
+    onDown: () -> Boolean,
     onClick: () -> Unit
 ) {
     ModularButton(
@@ -239,7 +231,7 @@ fun AnimeDubButton(
         fontFamily = fontFamily,
         focusRequester = focusRequester,
         modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
+            .offsetWithY(offsetX, offsetY)
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
@@ -278,10 +270,11 @@ fun AnimeDubButton(
 fun AnimeSubButton(
     fontFamily: FontFamily,
     focusRequester: FocusRequester,
-    offsetX: Dp = 228.dp,
-    offsetY: Dp = 332.5.dp,
+    offsetX: Dp,
+    /** Read while placing -- see MovieSourceGrid's playTop. */
+    offsetY: () -> Dp,
     /** Down; true when it moved focus (into the recommended row). */
-    onDown: (() -> Boolean)? = null,
+    onDown: () -> Boolean,
     onClick: () -> Unit
 ) {
     ModularButton(
@@ -290,7 +283,7 @@ fun AnimeSubButton(
         fontFamily = fontFamily,
         focusRequester = focusRequester,
         modifier = Modifier
-            .offset(x = offsetX, y = offsetY)
+            .offsetWithY(offsetX, offsetY)
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {

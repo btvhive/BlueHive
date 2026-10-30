@@ -47,7 +47,7 @@ fun rememberDetailsSearch(): DetailsSearchState = remember { DetailsSearchState(
  * The Search button's keyboard over a details page, as home and the media
  * catalog show it: a pop-up window, so the page keeps its state and focus.
  * The page behind blurs on API 31+ (the onn box -- the screen passes
- * hiveBackdropBlur to the scaffold); older boxes (Fire TV, no RenderEffect)
+ * detailsBackdropBlur to the scaffold); older boxes (Fire TV, no RenderEffect)
  * get the dark scrim home puts behind its sidebar, faded in. A search opens
  * the search page; BACK closes it.
  *

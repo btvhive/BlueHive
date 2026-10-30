@@ -2,7 +2,6 @@ package com.example.bluehive.details.tvshowdetails
 
 import com.example.bluehive.details.shared.layout.DetailsHeaderGate
 import android.util.Log
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -14,10 +13,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.geometry.Offset
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.models.Episode
@@ -92,8 +87,7 @@ class EpisodesState internal constructor(
     // painted its episodes — under the newly highlighted season heading.
     //
     // That is worse than a cosmetic mismatch. Opening an episode from that grid
-    // calls onEpisodeSelected(selectedSeason, episodeNumber, ...) and sets
-    // pendingSeason = selectedSeason, so the source chain and the player extras
+    // sets pendingSeason = selectedSeason, so the source chain and the player extras
     // get the season the user is LOOKING at paired with an episode number from a
     // different season — the wrong episode plays, and that pair is what lands in
     // watch history and drives the watched-corner markers.
@@ -254,24 +248,15 @@ internal fun WatchedEpisodesEffects(
     episodesState: EpisodesState,
     tmdbId: Int,
     profileId: Int,
-    coroutineScope: CoroutineScope,
 ) {
-    LaunchedEffect(tmdbId, profileId) { episodesState.refreshWatchedEpisodes(profileId) }
-
-    // Re-read on every resume. Nothing is marked optimistically any more — the
-    // marker follows the backend row, and that row is only written once the player
-    // confirms video is actually playing. Coming back from the player is therefore
-    // the moment a genuinely-watched episode should light up.
-    val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, tmdbId, profileId) {
-        val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
-                coroutineScope.launch { episodesState.refreshWatchedEpisodes(profileId) }
-            }
-        }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
+    // Read on open, and again on every return (rememberResumeCount). Nothing is
+    // marked optimistically any more — the marker follows the backend row, and
+    // that row is only written once the player confirms video is actually
+    // playing. Coming back from the player is therefore the moment a
+    // genuinely-watched episode should light up. One read on open, not two:
+    // the old resume observer also fired on Lifecycle's replay (v515).
+    val returns = rememberResumeCount()
+    LaunchedEffect(tmdbId, profileId, returns) { episodesState.refreshWatchedEpisodes(profileId) }
 }
 
 /**

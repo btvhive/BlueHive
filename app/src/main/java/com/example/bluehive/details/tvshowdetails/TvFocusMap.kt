@@ -10,8 +10,8 @@ import androidx.compose.ui.focus.FocusRequester
 
 /**
  * Every focus requester on the TV details screen that more than one section
- * uses (docs/details-redesign-architecture.md §6, rule 5): the three header
- * buttons, the season accordion, the source overlay's buttons, and whichever
+ * uses (docs/details-redesign-architecture.md §6, rule 5): the header's
+ * Favorites and trailer buttons, the season accordion, the source overlay's buttons, and whichever
  * stream button was pressed last. Sections are handed these; none creates a
  * requester another one asks for. The episode tiles' requesters change with
  * the season on show, so they live with the episodes, in EpisodesState.
@@ -23,7 +23,6 @@ class TvFocusMap internal constructor(
     providerCount: Int,
 ) {
     val favorite = FocusRequester()
-    val extras = FocusRequester()
     val trailer = FocusRequester()
 
     /** The season accordion (SeasonAccordion): one focus target for every season. */

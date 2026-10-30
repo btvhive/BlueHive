@@ -1,6 +1,5 @@
 package com.example.bluehive.details.shared.layout
 
-import android.util.Log
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -9,11 +8,7 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -70,8 +65,6 @@ fun BoxScope.DetailsOverview(
                 .padding(start = 258.25.dp, top = genresTop)
                 .width(160.dp)  // Add width constraint so it wraps nicely
         )
-    }else {
-        Log.d("GenresDebug", "❌ Not rendering genres - value: '$genres'")
     }
     // ========================================================================================================================================= >
 
@@ -81,8 +74,6 @@ fun BoxScope.DetailsOverview(
     if (!overview.isNullOrBlank()) {
         // One paragraph -- see flattenOverview.
         val text = remember(overview) { flattenOverview(overview) }
-        var fontSize by remember { mutableStateOf(18.sp) }
-        var lineHeight by remember { mutableStateOf(14.sp) }
 
         // Measure text to determine if we need smaller font
         val textMeasurer = rememberTextMeasurer()
@@ -103,40 +94,35 @@ fun BoxScope.DetailsOverview(
         // NOTE: this measures at 2.75 px per dp, not the box's own density
         // (2.0 on the onn box), so it sees a line ~550 dp wide where the box
         // is 400 and rarely shrinks. Kept as it is: fixing it would change
-        // the movie page's text.
-        if (fitted == null) LaunchedEffect(text) {
+        // the movie page's text. Measured while composing since v515 (it was
+        // an effect after the first frame), so the first frame has the size:
+        // no jump, and no third layout pass for a shrunk overview.
+        val movieSize = if (fitted != null) null else remember(text, dongleRegular) {
             val textLayoutResult = textMeasurer.measure(
-                text = androidx.compose.ui.text.AnnotatedString(text),
-                style = androidx.compose.ui.text.TextStyle(
+                text = AnnotatedString(text),
+                style = TextStyle(
                     fontSize = 18.sp,
                     fontFamily = dongleRegular,
                     lineHeight = 14.sp  // Include line height in measurement
                 ),
-                constraints = androidx.compose.ui.unit.Constraints(
+                constraints = Constraints(
                     maxWidth = (400 * 2.75).toInt(), // dp to px approximation
                     maxHeight = (105.75 * 2.75).toInt() // Add height constraint!
                 )
             )
-
-            // Check if text overflows OR doesn't fit in the height
-            if (textLayoutResult.lineCount > 5 || textLayoutResult.didOverflowHeight) {
-                fontSize = 16.sp
-                lineHeight = 13.7.sp
-            } else {
-                lineHeight = 14.sp
-            }
+            movieOverviewSize(textLayoutResult.lineCount, textLayoutResult.didOverflowHeight)
         }
+        val size = fitted?.size ?: movieSize ?: MOVIE_OVERVIEW_FULL
 
         Text(
             text = text,
             color = Color(0xFF8B8B8B),
-            fontSize = fitted?.size?.fontSize ?: fontSize,
+            fontSize = size.fontSize,
             fontFamily = dongleRegular,
-            lineHeight = fitted?.size?.lineHeight ?: lineHeight,
+            lineHeight = size.lineHeight,
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(start = 28.25.dp, top = 175.dp)
-                //.background(Color.Red.copy(alpha = 0.5f))  // Debug background
                 .height(108.25.dp)
                 .width(OVERVIEW_WIDTH),
             overflow = TextOverflow.Ellipsis,
@@ -167,6 +153,14 @@ internal fun flattenOverview(overview: String): String =
     overview.replace(LINE_BREAKS, " ").trim()
 
 private val LINE_BREAKS = Regex("\\s*\\R\\s*")
+
+/** The movie page's two sizes: 16 / 13.7 past five lines (or out of height), else 18 / 14. */
+internal val MOVIE_OVERVIEW_FULL = OverviewSize(18.sp, 14.sp)
+internal val MOVIE_OVERVIEW_SHRUNK = OverviewSize(16.sp, 13.7.sp)
+
+/** The movie page's overview size for a measurement at 18 sp. Pure, so it is tested. */
+internal fun movieOverviewSize(lineCount: Int, didOverflowHeight: Boolean): OverviewSize =
+    if (lineCount > 5 || didOverflowHeight) MOVIE_OVERVIEW_SHRUNK else MOVIE_OVERVIEW_FULL
 
 /** One overview size: the font and its line height. */
 internal data class OverviewSize(val fontSize: TextUnit, val lineHeight: TextUnit)

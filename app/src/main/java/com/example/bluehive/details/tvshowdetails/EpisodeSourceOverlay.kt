@@ -38,7 +38,6 @@ import com.example.bluehive.api.isJapaneseAnimation
 import com.example.bluehive.details.shared.playback.AnimePlaybackController
 import com.example.bluehive.details.shared.playback.SourcePlaybackController
 import com.example.bluehive.details.shared.playback.StreamSource
-import com.example.bluehive.details.shared.state.ExtrasState
 import com.example.bluehive.utilities.*
 import kotlinx.coroutines.delay
 
@@ -116,8 +115,8 @@ internal fun getStreamingSources(
 }
 
 /** The overlay is open: the screen blurs the page behind it (API 31+). */
-internal fun episodeOverlayOpen(extras: ExtrasState, episodesState: EpisodesState): Boolean =
-    !extras.isOn && episodesState.selectedEpisodeOverlayIndex in episodesState.episodes.indices
+internal fun episodeOverlayOpen(episodesState: EpisodesState): Boolean =
+    episodesState.selectedEpisodeOverlayIndex in episodesState.episodes.indices
 
 /**
  * The episode overlay: OK on an episode opens it over the page. The still
@@ -127,7 +126,7 @@ internal fun episodeOverlayOpen(extras: ExtrasState, episodesState: EpisodesStat
  * [episodesState] and starts the anime flow or the source chain; Back closes
  * it and returns to the tile.
  *
- * The page behind blurs on API 31+ (the onn box -- hiveBackdropBlur on the
+ * The page behind blurs on API 31+ (the onn box -- detailsBackdropBlur on the
  * scaffold's page); older boxes (Fire TV, no RenderEffect) get the dark scrim
  * the movie page's search keyboard uses, faded in. Drawn in the overlay slot,
  * under the loading and anime overlays, so those still cover it. It STAYS
@@ -139,7 +138,6 @@ internal fun episodeOverlayOpen(extras: ExtrasState, episodesState: EpisodesStat
  */
 @Composable
 internal fun BoxScope.EpisodeSourceOverlay(
-    extras: ExtrasState,
     episodesState: EpisodesState,
     focusMap: TvFocusMap,
     anime: AnimePlaybackController,
@@ -151,7 +149,8 @@ internal fun BoxScope.EpisodeSourceOverlay(
     backdropUrl: String?,
     passionFont: FontFamily,
     dongleRegular: FontFamily,
-    stopTrailerAndSelectEpisode: (season: Int, episode: Int, epName: String?) -> Unit,
+    /** Every launch from the overlay calls this first: the trailer stops (see the screen's stopTrailerForLaunch). */
+    stopTrailer: () -> Unit,
     /** A brand-new anime with no AniList mapping yet: the screen shows its notice. */
     onUnavailable: () -> Unit,
     /** The screen's snap: a Watch on ... press turns the card to dust first -- see EpisodeSnapState. */
@@ -168,19 +167,23 @@ internal fun BoxScope.EpisodeSourceOverlay(
         }
     }
 
-    val open = episodeOverlayOpen(extras, episodesState)
+    val open = episodeOverlayOpen(episodesState)
 
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-        val dim by animateFloatAsState(
+        val dim = animateFloatAsState(
             targetValue = if (open) 1f else 0f,
             animationSpec = tween(durationMillis = 200),
             label = "episodeOverlayDim",
         )
-        if (dim > 0f) {
+        // Only whether it shows is read here; the fade itself is read in the
+        // layer, so the 200 ms fade no longer recomposes the overlay every
+        // frame (v515).
+        val dimShows by remember { derivedStateOf { dim.value > 0f } }
+        if (dimShows) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .graphicsLayer { alpha = dim }
+                    .graphicsLayer { alpha = dim.value }
                     .background(overlayScrimColor())
             )
         }
@@ -297,7 +300,7 @@ internal fun BoxScope.EpisodeSourceOverlay(
                     focusRequesters = focusMap.providers,
                     onDub = { url ->
                         val epName = selectedEpisode.title
-                        stopTrailerAndSelectEpisode(season, episodeNumber, epName)
+                        stopTrailer()
                         // NOT marked watched here. Picking English only opens the
                         // server prompt — extraction can still fail, find no
                         // servers, or be cancelled. The mark happens where the
@@ -313,7 +316,7 @@ internal fun BoxScope.EpisodeSourceOverlay(
                     },
                     onSub = { url ->
                         val epName = selectedEpisode.title
-                        stopTrailerAndSelectEpisode(season, episodeNumber, epName)
+                        stopTrailer()
                         // NOT marked watched here — same reason as onDub above.
                         focusMap.lastStream = focusMap.providers.getOrNull(1)
                         anime.pendingUrl         = url
@@ -358,6 +361,15 @@ internal fun BoxScope.EpisodeSourceOverlay(
 
     // The dust's surface, only from a press until the dust is gone -- see
     // EpisodeSnapRenderer.
+    EpisodeSnapRendererWhenWanted(snap)
+}
+
+/**
+ * [EpisodeSnapRenderer] while the snap wants it. Its own scope (v515): a
+ * press turning the renderer on and off recomposes this, not the overlay.
+ */
+@Composable
+private fun EpisodeSnapRendererWhenWanted(snap: EpisodeSnapState) {
     if (snap.rendererWanted) EpisodeSnapRenderer(snap)
 }
 

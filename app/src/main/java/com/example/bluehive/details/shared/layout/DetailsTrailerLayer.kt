@@ -59,9 +59,6 @@ fun DetailsTrailerLayer(
             isPlaying = trailer.isPlaying,
             showPlayerView = trailer.hasPlayed,
             shouldExtract = trailer.shouldExtract,
-            onPlaybackStateChanged = { playing ->
-                trailer.onPlaybackStateChanged(playing)
-            },
             onPlayerReady = { player ->
                 trailer.onPlayerReady(player)
             },

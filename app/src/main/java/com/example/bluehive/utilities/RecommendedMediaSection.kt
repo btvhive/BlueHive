@@ -106,10 +106,10 @@ private fun RecommendedHeading(
 }
 
 /**
- * The recommended row. The defaults are the TV screen's Extras row. The movie
- * screen's peek layout moves it down ([topOffset]), shrinks and dims its
- * heading until it has focus, keeps it from taking focus on load, enters it
- * through [entry], and slides the page on [onRowFocusChanged].
+ * The recommended row, under the details pages' play area (the peek layout,
+ * DetailsPeekRecommendations): placed by [modifier], its heading smaller and
+ * dimmed until the row has focus, entered through [entry], and sliding the
+ * page on [onRowFocusChanged]. (The Extras row's defaults went in v515.)
  */
 @Composable
 fun RecommendedMediaSection(
@@ -117,12 +117,11 @@ fun RecommendedMediaSection(
     onMediaClick: (MediaItem) -> Unit,
     onNavigateUp: () -> Unit,
     modifier: Modifier = Modifier,
-    topOffset: Dp = 340.25.dp,
     titleFontSize: TextUnit = 24.sp,
     /** The heading's font: Passion One, as it has always been, unless a screen asks for another. */
     titleFontFamily: FontFamily = AppTypography.passionRegular,
-    /** The heading's offset above the cards; null keeps it where a 24 sp heading sat. */
-    titleOffsetY: Dp? = null,
+    /** The heading's offset above the cards. */
+    titleOffsetY: Dp,
     dimTitleUntilFocused: Boolean = false,
     autoFocusFirst: Boolean = true,
     entry: RecommendedRowEntry? = null,
@@ -167,7 +166,7 @@ fun RecommendedMediaSection(
 
     Column(
         modifier = modifier
-            .offset(x = 60.dp, y = topOffset)
+            .offset(x = 60.dp)
             .height(250.dp)
     ) {
         RecommendedHeading(
@@ -175,12 +174,7 @@ fun RecommendedMediaSection(
             dim = { dimTitleUntilFocused && !hasRowFocus },
             fontSize = titleFontSize,
             fontFamily = titleFontFamily,
-            // A smaller heading moves down by its lost line height, so it keeps
-            // its gap to the cards.
-            modifier = Modifier.offset(
-                x = (-29).dp,
-                y = titleOffsetY ?: ((-48).dp + ((24f - titleFontSize.value) * 1.2f).dp)
-            )
+            modifier = Modifier.offset(x = (-29).dp, y = titleOffsetY)
         )
 
         Box {
@@ -402,7 +396,9 @@ fun RecommendedMediaSection(
                                     }
                             )
 
-                            if (isItemFocused) {
+                            // Composed once the title is due (v515): a card passed over
+                            // while scrolling lays out no title it would never show.
+                            if (isItemFocused && titleVisible) {
                                 var fontSize by remember(mediaItem.title) { mutableStateOf(16.sp) }
 
                                 Box(
@@ -459,32 +455,19 @@ fun RecommendedMediaSection(
         }
     }
 
-    // 🔹 Centralized, debounced scroll logic
-    LaunchedEffect(focusedIndex) {
-        if (focusedIndex < 0 || recommendations.isEmpty()) return@LaunchedEffect
-
-        // Snapshot of current visible range
-        val layoutInfo = listState.layoutInfo
-        val visibleItems = layoutInfo.visibleItemsInfo
-        if (visibleItems.isEmpty()) return@LaunchedEffect
-
-        val firstVisibleIndex = visibleItems.first().index
-        val lastVisibleIndex = visibleItems.last().index
-
-        // If focused item is safely inside the visible window, do nothing
-        if (focusedIndex in (firstVisibleIndex + 1)..(lastVisibleIndex - 1)) {
-            return@LaunchedEffect
-        }
-
-        // Otherwise nudge the list so the focused item is slightly in from the edge
-        val targetIndex = when {
-            focusedIndex <= firstVisibleIndex -> maxOf(focusedIndex - 1, 0)
-            focusedIndex >= lastVisibleIndex -> maxOf(focusedIndex - 1, 0)
-            else -> focusedIndex
-        }
-
-        coroutineScope.launch {
-            listState.scrollToItem(targetIndex)
+    // 🔹 Centralized, debounced scroll logic. Follows focusedIndex in a flow,
+    // not as an effect key: a key is read while composing, so every focus
+    // move recomposed the whole section (v515).
+    LaunchedEffect(listState, recommendations) {
+        if (recommendations.isEmpty()) return@LaunchedEffect
+        snapshotFlow { focusedIndex }.collect { index ->
+            val visibleItems = listState.layoutInfo.visibleItemsInfo
+            if (index < 0 || visibleItems.isEmpty()) return@collect
+            val target = recommendedRowNudge(index, visibleItems.first().index, visibleItems.last().index)
+                ?: return@collect
+            coroutineScope.launch {
+                listState.scrollToItem(target)
+            }
         }
     }
 
@@ -496,3 +479,11 @@ fun RecommendedMediaSection(
         }
     }
 }
+
+/**
+ * Where the row scrolls to when [focused] lands at or past either end of the
+ * visible cards ([firstVisible]..[lastVisible]): one card in from the edge.
+ * Null while it is safely inside. Pure, so it is tested.
+ */
+internal fun recommendedRowNudge(focused: Int, firstVisible: Int, lastVisible: Int): Int? =
+    if (focused in (firstVisible + 1)..(lastVisible - 1)) null else maxOf(focused - 1, 0)
