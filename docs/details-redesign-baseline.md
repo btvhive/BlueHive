@@ -233,3 +233,43 @@ Same box, same session, two runs each:
 
 Slow UI-thread frames during the slide went from about 50 to 5-7. Idle stayed at 0 frames and the header D-pad at p50 20-21 ms; the row's 10 Rights stayed at p50 22 ms (p99 65-85 ms, varying run to run).
 
+
+## Efficiency pass: v514 against v516 (onn box, 2026-10-30)
+
+Interleaved A/B on the onn box, 13:47-14:10 on the box's clock, at the user's word, with nobody using it: A = v514's code (before the v515 efficiency pass), B = v516's code, built as 517/519 (A) and 518/520 (B) so they could alternate without a downgrade. One `tools/details-perf/measure_round.sh` per install, profile dre2: The Dark Knight from Home's movie row, SPY x FAMILY (anime, 4 seasons) from Continue Watching, which opens on S2 E5. Each figure below is round 1 / round 2 of that build.
+
+### Opening a page (logcat "Displayed", warm opens, the first after each launch dropped)
+
+| | A (before) | B (after) |
+|---|---|---|
+| Movie, 12 opens | 268, 402-443 (11 opens); **median 413 ms** | 225-263 (7 opens), 400-439 (5); **median 253 ms** |
+| TV show, 10 opens | 416-450, every open; **median 430 ms** | 328-367 (5 opens), 429, 593-619 (4); **median 398 ms** |
+
+The movie page opens fast far more often (7 of 12 against 1 of 12): one layout pass fewer (fix 9). The TV page is split: half its opens are ~80 ms faster, but 4 of 10 took about 600 ms, which A never did. Not explained yet; needs a trace.
+
+### Frames (gfxinfo)
+
+| | A p50 | A p90 | A p99 | A slow UI | B p50 | B p90 | B p99 | B slow UI |
+|---|---|---|---|---|---|---|---|---|
+| Movie header <-> Watch | 21 / 21 | 29 / 32 | 38 / 42 | 4 / 4 | 21 / 21 | 27 / 26 | 32 / 31 | 4 / 3 |
+| Movie slide (x3) | 27 / 27 | 32 / 36 | 65 / 77 | 7 / 6 | 24 / 23 | 32 / 32 | **42 / 40** | 5 / 6 |
+| Movie row, 10 Rights | 22 / 21 | 61 / 57 | 73 / 73 | 11 / 12 | 23 / 25 | **31 / 32** | **46 / 42** | 13 / 12 |
+| TV episode row, 6 Rights | 31 / 32 | 61 / 57 | 81 / 73 | 18 / 19 | 29 / 29 | 61 / 57 | 69 / 77 | 19 / 17 |
+| TV episode row, 6 Lefts | 44 / 38 | 57 / 53 | 81 / 77 | 18 / 14 | **32 / 36** | 48 / 57 | 73 / 81 | 10 / 13 |
+| Season picker (OK, D D U U, Back) | 34 / 34 | 44 / 46 | 53 / 48 | 6 / 9 | 29 / 32 | 34 / 44 | 48 / 53 | **1 / 2** |
+| TV slide (x3) | 34 / 32 | 42 / 44 | 61 / 65 | 5 / 6 | 31 / 29 | 40 / 42 | 53 / 53 | 11 / 13 |
+
+### The heaviest frame (framestats)
+
+| | A: slowest frame (UI thread) | B: slowest frame (UI thread) |
+|---|---|---|
+| Episode overlay opens (runs 2-3) | 149 (81), 128 (57) / 145 (74), 144 (72) ms | 120 (14), 129 (22) / 107 (13), 123 (17) ms |
+| Episode overlay closes | 59-80 ms (UI 34-52) | 55-76 ms (UI 24-45) |
+| Watch press: snap + loading, 1.6 s | 111-137 ms (UI 76-108); 22-32 frames over 16.7 ms | 99-163 ms (UI 55-79); 19-29 frames over 16.7 ms |
+
+### What it shows
+
+- **Clear wins:** movie opens (median 413 -> 253 ms), the movie slide's and row's tails (p99 ~70 -> ~42 ms, row p90 ~59 -> ~32), the overlay opening's UI-thread work (57-81 -> 13-22 ms: fix 7), the season picker's slow UI frames (6-9 -> 1-2: fix 3), and the Watch press's UI thread (peak 76-108 -> 55-79 ms).
+- **No change:** the episode row going Right (the bounce fix shows on the Lefts' median, 41 -> 34 ms, not on the Rights).
+- **Worse, to look at:** 4 of 10 TV opens at ~600 ms, and the TV slide's slow UI-thread frames (5-6 -> 11-13) although its p50 and p99 improved. Both are TV-page only; the always-present page blur layer (detailsBackdropBlur on API 31+) and the season list's new layer are the first suspects.
+- The box ends on B (versionCode 520): later builds must be numbered 521 or above.
