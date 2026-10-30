@@ -50,7 +50,7 @@ import com.example.bluehive.details.shared.layout.TimedDetailsToast
 import com.example.bluehive.details.shared.layout.rememberTimedNotice
 import com.example.bluehive.details.shared.layout.TrailerFailedNotice
 import com.example.bluehive.details.shared.state.DetailsBackHandlers
-import com.example.bluehive.details.shared.state.rememberExtrasState
+import com.example.bluehive.details.shared.state.rememberRecommendedRowState
 import com.example.bluehive.details.shared.state.rememberFavoriteState
 import com.example.bluehive.details.shared.state.rememberTrailerState
 
@@ -111,10 +111,10 @@ fun MovieDetailsScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // The recommendations row -- see ExtrasState. The peek layout
+    // The recommendations row -- see RecommendedRowState. The peek layout
     // (DetailsPeekState) shows it under the play buttons from the start, so
     // it loads on open, on a background thread.
-    val extras = rememberExtrasState(
+    val recommendedRow = rememberRecommendedRowState(
         scope      = coroutineScope,
         repository = recommendationsRepository,
         tmdbId     = args.mediaId,
@@ -128,7 +128,7 @@ fun MovieDetailsScreen(
     // The Search button's keyboard, over this page -- see DetailsSearchKeyboard.
     val search = rememberDetailsSearch()
 
-    val headerGate = rememberDetailsHeaderGate(blocked = args.startInExtras)
+    val headerGate = rememberDetailsHeaderGate(blocked = args.startInRow)
 
     // The backdrop trailer: playing, started, extracting, its player -- see
     // TrailerState.
@@ -267,7 +267,7 @@ fun MovieDetailsScreen(
     // page opens slid up on it. The row peeks 60% on an anime film, else 40%,
     // or 50% under a short overview -- see PeekRule.
     val peek = rememberDetailsPeek(
-        startFocused = args.startInExtras,
+        startFocused = args.startInRow,
         rule         = if (isAnime) PeekRule.Anime else PeekRule.LiftUnderShortOverview,
     )
     val sources by produceState(
@@ -354,7 +354,7 @@ fun MovieDetailsScreen(
 
 
     // The row loads; opened in it, the header waits for its titles -- see PeekRowStart.
-    PeekRowStart(peek, extras, favoriteFocusRequester, headerGate)
+    PeekRowStart(peek, recommendedRow, favoriteFocusRequester, headerGate)
 
     var displayBudget by remember { mutableLongStateOf(args.budget) }
     var displayRevenue by remember { mutableLongStateOf(args.revenue) }
@@ -391,7 +391,7 @@ fun MovieDetailsScreen(
         ),
         trailer = trailer,
         favorite = favorite,
-        extras = extras,
+        recommendedRow = recommendedRow,
         header = DetailsHeaderSpec(
             pressTiming            = MovieHeaderPressTiming,
             enableFocus            = headerGate.isOpen,

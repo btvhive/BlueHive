@@ -7,7 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
-import com.example.bluehive.details.shared.state.ExtrasState
+import com.example.bluehive.details.shared.state.RecommendedRowState
 import com.example.bluehive.models.MediaItem
 import com.example.bluehive.utilities.AppTypography
 import com.example.bluehive.utilities.RecommendedMediaSection
@@ -26,15 +26,15 @@ import com.example.bluehive.utilities.offsetWithY
  */
 @Composable
 fun DetailsPeekRecommendations(
-    extras: ExtrasState,
+    recommendedRow: RecommendedRowState,
     peek: DetailsPeekState,
     title: String,
     onOpen: (MediaItem) -> Unit,
     onNavigateUp: () -> Unit,
 ) {
-    if (extras.recommendations.isNotEmpty()) {
+    if (recommendedRow.recommendations.isNotEmpty()) {
         RecommendedMediaSection(
-            recommendations = extras.recommendations,
+            recommendations = recommendedRow.recommendations,
             onMediaClick = onOpen,
             onNavigateUp = onNavigateUp,
             title = title,
@@ -58,7 +58,7 @@ fun DetailsPeekRecommendations(
 const val PEEK_START_WAIT_MS = 6_000L
 
 /**
- * The peek row's start: it loads as the page opens (ExtrasState.loadRow; a
+ * The peek row's start: it loads as the page opens (RecommendedRowState.loadRow; a
  * no-op when a prefetched row is already there).
  *
  * A page opened in the row (from history, [DetailsPeekState.startFocused])
@@ -75,12 +75,12 @@ const val PEEK_START_WAIT_MS = 6_000L
 @Composable
 fun PeekRowStart(
     peek: DetailsPeekState,
-    extras: ExtrasState,
+    recommendedRow: RecommendedRowState,
     fallback: FocusRequester,
     headerGate: DetailsHeaderGate,
 ) {
-    LaunchedEffect(extras) { extras.loadRow() }
-    val hasTitles = extras.recommendations.isNotEmpty()
+    LaunchedEffect(recommendedRow) { recommendedRow.loadRow() }
+    val hasTitles = recommendedRow.recommendations.isNotEmpty()
     LaunchedEffect(peek, hasTitles) {
         if (!peek.startFocused) return@LaunchedEffect
         if (hasTitles) {

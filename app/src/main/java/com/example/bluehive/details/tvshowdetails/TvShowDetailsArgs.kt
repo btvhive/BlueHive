@@ -32,7 +32,8 @@ class TvShowDetailsArgs(
     val profileId: Int,
     val sourceScreen: String?,
     val searchQuery: String?,
-    val startInExtras: Boolean,
+    /** Opened in the recommended row. Its intent key keeps the old Extras name, start_in_extras, which history entries carry. */
+    val startInRow: Boolean,
     val lastSeason: Int,
     val lastEpisode: Int,
     /**
@@ -92,7 +93,7 @@ class TvShowDetailsArgs(
                 profileId = intent.getIntExtra("PROFILE_ID", -1),
                 sourceScreen = intent.getStringExtra("SOURCE_SCREEN"),
                 searchQuery = intent.getStringExtra("SEARCH_QUERY"),
-                startInExtras = intent.getBooleanExtra("start_in_extras", false),
+                startInRow = intent.getBooleanExtra("start_in_extras", false),
                 lastSeason = intent.getIntExtra("last_season", 1),
                 lastEpisode = intent.getIntExtra("last_episode", 1),
                 resumeToEpisode = intent.hasExtra("last_season") || intent.hasExtra("last_episode"),

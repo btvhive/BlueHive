@@ -24,7 +24,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
-import com.example.bluehive.details.shared.state.ExtrasState
+import com.example.bluehive.details.shared.state.RecommendedRowState
 import com.example.bluehive.details.shared.state.FavoriteState
 import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.models.MediaItem
@@ -121,7 +121,7 @@ fun DetailsScaffold(
     info: DetailsInfo,
     trailer: TrailerState,
     favorite: FavoriteState,
-    extras: ExtrasState,
+    recommendedRow: RecommendedRowState,
     header: DetailsHeaderSpec,
     /** The TV screen releases the trailer player again on leave (§10, #12). */
     releaseTrailerOnLeave: Boolean,
@@ -149,7 +149,7 @@ fun DetailsScaffold(
             DetailsPageBackground()
             DetailsSlidingPage(peek) {
                 DetailsPage(
-                    info, trailer, favorite, extras, header, releaseTrailerOnLeave,
+                    info, trailer, favorite, recommendedRow, header, releaseTrailerOnLeave,
                     onOpenRecommendation, onUpFromRecommendations, labels, playArea, peek, dongleRegular,
                 )
             }
@@ -170,7 +170,7 @@ private fun BoxScope.DetailsPage(
     info: DetailsInfo,
     trailer: TrailerState,
     favorite: FavoriteState,
-    extras: ExtrasState,
+    recommendedRow: RecommendedRowState,
     header: DetailsHeaderSpec,
     releaseTrailerOnLeave: Boolean,
     onOpenRecommendation: (MediaItem) -> Unit,
@@ -239,7 +239,7 @@ private fun BoxScope.DetailsPage(
         // The play area, and the row peeking up under it.
         playArea()
         DetailsPeekRecommendations(
-            extras = extras,
+            recommendedRow = recommendedRow,
             peek = peek,
             title = info.rowTitle,
             onOpen = onOpenRecommendation,

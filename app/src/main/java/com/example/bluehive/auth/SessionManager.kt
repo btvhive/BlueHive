@@ -76,13 +76,6 @@ class SessionManager private constructor(context: Context) {
         get() = prefs.getString(KEY_DEVICE_FP, null)
             ?: error("DeviceFingerprint missing — was SessionManager.init() called in Application.onCreate()?")
 
-    /** Package name of the host app that launched BlueHive, resolved dynamically
-     *  at cold start (see HostDiscovery). Persisted so the background token
-     *  provider can rebind to the same host on a 401 — where no launch intent /
-     *  referrer is available. Null until a host has been resolved at least once.
-     *  BlueHive is a companion: it trusts whichever host launched it, and names
-     *  no specific host anywhere. */
-    val hostPackage: String? get() = prefs.getString(KEY_HOST_PACKAGE, null)
 
     // PHASE 2: In the host model BlueHive holds no refresh token of its own —
     // the host owns the only device-bound refresh token. Authentication is
@@ -158,10 +151,6 @@ class SessionManager private constructor(context: Context) {
             Log.w("SessionManager", "Could not decode userId from host token: ${e.message}")
         }
     }
-
-    /** Remember which host app launched us (see [hostPackage]). Written with
-     *  commit() so it's on disk before the launch flow hands off and before any
-     *  background token refresh needs it. */
 
     /** Remember which profile was just selected, so the next cold-start
      *  warm-up can prefetch its personalized rows immediately. */

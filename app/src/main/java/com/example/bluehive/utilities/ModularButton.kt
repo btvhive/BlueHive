@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import android.os.Build
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.platform.LocalDensity
@@ -212,28 +213,6 @@ val StreamSourceButtonColors = ModularButtonColors(
     textUnfocusedToggled = Color(0xFF3C3A61),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFD6D6D6),
-)
-
-/**
- * Season chips on the TV detail screen.
- *
- * DERIVED FROM THE STREAM BUTTONS, not copied. Every base colour was already
- * identical -- same blue face, same violet strip, same shadow and label colours
- * -- including the same missing mainFocused, which is why a focused season also
- * turned grey. Deriving means the fix, and any future retune, reaches both.
- *
- * The two additions are toggle-only, and the reason this could not simply BE
- * StreamSourceButtonColors: a season chip is the one control here that is
- * toggleable, so it needs label colours for the selected state. ModularButton
- * resolves "toggled" ahead of "focused", so the SELECTED season keeps its dark
- * mainToggled face whether or not the cursor is on it -- only unselected chips
- * light up, which is what makes the selection readable at a glance.
- */
-val SeasonButtonColors = StreamSourceButtonColors.copy(
-    // Selected but not under the cursor: dimmed, so the cursor stays findable.
-    textToggled      = Color(0xFF5D5B6A),
-    // Selected AND under the cursor.
-    textToggledFocus = Color(0xFFCDCDCD),
 )
 
 /**
@@ -784,7 +763,10 @@ fun ModularButton(
                             modifier = Modifier
                                 .size(textConfig.iconSize)
                                 .offsetWithY(textConfig.offsetX + dx) { textYOffset.value + dy }
-                                .blur(blur, BlurredEdgeTreatment.Unbounded)
+                                // Blur needs API 31. Below it Modifier.blur draws nothing but
+                                // still adds a layer (Unbounded: no clip either) under each
+                                // shadowed icon on the Fire TV sticks -- so it is left off there (v516).
+                                .then(if (blurDrawsOn(Build.VERSION.SDK_INT)) Modifier.blur(blur, BlurredEdgeTreatment.Unbounded) else Modifier)
                         )
                     }
                     Image(
@@ -812,3 +794,6 @@ fun ModularButton(
         }
     }
 }
+
+/** Modifier.blur draws from API 31 (RenderEffect); below it, it only adds an empty layer. Pure, so it is tested. */
+internal fun blurDrawsOn(sdkInt: Int): Boolean = sdkInt >= Build.VERSION_CODES.S

@@ -78,9 +78,6 @@ import kotlin.math.abs
  *     together — no drift.
  */
 
-// Logical height of one TvWideLazyRow (its sectionHeight).  Don't change
-// this independently of TvWideLazyRow's sectionHeight default.
-val SHELF_STACK_ROW_HEIGHT: Dp = 250.dp
 
 // Vertical gap between the TOP of the focused row and the TOP of the next
 // row.  Peek control — lower values show MORE of the next row at the bottom

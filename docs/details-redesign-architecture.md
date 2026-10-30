@@ -1,9 +1,22 @@
 # Details screens redesign: architecture
 
-**Status:** design only, nothing built yet.
+**Status:** built. Stages 0-10 shipped 2026-10-25 (v377-v402, last commit `68fda41`), and all six test rounds passed. §3 and §4 describe the code as it is now (v516); the rest is the plan as written, kept as the record of why it is shaped this way.
 
 - Written 2026-10-24 against commit `ac47236` (v376), after reading both screens end to end.
 - Revised the same day: added the shared frame (§4) and grouped the TV test rounds (§11).
+- Updated 2026-10-30 (v516) for what changed since: see "Since the redesign" below.
+
+## Since the redesign
+
+| When | What changed | Where |
+|---|---|---|
+| v417 movie, v469 TV | The **peek layout** replaced the Extras switch: no Extras button (Search in its place), the play area and the recommended row both shown, the page slides up while the row has focus. | `shared/layout/DetailsPeek.kt` |
+| v451, v502-v514 | The TV **season column** became a season picker in the left cap: a card wheel (v488-v501), then a list with focus and choosing modes. `SeasonColumn.kt` is gone. | `tvshowdetails/SeasonAccordion.kt` |
+| v458-v468 | The inline "Watch on ..." grid under a tile became the **episode overlay**, which turns to dust on a Watch press. | `tvshowdetails/EpisodeSourceOverlay.kt`, `EpisodeSnap.kt` |
+| v515 | **Efficiency pass**: nine per-frame and on-open costs fixed (animated values read while placing or drawing, the season list on its own layer, no cache walk on open, one watched fetch on open), each with its own test. The Extras code (switch, Back handler, non-peek frame, Extras button) removed. | commit `9de4814` |
+| v516 | `ExtrasState` renamed `RecommendedRowState` (it only holds the row now); `startInExtras` renamed `startInRow` (the intent key stays `start_in_extras`). Unused resources and declarations removed across the app. | |
+
+The test checklists in §11 and §12 are the ones the six rounds ran; items about Extras no longer apply.
 
 ---
 
@@ -50,63 +63,68 @@ What that size has cost so far:
 
 ## 3. Target structure
 
-The tree below uses `├──` connectors. Sizes are estimates, in lines.
+The tree below uses `├──` connectors. It is the code as it stands (v516), with line counts.
 
 ```
 app/src/main/java/com/example/bluehive/details/
 ├── moviesdetails/                     only the movie screen
-│   ├── MoviesDetailsScreenCompose.kt     Activity: intent → MovieDetailsArgs → screen      ~120
-│   ├── MovieDetailsArgs.kt               typed intent extras                                ~60
-│   ├── MovieDetailsScreen.kt             root: creates the state, plugs into the frame      ~120
-│   ├── MovieInfoLabels.kt                revenue, budget (+ refresh), release, language     ~120
-│   ├── MovieSourceGrid.kt                the 2-column "Watch on …" buttons                  ~170
-│   └── MovieAnimeButtons.kt              Watch in English / Japanese + early-press queue    ~200
+│   ├── MoviesDetailsScreenCompose.kt     Activity: intent → MovieDetailsArgs → screen      121
+│   ├── MovieDetailsArgs.kt               typed intent extras                                 91
+│   ├── MovieDetailsScreen.kt             root: creates the state, plugs into the frame      504
+│   ├── MovieInfoLabels.kt                revenue, budget, release, language                  78
+│   └── MovieSourceGrid.kt                "Watch on …" grid, Watch in English / Japanese     319
 │
 ├── tvshowdetails/                     only the TV screen
-│   ├── TVShowsDetailsScreenCompose.kt    Activity                                           ~130
-│   ├── TvShowDetailsArgs.kt              typed intent extras (incl. last season/episode)    ~70
-│   ├── TvShowDetailsScreen.kt            root: creates the state, plugs into the frame      ~150
-│   ├── TvFocusMap.kt                     every focus requester that crosses sections        ~80
-│   ├── TvInfoLabels.kt                   seasons, status, release, language                 ~120
-│   ├── TvPlayArea.kt                     decorations + seasons + episodes + source overlay  ~150
-│   ├── SeasonAvailability.kt             aired/unaired rules + season check (pure, tested)  ~200
-│   ├── SeasonColumn.kt                   season list, its keys, reliable focus              ~220
-│   ├── EpisodesState.kt                  season loads, prefetch, first focus, watched marks ~300
-│   ├── EpisodeRow.kt                     the episode LazyRow + hold-to-repeat               ~200
-│   ├── EpisodeCard.kt                    one tile: date, still, badge, fold, scrim, popup   ~380
-│   ├── UnairedGate.kt                    press-twice override, 6 s window, notice           ~90
-│   ├── EpisodeSourceOverlay.kt           "Watch on …" grid under a tile + its D-pad rules   ~260
-│   └── EpisodeAnimeButtons.kt            Watch in English / Japanese under a tile           ~200
+│   ├── TVShowsDetailsScreenCompose.kt    Activity                                           100
+│   ├── TvShowDetailsArgs.kt              typed intent extras (incl. last season/episode)    102
+│   ├── TvShowDetailsScreen.kt            root: creates the state, plugs into the frame      491
+│   ├── TvFocusMap.kt                     every focus requester that crosses sections         79
+│   ├── TvInfoLabels.kt                   seasons, status, release, language                  75
+│   ├── TvPlayArea.kt                     caps + season picker + episode row                 140
+│   ├── SeasonAvailability.kt             aired/unaired rules, season check, return count    214
+│   ├── SeasonAccordion.kt                the season picker: focus and choosing modes        710
+│   ├── EpisodesState.kt                  season loads, prefetch, first focus, watched marks 304
+│   ├── EpisodeRow.kt                     the episode LazyRow + hold-to-repeat               247
+│   ├── EpisodeCard.kt                    one tile: date, still, badge, fold, scrim          490
+│   ├── UnairedGate.kt                    press-twice override, 6 s window, notice            93
+│   ├── EpisodeSourceOverlay.kt           the episode overlay and its Watch buttons          533
+│   ├── EpisodeSnap.kt                    the overlay's snap-to-dust on a Watch press        357
+│   └── EpisodeAnimeButtons.kt            Watch in English / Japanese in the overlay         120
 │
 └── shared/                            used by both; imports neither screen
     ├── layout/
-    │   ├── DetailsScaffold.kt            the frame both screens plug into (§4)              ~200
-    │   ├── DetailsBackdrop.kt            background, rating + star, backdrop, gradient      ~120
-    │   ├── DetailsTrailerLayer.kt        trailer player + release on leave                  ~60
-    │   ├── DetailsLogoOrTitle.kt         logo, or the wrapped title when there is none      ~110
-    │   ├── DetailsOverview.kt            genres line + overview with the auto-shrink        ~90
-    │   ├── DetailsHeaderButtons.kt       Favorites, Extras, Trailer, Rewind, Fast-forward   ~420
-    │   ├── DetailsRecommendations.kt     the Extras row and what a pick does                ~80
-    │   └── DetailsToasts.kt              the bottom-centre notices                          ~80
+    │   ├── DetailsScaffold.kt            the frame both screens plug into (§4)              278
+    │   ├── DetailsPeek.kt                the peek layout: row position, slide, entry        176
+    │   ├── DetailsBackdrop.kt            rating + star, backdrop, gradient                  143
+    │   ├── DetailsBackdropBlur.kt        the page blur behind search / the overlay           30
+    │   ├── DetailsTrailerLayer.kt        trailer player + release on leave                   91
+    │   ├── DetailsLogoOrTitle.kt         logo, or the wrapped title when there is none      125
+    │   ├── DetailsInfoLines.kt           metadata lines that close up when missing           58
+    │   ├── DetailsOverview.kt            genres line + overview, sized to fit               233
+    │   ├── DetailsHeaderButtons.kt       Favorites, Search, Rewind, Trailer, Forward        558
+    │   ├── DetailsSearchKeyboard.kt      the honeycomb keyboard over the page                84
+    │   ├── DetailsRecommendations.kt     the peek row and where it starts                    96
+    │   ├── RecommendedRowTitle.kt        the row's heading by kind of title                  22
+    │   └── DetailsToasts.kt              the bottom-centre notices                          104
     ├── state/
-    │   ├── TrailerState.kt               playing / played / extracting / seek               ~90
-    │   ├── FavoriteState.kt              check on open + toggle                             ~70
-    │   ├── ExtrasState.kt                Extras toggle + recommendations                    ~110
-    │   └── DetailsBackHandlers.kt        the three Back handlers, in their fixed order      ~80
+    │   ├── TrailerState.kt               playing / played / extracting / seek               150
+    │   ├── FavoriteState.kt              check on open + toggle                              93
+    │   ├── RecommendedRowState.kt        the recommended row's titles (was ExtrasState)      80
+    │   └── DetailsBackHandlers.kt        the Back handlers, in their fixed order             55
     ├── playback/
-    │   ├── StreamSource.kt               the one source model (replaces both copies)        ~30
-    │   ├── PlaybackRequest.kt            Movie(tmdbId) | Episode(tmdbId, season, ep, name)  ~40
-    │   ├── PlaybackSession.kt            the one loading screen: flags, stages, cancel      ~150
-    │   ├── SourcePlaybackController.kt   source chain + both failover halves                ~350
-    │   ├── AnimePlaybackController.kt    Miruro: backend first, on-device fallback          ~380
-    │   ├── AnimeServerList.kt            server cache, pick-next, ensure-list               ~150
-    │   ├── PlayerIntents.kt              every player/extractor Intent and all its extras   ~220
-    │   ├── ExtractionMessages.kt         error wording, reason parsing, labels, relay url   ~200
-    │   └── PlaybackOverlays.kt           loading + trap, error, default-server prompt,      ~150
+    │   ├── StreamSource.kt               the one source model (replaces both copies)         18
+    │   ├── PlaybackRequest.kt            Movie(tmdbId) | Episode(tmdbId, season, ep, name)   53
+    │   ├── PlaybackSession.kt            the one loading screen: flags, stages, cancel      151
+    │   ├── SourcePlaybackController.kt   source chain + both failover halves                365
+    │   ├── AnimePlaybackController.kt    Miruro: backend first, on-device fallback          677
+    │   ├── AnimeServerList.kt            server cache, pick-next, ensure-list                84
+    │   ├── PlayerIntents.kt              every player/extractor Intent and all its extras   328
+    │   ├── ExtractionMessages.kt         error wording, reason parsing, labels, relay url   203
+    │   └── PlaybackOverlays.kt           loading + trap, error, default-server prompt,      140
     │                                     picker
     └── navigation/
-        ├── DetailsIntents.kt             one builder for "open details for this title"      ~120
-        └── DetailsBackNavigation.kt      history stack; back to History/Favorites/Search    ~120
+        ├── DetailsIntents.kt             one builder for "open details for this title"      184
+        └── DetailsBackNavigation.kt      history stack; back to History/Favorites/Search     96
 ```
 
 **Budgets**, enforced by the gates in §9:
@@ -115,7 +133,7 @@ app/src/main/java/com/example/bluehive/details/
 - No file over about 600 lines.
 - Each root screen around 150 lines or less.
 
-**As built (Stage 10):** the tree holds, except for the movie screen. `MovieSourceGrid.kt` and `MovieAnimeButtons.kt` were never split out, so those buttons are still in `MovieDetailsScreen.kt` (757 lines, the longest file). Every method is under the budget. The roots are longer than planned (the TV function is 427 lines, the movie's 466, much of it comments), but at 2,142 and 1,515 units they are well under it.
+**As built:** at Stage 10 the movie buttons were still in `MovieDetailsScreen.kt`; `MovieSourceGrid.kt` took them on 2026-10-26 (`MovieAnimeButtons.kt` was never needed: both kinds live in it). Every method is under the budget. At v515 the TV function is 2,091 units / 63 registers and the movie's 1,631 / 63. Two files are over the 600-line guide: `SeasonAccordion.kt` (710, most of it the drawing and its constants) and `AnimePlaybackController.kt` (677).
 
 **The Activity class names stay as they are; only their package changes.** That keeps logs, adb checks and crash reports comparable before and after. A rename can come at the very end if wanted.
 
@@ -129,51 +147,59 @@ Both screens draw the same frame around their own content:
 
 - the background, rating, backdrop, trailer and gradient;
 - the logo or title, the genres and the overview;
-- the five header buttons;
-- the Extras switch.
+- the header buttons;
+- the play area, and the recommended row peeking up under it.
 
-Today each screen writes that frame out by hand. With the scaffold it exists once, and each screen plugs in only what is its own.
+Before the redesign each screen wrote that frame out by hand. With the scaffold it exists once, and each screen plugs in only what is its own.
 
 **What the scaffold owns:**
 
 - the layer order (C1), from the background down to the play area;
-- the Extras switch: the play area while Extras is off, the recommendations row while it is on.
+- the peek layout: the page (everything but the background) on a layer that slides up while the row has focus. (Until v515 it also owned the Extras switch, which showed the row in place of the play area.)
 
 **What each screen plugs in:**
 
 | Slot | Movie | TV |
 |---|---|---|
 | `labels` | revenue, budget, release, language | seasons, status, release, language |
-| `playArea` | anime buttons, or the source grid | decorations, season column, episode row, source overlay |
+| `playArea` | anime buttons, or the source grid | caps, season picker, episode row |
 | `overlays` | its overlay stack, in today's movie order | its overlay stack, in today's TV order |
 | hooks | what picking a recommendation does; Up from the row | the same (TV prefetches first) |
 
-**The scaffold:**
+**The scaffold** (as it is now, simplified):
 
 ```kotlin
 @Composable
 fun DetailsScaffold(
-    info: DetailsInfo,                  // title, logo, backdrop, trailer url, rating, overview, genres
-    header: DetailsHeaderSpec,          // focus requesters, enable flag, press timing
+    info: DetailsInfo,                  // title, logo, backdrop, rating, overview, genres, row title
     trailer: TrailerState,
     favorite: FavoriteState,
-    extras: ExtrasState,
+    recommendedRow: RecommendedRowState,
+    header: DetailsHeaderSpec,          // focus requesters, enable flag, press timing, search
     onOpenRecommendation: (MediaItem) -> Unit,
     onUpFromRecommendations: () -> Unit,
     labels: @Composable BoxScope.() -> Unit,
     playArea: @Composable BoxScope.() -> Unit,
     overlays: @Composable BoxScope.() -> Unit,
+    peek: DetailsPeekState,
+    modifier: Modifier,                 // the movie page's search blur (detailsBackdropBlur)
+    pageModifier: Modifier,             // the TV page's blur and focus block, under its overlays
 ) {
-    Box(Modifier.fillMaxSize()) {
-        DetailsBackdrop(info, trailer)          // background, rating, star, backdrop
-        DetailsTrailerLayer(info, trailer)
-        DetailsGradient(info)
-        DetailsLogoOrTitle(info)
-        labels()
-        DetailsOverview(info)                   // genres + overview
-        DetailsHeaderButtons(header, trailer, favorite, extras)   // incl. "Loading trailer…"
-        if (!extras.isOn) playArea()
-        else DetailsRecommendations(extras, onOpenRecommendation, onUpFromRecommendations)
+    Box(Modifier.fillMaxSize().then(modifier)) {
+        Box(Modifier.fillMaxSize().then(pageModifier)) {
+            DetailsPageBackground()
+            DetailsSlidingPage(peek) {          // slides up while the row has focus
+                DetailsBackdrop(info, trailer)  // rating, star, backdrop
+                DetailsTrailerLayer(trailer)
+                DetailsGradient(info)
+                DetailsLogoOrTitle(info)
+                labels()
+                DetailsOverview(info, peek)     // genres + overview; tells the peek where it ends
+                DetailsHeaderButtons(header, trailer, favorite)   // incl. "Loading trailer…"
+                playArea()
+                DetailsPeekRecommendations(recommendedRow, peek, …)
+            }
+        }
         overlays()
     }
 }
@@ -187,14 +213,14 @@ fun MovieDetailsScreen(args: MovieDetailsArgs, onOpenDetails: (MediaItem) -> Uni
     val scope    = rememberCoroutineScope()
     val trailer  = rememberTrailerState()
     val favorite = rememberFavoriteState(args, sendTitle = false)
-    val extras   = rememberExtrasState(args, loadOn = Dispatchers.IO)
+    val row      = rememberRecommendedRowState(args)   // was rememberExtrasState
     val session  = rememberPlaybackSession(scope)
     val anime    = rememberAnimePlayback(session, PlaybackRequest.Movie(args.tmdbId), …)
     val sources  = rememberSourcePlayback(session, PlaybackRequest.Movie(args.tmdbId), …)
-    DetailsBackHandlers(extras, anime, session)   // always right after the holders (C2)
+    DetailsBackHandlers(anime, session)   // always right after the holders (C2)
     // … focus restore on player return, budget/revenue refresh, diagnostics …
     DetailsScaffold(
-        info = args.info, header = …, trailer = trailer, favorite = favorite, extras = extras,
+        info = args.info, header = …, trailer = trailer, favorite = favorite, recommendedRow = row,
         onOpenRecommendation    = { trailer.stop(); onOpenDetails(it) },
         onUpFromRecommendations = { … },
         labels   = { MovieInfoLabels(args, budgetRevenue) },
@@ -217,7 +243,7 @@ fun MovieDetailsScreen(args: MovieDetailsArgs, onOpenDetails: (MediaItem) -> Uni
 
 | | |
 |---|---|
-| One copy of the frame | The layer order and the Extras switch exist once instead of twice, so they can't drift. |
+| One copy of the frame | The layer order and the peek layout exist once instead of twice, so they can't drift. |
 | Small roots | About 120 lines (movie) and 150 (TV), instead of about 300. |
 | Early crash protection | From Stage 5, the play area and the overlays compile as separate methods. The method R8 keeps miscompiling shrinks halfway through the plan, not at the end. |
 | Early speed win | The play area and the overlays become their own recomposition scopes from Stage 5 (P1). |

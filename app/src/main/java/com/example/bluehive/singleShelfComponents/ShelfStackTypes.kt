@@ -57,11 +57,5 @@ data class PageWindow(
         return result
     }
 
-    fun getRelativeIndex(absoluteIndex: Int, pageSize: Int): Pair<Int, Int> {
-        val pageNumber = absoluteIndex / pageSize
-        val indexInPage = absoluteIndex % pageSize
-        return Pair(pageNumber, indexInPage)
-    }
-
     fun getPageCount(): Int = windowEndPage - windowStartPage + 1
 }

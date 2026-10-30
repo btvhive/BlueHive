@@ -20,13 +20,13 @@ import kotlinx.coroutines.withContext
  * (DetailsPeekRecommendations). Loads on open ([loadRow]) unless the page
  * opened with a prefetched row (a title picked from another TV show's row).
  *
- * Moved here from both screens in Stage 4 of the details redesign as the
- * Extras switch and its row. The switch went with the peek layout (movie v417,
- * TV v469) and its code -- isOn, toggle, close and the open-in-Extras preload
- * -- was removed in v515; the name stayed.
+ * Moved here from both screens in Stage 4 of the details redesign as
+ * ExtrasState, the Extras switch and its row. The switch went with the peek
+ * layout (movie v417, TV v469); its code was removed in v515, and the holder
+ * renamed for what it is in v516.
  */
 @Stable
-class ExtrasState internal constructor(
+class RecommendedRowState internal constructor(
     private val scope: CoroutineScope,
     private val repository: RecommendationsRepository,
     private val tmdbId: Int,
@@ -64,17 +64,17 @@ class ExtrasState internal constructor(
 }
 
 /**
- * The page's ExtrasState. [scope] is the screen's own, so leaving the page
+ * The page's RecommendedRowState. [scope] is the screen's own, so leaving the page
  * cancels a load in flight, as before. [prefetched] is the TV screen's
  * prefetched row, if it opened with one.
  */
 @Composable
-fun rememberExtrasState(
+fun rememberRecommendedRowState(
     scope: CoroutineScope,
     repository: RecommendationsRepository,
     tmdbId: Int,
     mediaType: String,
     prefetched: List<MediaItem>?,
-): ExtrasState = remember(scope, repository, tmdbId, mediaType) {
-    ExtrasState(scope, repository, tmdbId, mediaType, prefetched)
+): RecommendedRowState = remember(scope, repository, tmdbId, mediaType) {
+    RecommendedRowState(scope, repository, tmdbId, mediaType, prefetched)
 }

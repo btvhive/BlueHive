@@ -53,8 +53,6 @@ import kotlinx.coroutines.launch
 class BlueHiveApplication : Application(), ImageLoaderFactory {
 
 
-    private lateinit var sessionExpiredCallback: () -> Unit
-
     // Tracks the current foreground Activity so a background-posted session-
     // expiry event can tear BlueHive down (finishAffinity → drops back to the
     // host) without needing an Activity reference at the call site. PHASE 2:

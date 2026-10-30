@@ -42,7 +42,7 @@ import com.example.bluehive.details.shared.layout.TimedDetailsToast
 import com.example.bluehive.details.shared.layout.rememberTimedNotice
 import com.example.bluehive.details.shared.layout.TrailerFailedNotice
 import com.example.bluehive.details.shared.state.DetailsBackHandlers
-import com.example.bluehive.details.shared.state.rememberExtrasState
+import com.example.bluehive.details.shared.state.rememberRecommendedRowState
 import com.example.bluehive.details.shared.state.rememberFavoriteState
 import com.example.bluehive.details.shared.state.rememberTrailerState
 import androidx.compose.ui.Modifier
@@ -88,11 +88,11 @@ fun TvShowDetailsScreen(
 
     val coroutineScope = rememberCoroutineScope()
 
-    // The recommendations row -- see ExtrasState. The peek layout
+    // The recommendations row -- see RecommendedRowState. The peek layout
     // (DetailsPeekState) shows it under the episodes from the start, so it
     // loads on open, on a background thread, unless the page opened with
     // another show's prefetched row.
-    val extras = rememberExtrasState(
+    val recommendedRow = rememberRecommendedRowState(
         scope      = coroutineScope,
         repository = recommendationsRepository,
         tmdbId     = args.mediaId,
@@ -102,14 +102,14 @@ fun TvShowDetailsScreen(
 
     // Opened from history in Extras: the row takes focus as it loads, so the
     // page opens slid up on it.
-    val peek = rememberDetailsPeek(startFocused = args.startInExtras)
+    val peek = rememberDetailsPeek(startFocused = args.startInRow)
 
     // The Search button's keyboard, over this page -- see DetailsSearchKeyboard.
     val search = rememberDetailsSearch()
 
     // First focus off the header while the page opens in the row or on an
     // episode -- see DetailsHeaderGate.
-    val headerGate = rememberDetailsHeaderGate(blocked = args.startInExtras || args.resumeToEpisode)
+    val headerGate = rememberDetailsHeaderGate(blocked = args.startInRow || args.resumeToEpisode)
 
 
     // The season on show, its episodes, the row's scroll and focus, the open
@@ -181,7 +181,7 @@ fun TvShowDetailsScreen(
 
 
     // The row loads; opened in it, the header waits for its titles -- see PeekRowStart.
-    PeekRowStart(peek, extras, focusMap.favorite, headerGate)
+    PeekRowStart(peek, recommendedRow, focusMap.favorite, headerGate)
 
     val favoriteProfileId = args.profileId
 
@@ -342,7 +342,7 @@ fun TvShowDetailsScreen(
         ),
         trailer = trailer,
         favorite = favorite,
-        extras = extras,
+        recommendedRow = recommendedRow,
         header = DetailsHeaderSpec(
             pressTiming            = TvHeaderPressTiming,
             enableFocus            = headerGate.isOpen,
