@@ -38,7 +38,7 @@ class SeasonListDrawTest {
     fun `the cached gradients are the ones drawn before, moved to the row's top`() {
         // A slot's gradient ran from its own top to its bottom; it is now made
         // from 0 and drawn translated to the row, which is the same paint.
-        assertEquals(Brush.verticalGradient(listOf(Color(0xFF0C0C0F), Color(0xFF111115)), startY = 0f, endY = 40f), brushes.slot)
+        assertEquals(Brush.verticalGradient(listOf(Color(0xFF1E1E25), Color(0xFF25252D)), startY = 0f, endY = 40f), brushes.slot)
         assertEquals(
             Brush.verticalGradient(listOf(Color(0xFF070707), Color.Transparent), startY = 10f, endY = 30f),
             brushes.fadeAbove,

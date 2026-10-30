@@ -121,12 +121,16 @@ private val ROW_GAP = 2.5.dp
 private val ROW_CORNER = 4.3.dp
 private val ROW_TEXT_PAD = 7.4.dp
 
-/** The recessed slots: a dark gradient, shaded inside its top edge, lit along its bottom. */
-private val SLOT_TOP = Color(0xFF0C0C0F)
-private val SLOT_BOTTOM = Color(0xFF111115)
-private val SLOT_SHADE = Color(0xD9000000)
+/**
+ * The slots: a dark gradient, shaded inside its top edge, lit along its
+ * bottom. Brighter since v532 (the user's mock-up A, 2026-10-30) -- they were
+ * near-black (0C0C0F to 111115, shade D9, light 0D) and easy to miss.
+ */
+private val SLOT_TOP = Color(0xFF1E1E25)
+private val SLOT_BOTTOM = Color(0xFF25252D)
+private val SLOT_SHADE = Color(0x99000000)
 private val SLOT_SHADE_DEPTH = 3.dp
-private val SLOT_LIGHT = Color(0x0DFFFFFF)
+private val SLOT_LIGHT = Color(0x1FFFFFFF)
 
 /** A raised tile: a three-stop gradient on a darker lip, lit along its top, and its text. */
 internal class TilePaint(
@@ -170,8 +174,9 @@ internal val DULL_TILE = TilePaint(
     face = listOf(Color(0xFFC9CACF), Color(0xFFB1B2B9), Color(0xFF9D9EA6)),
     lip = Color(0xFF4F5057),
     shine = Color(0x59FFFFFF),
-    ink = Color(0xFF24242A),
-    label = Color(0xFF45454F),
+    // Crisper since v532, the user's pick (24242A / 45454F before).
+    ink = Color(0xFF0C0C10),
+    label = Color(0xFF24242C),
 )
 private val TILE_FACE_STOPS = floatArrayOf(0f, 0.55f, 1f)
 
@@ -183,8 +188,9 @@ private val TILE_SHINE_DEPTH = 0.6.dp
 private val GOLD = Color(0xFFD19814)
 private val CARET_OFF = Color(0xFF2A2A30)
 
-/** A slot's text. */
-private val INK_OFF = Color(0xFF8D8D96)
+/** A slot's text: SEASON and its number, brighter since v532 (both 8D8D96 before). */
+private val LABEL_OFF = Color(0xFFB4B4BF)
+private val INK_OFF = Color(0xFFC8C8D2)
 private const val LABEL_SP = 6.2f
 private const val NUMBER_SP = 12.7f
 
@@ -528,7 +534,7 @@ private fun DrawScope.drawSeasonList(text: SeasonListText, paint: SeasonListPain
             val label = text.label
             drawText(
                 label,
-                color = lerp(if (isLoaded) playing.label else INK_OFF, BRIGHT_TILE.label, on),
+                color = lerp(if (isLoaded) playing.label else LABEL_OFF, BRIGHT_TILE.label, on),
                 topLeft = Offset(left + ROW_TEXT_PAD.toPx(), centre - label.size.height / 2f),
             )
             val number = text.numbers[season - 1]
