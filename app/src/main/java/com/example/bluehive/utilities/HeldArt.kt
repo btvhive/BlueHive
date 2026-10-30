@@ -21,7 +21,7 @@ import com.example.bluehive.R
  * the Resources drawable cache, which keeps nothing once a page has closed
  * and a garbage collection has run. Every other TV-page open then decoded all
  * of this again on the main thread inside its first frame -- backdrop_details
- * (1920x1080) 75 ms, the 1280x815 backdrop fade 90 ms, the caps,
+ * (1920x1080) 75 ms, backdrop_details_gradient (1280x815) 90 ms, the caps,
  * glows and title-card frames the rest: ~230 ms, the whole gap between the
  * ~350 ms and ~650 ms opens. Warming that cache from the application did not
  * help (still decoded every other open), so the bitmaps are held here and
@@ -37,7 +37,7 @@ object HeldArt {
     /** Every raster drawable the details pages draw (vectors have their own cache). Checked by HeldArtTest. */
     internal val RASTER: IntArray = intArrayOf(
         R.drawable.backdrop_details,
-        R.drawable.backdrop_details_fade,
+        R.drawable.backdrop_details_gradient,
         R.drawable.button_focus_wide_glow,
         R.drawable.button_focus_wide_nonglow,
         R.drawable.button_focus_narrow_glow,
