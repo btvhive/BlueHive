@@ -125,13 +125,19 @@ fun BoxScope.DetailsPageBackground() {
     )
 }
 
-/** The gradient over the top-right backdrop, drawn above the trailer player. */
+/**
+ * The fade over the top-right backdrop, drawn above the trailer player.
+ * backdrop_details_fade (v528): the original backdrop_details_gradient's shape
+ * and colour without its grain or stepping, which looked patchy from some
+ * angles -- made by tools/details-art/make_backdrop_fade.py. The original
+ * stays in res as the source it is made from.
+ */
 @Composable
 fun BoxScope.DetailsGradient(backdropUrl: String?) {
     if (!backdropUrl.isNullOrBlank() && backdropUrl != "N/A") {
         // GRADIENT OVERLAY - Add this right after the backdrop
         Image(
-            painter = heldPainter(R.drawable.backdrop_details_gradient),
+            painter = heldPainter(R.drawable.backdrop_details_fade),
             contentDescription = "Gradient overlay",
             modifier = Modifier
                 .align(Alignment.TopEnd)
