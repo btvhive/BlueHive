@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
@@ -57,6 +56,12 @@ import com.example.bluehive.utilities.RecommendedRowEntry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.launch
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
+import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.layout.ContentScale
+import com.example.bluehive.R
+import com.example.bluehive.utilities.heldPainter
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.floor
@@ -68,15 +73,17 @@ import kotlin.math.floor
  *
  * Two steps since v505, so Up / Down never pick a season by accident (the
  * user's flow and the 2026-10-29/30 mockups):
- *   - FOCUSED: a thin glowing white line rings the black panel and the season
- *     on show stays the DULL WHITE tile (v508). Up goes to the header, Down to
+ *   - FOCUSED: the buttons' focus underglow glows behind the whole cap
+ *     (SeasonCapGlow, v526; a thin white line round the panel before), the
+ *     episode card the cap half-covers tucks under it, and the season on show
+ *     stays the DULL WHITE tile (v508). Up goes to Add to Favorites, Down to
  *     the recommended row, Right to the episodes; OK starts CHOOSING.
- *   - CHOOSING: the line goes (v506), the season on show turns GREY, and a
+ *   - CHOOSING: the glow goes (v506), the season on show turns GREY, and a
  *     bright white tile with the gold arrow beside it moves between seasons
  *     on Up / Down, STOPPING at the ends (no wrap). OK plays that season (its
  *     tile presses in) and stays CHOOSING (v507); Back goes back to FOCUSED,
  *     the white tile returning to the season on show.
- *   - Focus elsewhere: no line; the season on show is a DULL WHITE tile.
+ *   - Focus elsewhere: no glow; the season on show is a DULL WHITE tile.
  * Four rows show at a time. While choosing, a gold caret at either end of the
  * arrow's track says there are more seasons that way, and the list fades out
  * there.
@@ -195,15 +202,14 @@ private val CARET_DOWN_TOP = 94.1.dp
 private val FADE_DEPTH = 9.9.dp
 
 /**
- * The focus line: "C with B's thin glow" of the 2026-10-30 mockups -- a thin
- * white line just outside the black panel ([FOCUS_LINE_OUTSET] from its edge
- * to the line's middle), glowing both ways.
+ * The focus glow behind the cap: season_cap_focus_glow, the buttons'
+ * underglow (button_focus_narrow_glow's plate colour, halo and grain) on a
+ * plate 2 dp beyond the cap with the cap's own rounded corners (5 dp, so 7),
+ * in the user's approved mock-up of 2026-10-30. The image runs [CAP_GLOW_OUT]
+ * past the cap on every side: 2 dp of plate, 9 dp of halo.
  */
-private val FOCUS_LINE_OUTSET = 3.2.dp
-private val FOCUS_LINE_WIDTH = 1.2.dp
-private val FOCUS_LINE_CORNER = 3.7.dp
-private val FOCUS_GLOW = listOf(5.dp to 0.06f, 3.6.dp to 0.12f, 2.4.dp to 0.22f)
-private const val FOCUS_FADE_MS = 150
+internal val CAP_GLOW_OUT = 11.dp
+internal const val FOCUS_FADE_MS = 150
 
 /** One move: the white tile slides and the list scrolls together (the mockup's cubic-bezier(.2, .8, .2, 1)). */
 private const val LIST_MOVE_MS = 150   // 320 in v502; "a lot faster", the user (2026-10-29)
@@ -282,10 +288,6 @@ private class SeasonListFrame(
     val choosing: Float,
     val scroll: Float,
     val press: Float,
-    /** How far the picker has focus (0 to 1). */
-    val focus: Float,
-    /** Left while choosing: the line stays off as both fade out (v514). */
-    val lineOff: Boolean,
 )
 
 /** Season 1 through [listedSeasons]: the newest with an aired episode (SeasonAvailability). */
@@ -306,9 +308,6 @@ internal fun BoxScope.SeasonAccordion(
     val loaded = episodesState.selectedSeason.coerceIn(1, total)
     var browsing by remember { mutableIntStateOf(loaded) }
     var choosing by remember { mutableStateOf(false) }
-    // Set when focus leaves mid-choosing (Right to the episodes): the choosing
-    // fade would otherwise bring the line back for a frame or two on the way out.
-    var lineOff by remember { mutableStateOf(false) }
     // A load from anywhere (OK here, the season check, the first load) moves the white tile with it.
     LaunchedEffect(loaded) { browsing = loaded }
     val shown = browsing.coerceIn(1, total)
@@ -318,18 +317,20 @@ internal fun BoxScope.SeasonAccordion(
     // recomposes nothing until it moves -- see SEASON_TURN_GAP_MS.
     val lastTurn = remember { longArrayOf(Long.MIN_VALUE / 2) }
     // Read only in drawing: the white tile's row, the list's scroll (rows),
-    // the playing tile's press, the choosing fade and the focus fade.
+    // the playing tile's press and the choosing fade.
     val cursor = remember(total) { Animatable(shown - 1f) }
     val scroll = remember(total) { Animatable(seasonListScroll(shown, total)) }
     val press = remember { Animatable(0f) }
     val choosingFade = remember { Animatable(0f) }
-    val focusFade = remember { Animatable(0f) }
     LaunchedEffect(shown, total) {
         launch { cursor.animateTo(shown - 1f, tween(LIST_MOVE_MS, easing = ListEase)) }
         launch { scroll.animateTo(seasonListScroll(shown, total), tween(LIST_MOVE_MS, easing = ListEase)) }
     }
     LaunchedEffect(choosing) { choosingFade.animateTo(if (choosing) 1f else 0f, tween(CHOOSING_FADE_MS)) }
-    LaunchedEffect(focused) { focusFade.animateTo(if (focused) 1f else 0f, tween(FOCUS_FADE_MS)) }
+    // The cap's glow (SeasonCapGlow, drawn behind the cap): on while focused,
+    // off while choosing. One target, so leaving mid-choosing never flashes it.
+    val glowOn = focused && !choosing
+    SideEffect { focusMap.seasonCapGlowOn = glowOn }
     val text = rememberSeasonListText(total, passionFont)
 
     // Choosing ends where it started: back on the season on show.
@@ -347,7 +348,6 @@ internal fun BoxScope.SeasonAccordion(
             .focusRequester(focusMap.seasonPicker)
             .onFocusChanged { state ->
                 focusMap.seasonPickerFocused = state.isFocused
-                lineOff = !state.isFocused && (choosing || lineOff)
                 // Leaving drops the browse.
                 if (!state.isFocused) stopChoosing()
             }
@@ -417,8 +417,6 @@ internal fun BoxScope.SeasonAccordion(
                         choosing = choosingFade.value,
                         scroll = scroll.value,
                         press = press.value,
-                        focus = focusFade.value,
-                        lineOff = lineOff,
                     ),
                 )
                 }
@@ -505,9 +503,6 @@ private fun DrawScope.drawSeasonList(text: SeasonListText, paint: SeasonListPain
     val rowTop = { row: Float -> top + (row - frame.scroll) * step }
     val sink = PRESS_SINK.toPx() * frame.press
 
-    // The line shows while focused, and goes while choosing (v506).
-    val line = if (frame.lineOff) 0f else frame.focus * (1f - frame.choosing)
-    if (line > 0f) drawFocusLine(paint, line)
     // The season on show: dull white, focused or not (v508); grey while choosing,
     // and bright white only under the white tile.
     val playing = lerpTile(DULL_TILE, GREY_TILE, frame.choosing)
@@ -584,8 +579,6 @@ private class SeasonListPaint(
     val arrow: Path,
     val caretUp: Path,
     val caretDown: Path,
-    val glowStrokes: List<Pair<Stroke, Float>>,
-    val lineStroke: Stroke,
 )
 
 private fun CacheDrawScope.seasonListPaint(): SeasonListPaint {
@@ -610,8 +603,6 @@ private fun CacheDrawScope.seasonListPaint(): SeasonListPaint {
         },
         caretUp = caretPath(CARET_UP_TOP.toPx(), up = true),
         caretDown = caretPath(CARET_DOWN_TOP.toPx(), up = false),
-        glowStrokes = FOCUS_GLOW.map { (width, glow) -> Stroke(width.toPx()) to glow },
-        lineStroke = Stroke(FOCUS_LINE_WIDTH.toPx()),
     )
 }
 
@@ -669,18 +660,6 @@ private fun DrawScope.drawTile(
     }
 }
 
-/** The focus line round the black panel, its glow faked with wider, fainter strokes under it. */
-private fun DrawScope.drawFocusLine(paint: SeasonListPaint, alpha: Float) {
-    val outset = FOCUS_LINE_OUTSET.toPx()
-    val topLeft = Offset(-outset, -outset)
-    val ring = Size(size.width + outset * 2, size.height + outset * 2)
-    val radius = CornerRadius(FOCUS_LINE_CORNER.toPx())
-    for ((stroke, glow) in paint.glowStrokes) {
-        drawRoundRect(Color.White, topLeft, ring, radius, style = stroke, alpha = glow * alpha)
-    }
-    drawRoundRect(Color.White, topLeft, ring, radius, style = paint.lineStroke, alpha = alpha)
-}
-
 /** Fades into the panel's black over whichever ends of the list are cut off. */
 private fun DrawScope.drawListFades(
     brushes: SeasonListBrushes,
@@ -707,3 +686,28 @@ private fun DrawScope.drawArrow(paint: SeasonListPaint, centreY: Float, alpha: F
     translate(top = centreY + 0.6.dp.toPx()) { drawPath(paint.arrow, Color.Black, alpha = 0.6f * alpha) }
     translate(top = centreY) { drawPath(paint.arrow, GOLD, alpha = alpha) }
 }
+
+/**
+ * The cap's focus glow (v526), behind the cap image -- TvPlayArea draws it just
+ * before the cap. Fades in while the season picker has focus and is not
+ * choosing ([TvFocusMap.seasonCapGlowOn]); only this recomposes when it turns.
+ */
+@Composable
+internal fun BoxScope.SeasonCapGlow(focusMap: TvFocusMap) {
+    val alpha = animateFloatAsState(
+        targetValue = if (focusMap.seasonCapGlowOn) 1f else 0f,
+        animationSpec = tween(FOCUS_FADE_MS),
+        label = "seasonCapGlow",
+    )
+    Image(
+        painter = heldPainter(R.drawable.season_cap_focus_glow),
+        contentDescription = null,
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .size(width = SEASON_CAP_WIDTH + CAP_GLOW_OUT * 2, height = SEASON_CAP_HEIGHT + CAP_GLOW_OUT * 2)
+            .offset(x = SEASON_CAP_X - CAP_GLOW_OUT, y = SEASON_CAP_Y - CAP_GLOW_OUT)
+            .graphicsLayer { this.alpha = alpha.value },
+        contentScale = ContentScale.FillBounds,
+    )
+}
+

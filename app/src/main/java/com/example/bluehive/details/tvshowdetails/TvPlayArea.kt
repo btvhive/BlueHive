@@ -107,6 +107,10 @@ internal fun BoxScope.TvPlayArea(
 
 
 
+    // The cap's focus glow, behind the cap (and over the row, whose half-covered
+    // card tucks away while it shows) -- see SeasonCapGlow.
+    SeasonCapGlow(focusMap)
+
     // The season cap, on Add to Favorites' left edge, and the accordion inside it.
     Image(
         painter = heldPainter(R.drawable.extended_mini_left_upper_body),

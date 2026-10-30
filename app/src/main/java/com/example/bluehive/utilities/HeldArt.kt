@@ -54,6 +54,7 @@ object HeldArt {
         R.drawable.titlecard_focused,
         R.drawable.titlecard_shadow,
         R.drawable.episode_focus_glow,
+        R.drawable.season_cap_focus_glow,
         R.drawable.star,
     )
 

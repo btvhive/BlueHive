@@ -23,6 +23,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.border
 import androidx.compose.ui.Alignment
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.lazy.LazyListState
@@ -152,6 +155,20 @@ private val baseStillModifier =
         .height(97.5.dp)
         .clip(episodeShape)
 
+/** How long a half-covered card takes to tuck under the season cap, or come back out. */
+private const val CARD_TUCK_MS = 220
+
+/**
+ * The season cap half-covers this card: its left end is under the cap
+ * ([capCover] px into the row) and its right end shows past it. Pure, so it is tested.
+ */
+internal fun cardUnderCap(itemOffset: Int, itemSize: Int, viewportStart: Int, capCover: Float): Boolean =
+    itemOffset < viewportStart + capCover && itemOffset + itemSize > viewportStart + capCover
+
+/** How far left (px) the card slides to tuck away: until its right end meets the row's left edge. */
+internal fun tuckDistance(itemOffset: Int, itemSize: Int, viewportStart: Int): Float =
+    (itemOffset + itemSize - viewportStart).toFloat().coerceAtLeast(0f)
+
 /**
  * One episode tile: the air date above the still, the still with its focus
  * glow, badge and watched fold, the unaired scrim, and the title under it.
@@ -178,6 +195,8 @@ internal fun EpisodeCard(
     focusRequester: FocusRequester,
     passionFont: FontFamily,
     dongleRegular: FontFamily,
+    /** The season cap's focus glow is on: a card the cap half-covers tucks under it (v526). */
+    capGlowOn: () -> Boolean,
     onFocused: () -> Unit,
     onKeyEvent: (KeyEvent) -> Boolean,
 ) {
@@ -227,10 +246,41 @@ internal fun EpisodeCard(
         }
     }
 
+    // The card the season cap half-covers (its left end under the cap, its
+    // right end out past it) tucks away under the cap while the cap's focus
+    // glow shows, and slides back out when it goes (v526, the user's call):
+    // it slides left until its right end reaches the row's left edge, where
+    // the row clips it. The distance is read while drawing, so scrolling
+    // never recomposes the card for it.
+    val isUnderCap by remember(rowState, index, leftCapCover) {
+        derivedStateOf {
+            val layoutInfo = rowState.layoutInfo
+            val itemInfo = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                ?: return@derivedStateOf false
+            cardUnderCap(itemInfo.offset, itemInfo.size, layoutInfo.viewportStartOffset, leftCapCover)
+        }
+    }
+    val tuck = animateFloatAsState(
+        targetValue = if (isUnderCap && capGlowOn()) 1f else 0f,
+        animationSpec = tween(CARD_TUCK_MS, easing = FastOutSlowInEasing),
+        label = "episodeTuck",
+    )
+
     // ✅ This outer column is the "focus target"
     //    It gives the title real space UNDER the still image.
     Column(
         modifier = Modifier
+            .graphicsLayer {
+                val t = tuck.value
+                if (t > 0f) {
+                    val itemInfo = rowState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                    if (itemInfo != null) {
+                        translationX = -t * tuckDistance(itemInfo.offset, itemInfo.size, rowState.layoutInfo.viewportStartOffset)
+                    }
+                } else {
+                    translationX = 0f
+                }
+            }
             // keep item layout sized to the still image (prevents spacing weirdness)
             .width(174.27.dp)
             .focusRequester(focusRequester)

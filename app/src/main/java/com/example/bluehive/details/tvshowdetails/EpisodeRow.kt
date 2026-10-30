@@ -143,6 +143,7 @@ internal fun BoxScope.EpisodeRow(
                             focusRequester         = episodesState.focusRequesters[index],
                             passionFont            = passionFont,
                             dongleRegular          = dongleRegular,
+                            capGlowOn              = { focusMap.seasonCapGlowOn },
                             onFocused = {
                                 episodesState.lastFocusedEpisodeIndex = index
                                 episodesState.episodeFocusLanded = true  // confirms initial focus actually landed

@@ -37,6 +37,13 @@ class TvFocusMap internal constructor(
     var seasonPickerFocused by mutableStateOf(false)
 
     /**
+     * The cap's focus glow is on: the picker has focus and is not choosing
+     * (set by SeasonAccordion, read by SeasonCapGlow and the episode cards,
+     * which tuck the card the cap half-covers under it -- v526).
+     */
+    var seasonCapGlowOn by mutableStateOf(false)
+
+    /**
      * ✅ Focus requesters for overlay buttons.
      * Pool sized to the largest provider set we might show — the tv source list
      * (the anime overlay shows fewer). Deriving the size from getStreamingSources()
