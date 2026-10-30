@@ -3,7 +3,7 @@ package com.example.bluehive.details.tvshowdetails
 import androidx.compose.foundation.layout.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
+import com.example.bluehive.utilities.heldPainter
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Image
 import androidx.compose.ui.layout.ContentScale
@@ -71,7 +71,7 @@ internal fun BoxScope.TvPlayArea(
     // +0.7 dp: one screen pixel right of v451's +0.2 on the onn box (2 px per
     // dp), the user's call, 2026-10-28 -- it looked slightly out of line.
     Image(
-        painter = painterResource(id = R.drawable.extended_mini_left_lower_body),
+        painter = heldPainter(R.drawable.extended_mini_left_lower_body),
         contentDescription = null,
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -81,7 +81,7 @@ internal fun BoxScope.TvPlayArea(
     )
 
     Image(
-        painter = painterResource(id = R.drawable.mini_right_lower_body),
+        painter = heldPainter(R.drawable.mini_right_lower_body),
         contentDescription = null,
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -109,7 +109,7 @@ internal fun BoxScope.TvPlayArea(
 
     // The season cap, on Add to Favorites' left edge, and the accordion inside it.
     Image(
-        painter = painterResource(id = R.drawable.extended_mini_left_upper_body),
+        painter = heldPainter(R.drawable.extended_mini_left_upper_body),
         contentDescription = null,
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -128,7 +128,7 @@ internal fun BoxScope.TvPlayArea(
     )
 
     Image(
-        painter = painterResource(id = R.drawable.mini_right_upper_body),
+        painter = heldPainter(R.drawable.mini_right_upper_body),
         contentDescription = null,
         modifier = Modifier
             .align(Alignment.TopStart)

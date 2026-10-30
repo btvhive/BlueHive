@@ -558,7 +558,7 @@ fun ModularButton(
 
             glowRes?.let {
                 Image(
-                    painter = painterResource(id = it),
+                    painter = heldPainter(it),
                     contentDescription = null,
                     modifier = Modifier
                         .size(

@@ -95,6 +95,10 @@ object AppWarmup {
      * the instant its hard timer fires). Never throws — every step is guarded.
      */
     suspend fun run(app: BlueHiveApplication) {
+        // The details pages' art, decoded off the main thread and kept, so no
+        // page decodes it inside its first frame (~230 ms) -- see HeldArt.
+        // On the app-wide scope: the loading screen's timer must not cancel it.
+        imagePrefetchScope.launch { com.example.bluehive.utilities.HeldArt.warm(app) }
         try {
             // ── Step 1: token prime — REMOVED (Phase 2) ────────────────────
             // Obsolete under the host model. BlueHive no longer rotates its own

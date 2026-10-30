@@ -16,7 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
+import com.example.bluehive.utilities.heldPainter
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,7 +75,7 @@ fun BoxScope.DetailsBackdrop(
 
     // ========================================================================================================================================= > // vote_average
     Image(
-        painter = painterResource(id = R.drawable.star),
+        painter = heldPainter(R.drawable.star),
         contentDescription = "Rating star",
         modifier = Modifier
             .align(Alignment.TopStart)
@@ -118,7 +118,7 @@ fun BoxScope.DetailsBackdrop(
 fun BoxScope.DetailsPageBackground() {
     // Background image layer
     Image(
-        painter = painterResource(id = R.drawable.backdrop_details),
+        painter = heldPainter(R.drawable.backdrop_details),
         contentDescription = null,
         modifier = Modifier.fillMaxSize(),
         contentScale = ContentScale.Crop
@@ -131,7 +131,7 @@ fun BoxScope.DetailsGradient(backdropUrl: String?) {
     if (!backdropUrl.isNullOrBlank() && backdropUrl != "N/A") {
         // GRADIENT OVERLAY - Add this right after the backdrop
         Image(
-            painter = painterResource(id = R.drawable.backdrop_details_gradient),
+            painter = heldPainter(R.drawable.backdrop_details_gradient),
             contentDescription = "Gradient overlay",
             modifier = Modifier
                 .align(Alignment.TopEnd)

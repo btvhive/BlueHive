@@ -36,7 +36,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import coil.compose.AsyncImage
@@ -286,7 +285,7 @@ internal fun EpisodeCard(
             // ✅ Glow behind image when focused
             if (isEpisodeFocused && !isEpisodeSelectOverlay) {
                 Image(
-                    painter = painterResource(id = R.drawable.episode_focus_glow),
+                    painter = heldPainter(R.drawable.episode_focus_glow),
                     contentDescription = null,
                     modifier = Modifier
                         .offset(x = (-0.25).dp, y = (-0.3).dp) // offset the position of the glow

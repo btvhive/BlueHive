@@ -29,7 +29,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.activity.compose.LocalActivity
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
@@ -129,9 +128,9 @@ fun RecommendedMediaSection(
     /** The heading's words; the details pages name the kind of title (recommendedRowTitle). */
     title: String = "Recommended Media",
 ) {
-    val backgroundPainter = painterResource(id = R.drawable.titlecard_base)
-    val focusedPainter = painterResource(id = R.drawable.titlecard_focused)
-    val shadowPainter = painterResource(id = R.drawable.titlecard_shadow)
+    val backgroundPainter = heldPainter(R.drawable.titlecard_base)
+    val focusedPainter = heldPainter(R.drawable.titlecard_focused)
+    val shadowPainter = heldPainter(R.drawable.titlecard_shadow)
 
     val baseCardModifier = remember {
         Modifier
@@ -179,7 +178,7 @@ fun RecommendedMediaSection(
 
         Box {
             Image(
-                painter = painterResource(id = R.drawable.left_lower_body),
+                painter = heldPainter(R.drawable.left_lower_body),
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -190,7 +189,7 @@ fun RecommendedMediaSection(
             )
 
             Image(
-                painter = painterResource(id = R.drawable.right_lower_body),
+                painter = heldPainter(R.drawable.right_lower_body),
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -432,7 +431,7 @@ fun RecommendedMediaSection(
             }
 
             Image(
-                painter = painterResource(id = R.drawable.left_upper_body),
+                painter = heldPainter(R.drawable.left_upper_body),
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -443,7 +442,7 @@ fun RecommendedMediaSection(
             )
 
             Image(
-                painter = painterResource(id = R.drawable.right_upper_body),
+                painter = heldPainter(R.drawable.right_upper_body),
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.TopStart)
