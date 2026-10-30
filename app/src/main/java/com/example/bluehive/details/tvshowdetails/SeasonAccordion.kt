@@ -117,7 +117,7 @@ private val LIST_INSET_V = 5.dp
 private val LIST_LEFT = 16.dp
 private val LIST_RIGHT = 5.dp
 private val ROW_STEP = (PANEL_HEIGHT - LIST_INSET_V * 2) / LIST_VISIBLE_ROWS
-private val ROW_GAP = 2.5.dp
+private val ROW_GAP = 3.dp      // 2.5 until v533: a little more space between tiles, the user's call
 private val ROW_CORNER = 4.3.dp
 private val ROW_TEXT_PAD = 7.4.dp
 
@@ -218,7 +218,7 @@ internal val CAP_GLOW_OUT = 11.dp
 internal const val FOCUS_FADE_MS = 150
 
 /** One move: the white tile slides and the list scrolls together (the mockup's cubic-bezier(.2, .8, .2, 1)). */
-private const val LIST_MOVE_MS = 150   // 320 in v502; "a lot faster", the user (2026-10-29)
+private const val LIST_MOVE_MS = 100   // 320 in v502, 150 in v503; faster again in v533, the user's call
 private val ListEase = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 
 /** The white tile and arrow fading in as choosing starts, and out as it ends. */
