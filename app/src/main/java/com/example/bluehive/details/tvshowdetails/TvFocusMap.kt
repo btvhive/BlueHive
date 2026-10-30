@@ -6,7 +6,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import com.example.bluehive.BlueHiveApplication
 
 /**
  * Every focus requester on the TV details screen that more than one section
@@ -24,6 +26,9 @@ class TvFocusMap internal constructor(
 ) {
     val favorite = FocusRequester()
     val trailer = FocusRequester()
+
+    /** The header's Search button: Up from any episode lands here (v525). */
+    val search = FocusRequester()
 
     /** The season accordion (SeasonAccordion): one focus target for every season. */
     val seasonPicker = FocusRequester()
@@ -53,21 +58,17 @@ fun rememberTvFocusMap(providerCount: () -> Int): TvFocusMap =
     remember { TvFocusMap(providerCount()) }
 
 /**
- * Up from the recommended row: the episode Down came from (the last one
- * focused, 0 on a season's first draw) while it is on screen, else the first
- * episode on screen; with no episodes, the season accordion, then Play
- * Trailer. Each is tried in turn, so a target that is not attached yet never
- * leaves focus stranded in the row's slid-up page.
+ * Up from the recommended row: the season picker (the user's call, v525);
+ * with no picker on screen, the episode Down came from (the last one focused,
+ * 0 on a season's first draw) while it is on screen, else the first episode
+ * on screen; then Play Trailer. Each is tried in turn, so a target that is not
+ * attached yet never leaves focus stranded in the row's slid-up page.
  */
 internal fun TvFocusMap.focusAboveRow(episodesState: EpisodesState) {
     val visible = episodesState.rowState.layoutInfo.visibleItemsInfo
     val last = episodesState.lastFocusedEpisodeIndex
     val index = if (visible.any { it.index == last }) last else visible.firstOrNull()?.index
-    val targets = listOfNotNull(
-        index?.let { episodesState.focusRequesters.getOrNull(it) },
-        seasonPicker,
-        trailer,
-    )
+    val targets = aboveRowOrder(seasonPicker, index?.let { episodesState.focusRequesters.getOrNull(it) }, trailer)
     for (target in targets) {
         try {
             target.requestFocus()
@@ -77,3 +78,21 @@ internal fun TvFocusMap.focusAboveRow(episodesState: EpisodesState) {
         }
     }
 }
+
+/** The order Up from the row tries (v525): the season picker, the episode, Play Trailer. Pure, so it is tested. */
+internal fun <T : Any> aboveRowOrder(seasonPicker: T, episode: T?, trailer: T): List<T> =
+    listOfNotNull(seasonPicker, episode, trailer)
+
+/**
+ * Focus [target], playing the move sound; false when it is not on screen
+ * (not attached, or refusing focus), so the caller can let the move fall through.
+ */
+internal fun focusWithSound(target: FocusRequester): Boolean =
+    try {
+        val moved = target.requestFocus(FocusDirection.Enter)
+        if (moved) BlueHiveApplication.playHoverSound()
+        moved
+    } catch (_: IllegalStateException) {
+        false
+    }
+

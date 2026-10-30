@@ -349,6 +349,7 @@ fun TvShowDetailsScreen(
             favoriteFocusRequester = focusMap.favorite,
             trailerFocusRequester  = focusMap.trailer,
             search                 = search,
+            searchFocusRequester   = focusMap.search,
         ),
         releaseTrailerOnLeave = true,
         onOpenRecommendation = { media ->

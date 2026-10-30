@@ -71,6 +71,8 @@ fun BoxScope.DetailsHeaderButtons(
     enableFocus: Boolean,
     favoriteFocusRequester: FocusRequester,
     trailerFocusRequester: FocusRequester,
+    /** The Search button's focus; null makes one of its own. */
+    searchFocusRequester: FocusRequester? = null,
     favorite: FavoriteState,
     trailer: TrailerState,
     /**
@@ -107,6 +109,7 @@ fun BoxScope.DetailsHeaderButtons(
     if (onSearch != null) {
         DetailsSearchButton(
             fontFamily = fontFamily,
+            focusRequester = searchFocusRequester ?: remember { FocusRequester() },
             pressTiming = pressTiming,
             enableFocus = enableFocus,
             iconShadow = labelShadow,
@@ -248,6 +251,7 @@ private fun DetailsFavoriteButton(
 @Composable
 private fun DetailsSearchButton(
     fontFamily: FontFamily,
+    focusRequester: FocusRequester,
     pressTiming: DetailsPressTiming,
     offsetX: Dp = 182.dp,
     offsetY: Dp = 139.dp,
@@ -265,7 +269,7 @@ private fun DetailsSearchButton(
         ),
         isToggleable = false,
         fontFamily = fontFamily,
-        focusRequester = remember { FocusRequester() },
+        focusRequester = focusRequester,
         modifier = Modifier
             .offset(x = offsetX, y = offsetY)
             .focusProperties { canFocus = enableFocus }

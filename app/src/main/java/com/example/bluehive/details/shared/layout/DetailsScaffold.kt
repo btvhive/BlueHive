@@ -87,6 +87,8 @@ data class DetailsHeaderSpec(
     val trailerFocusRequester: FocusRequester,
     /** The peek layout's Search button opens this keyboard; null shows no Search button. */
     val search: DetailsSearchState? = null,
+    /** The Search button's focus, for a page that sends focus to it (the TV page: Up from an episode). */
+    val searchFocusRequester: FocusRequester? = null,
 )
 
 /**
@@ -225,6 +227,7 @@ private fun BoxScope.DetailsPage(
             enableFocus = header.enableFocus,
             favoriteFocusRequester = header.favoriteFocusRequester,
             trailerFocusRequester = header.trailerFocusRequester,
+            searchFocusRequester = header.searchFocusRequester,
             favorite = favorite,
             trailer = trailer,
             // Search: the trailer stops, as it does when a recommendation

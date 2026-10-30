@@ -210,6 +210,11 @@ internal fun BoxScope.EpisodeRow(
                                                 true
                                             }
                                         }
+                                        // Up from any episode lands on Search (the
+                                        // user's call, v525); if the header won't take
+                                        // focus, the move falls through as before.
+                                        Key.DirectionUp -> focusWithSound(focusMap.search)
+
                                         Key.DirectionLeft, Key.DirectionRight -> {
                                             if (episodesState.selectedEpisodeOverlayIndex == index) {
                                                 true

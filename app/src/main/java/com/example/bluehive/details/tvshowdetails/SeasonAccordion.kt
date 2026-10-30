@@ -374,10 +374,9 @@ internal fun BoxScope.SeasonAccordion(
                 } else {
                     when (event.key) {
                         // Focused, not choosing: Up and Down move on, as anywhere else.
-                        Key.DirectionUp -> {
-                            BlueHiveApplication.playHoverSound()
-                            false
-                        }
+                        // Up lands on Add to Favorites (the user's call, v525); if
+                        // the header won't take focus, the move falls through.
+                        Key.DirectionUp -> focusWithSound(focusMap.favorite)
                         Key.DirectionDown -> {
                             // The recommended row peeks under the cap, as under the
                             // episodes (EpisodeRow): consumed even before it can take focus.
