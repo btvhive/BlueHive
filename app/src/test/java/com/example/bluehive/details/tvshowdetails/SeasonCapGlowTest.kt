@@ -47,9 +47,12 @@ class SeasonCapGlowTest {
     @Test
     fun `the glow is drawn behind the cap, and the white line is gone`() {
         val area = MainSource.code("details/tvshowdetails/TvPlayArea.kt")
+        // First of all: behind the strip below the cap, the episode row and the cap.
         val glow = area.indexOf("SeasonCapGlow(focusMap)")
+        val strip = area.indexOf("heldPainter(R.drawable.extended_mini_left_lower_body)")
+        val row = area.indexOf("EpisodeRow(")
         val cap = area.indexOf("heldPainter(R.drawable.extended_mini_left_upper_body)")
-        assertTrue(glow in 0 until cap)
+        assertTrue(glow >= 0 && glow < strip && glow < row && glow < cap)
         val picker = MainSource.code("details/tvshowdetails/SeasonAccordion.kt")
         assertFalse(picker.contains("drawFocusLine"))
         assertFalse(picker.contains("FOCUS_LINE"))

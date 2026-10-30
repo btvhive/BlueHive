@@ -67,6 +67,12 @@ internal fun BoxScope.TvPlayArea(
     rowEntry: RecommendedRowEntry,
 ) {
     // ===============================================================================> episode lAZY ROW DECORATIONS
+    // The cap's focus glow, first of all: behind both cap images (the strip
+    // below and the cap above) and the episode row, whose half-covered card
+    // tucks away while it shows -- see SeasonCapGlow. (v526 drew it after the
+    // strip, which painted a bright bar over it.)
+    SeasonCapGlow(focusMap)
+
     // The strip behind the season cap's right edge, where the cards come out.
     // +0.7 dp: one screen pixel right of v451's +0.2 on the onn box (2 px per
     // dp), the user's call, 2026-10-28 -- it looked slightly out of line.
@@ -106,10 +112,6 @@ internal fun BoxScope.TvPlayArea(
     )
 
 
-
-    // The cap's focus glow, behind the cap (and over the row, whose half-covered
-    // card tucks away while it shows) -- see SeasonCapGlow.
-    SeasonCapGlow(focusMap)
 
     // The season cap, on Add to Favorites' left edge, and the accordion inside it.
     Image(
