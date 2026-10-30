@@ -268,6 +268,8 @@ private class SeasonListFrame(
     val press: Float,
     /** How far the picker has focus (0 to 1). */
     val focus: Float,
+    /** Left while choosing: the line stays off as both fade out (v514). */
+    val lineOff: Boolean,
 )
 
 /** Season 1 through [listedSeasons]: the newest with an aired episode (SeasonAvailability). */
@@ -289,6 +291,9 @@ internal fun BoxScope.SeasonAccordion(
     val loaded = episodesState.selectedSeason.coerceIn(1, total)
     var browsing by remember { mutableIntStateOf(loaded) }
     var choosing by remember { mutableStateOf(false) }
+    // Set when focus leaves mid-choosing (Right to the episodes): the choosing
+    // fade would otherwise bring the line back for a frame or two on the way out.
+    var lineOff by remember { mutableStateOf(false) }
     // A load from anywhere (OK here, the season check, the first load) moves the white tile with it.
     LaunchedEffect(loaded) { browsing = loaded }
     val shown = browsing.coerceIn(1, total)
@@ -327,13 +332,14 @@ internal fun BoxScope.SeasonAccordion(
             .focusRequester(focusMap.seasonPicker)
             .onFocusChanged { state ->
                 focusMap.seasonPickerFocused = state.isFocused
+                lineOff = !state.isFocused && (choosing || lineOff)
                 // Leaving drops the browse.
                 if (!state.isFocused) stopChoosing()
             }
             .onKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
                 if (choosing && event.key == Key.DirectionRight) {
-                    // Right goes straight to the episodes, choosing or not (v509);
+                    // Right goes straight to the episodes, choosing or not (v513);
                     // losing focus ends the choosing. Held here while none are loaded.
                     focusEpisodes(episodesState, coroutineScope)
                     true
@@ -390,6 +396,7 @@ internal fun BoxScope.SeasonAccordion(
                         scroll = scroll.value,
                         press = press.value,
                         focus = focusFade.value,
+                        lineOff = lineOff,
                     ),
                 )
             }
@@ -476,7 +483,7 @@ private fun DrawScope.drawSeasonList(text: SeasonListText, frame: SeasonListFram
     val sink = PRESS_SINK.toPx() * frame.press
 
     // The line shows while focused, and goes while choosing (v506).
-    val line = frame.focus * (1f - frame.choosing)
+    val line = if (frame.lineOff) 0f else frame.focus * (1f - frame.choosing)
     if (line > 0f) drawFocusLine(line)
     // The season on show: dull white, focused or not (v508); grey while choosing,
     // and bright white only under the white tile.
