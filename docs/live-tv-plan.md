@@ -29,6 +29,29 @@ hint bar within 1-4 px of the ×1.412 spec; colours exact (`#2644A6`, `#222340`,
 Mockups were shown in the chat (`live_tv_browse_designs_abc`, `live_tv_player_states`);
 design C is built to its exact sizes and colours (spec in §4a).
 
+**Search (v504, 2026-10-30):** the user picked design B's bar opening design C's page from
+`live_tv_search_designs_abc` (same 680 × 382 px frame, so ×1.412 again).
+- The guide's list starts 42 px lower, under a search bar, and shows 9 rows. Up from the first
+  channel reaches the bar; the panel then reads "Search channels" with what it covers. Click
+  opens the search page.
+- v510: bar to list is 14 px, the same as chips to bar (the mockup's 6 px was too tight).
+  Fixed in the same build: after scrolling down a list and back up, row 0 stayed half under the
+  bar (`keepInView`).
+- Search page: the honeycomb keyboard on the left (`HoneycombKeyboardInline`, placed by the
+  page). On the right, until something is typed, 12 quick picks (Fox, Sky Sports, ESPN, beIN,
+  DAZN, TNT, NBC, BBC, HBO, Showtime, Disney, Nickelodeon), each showing its channel and live
+  counts. After that, results as two-column tiles.
+- Every key filters on the TV, with no server call. Order: live first and off-air last; inside
+  each, the name starts with the query, then a word does, then it only contains it; then A–Z.
+  Spoken numbers ("fox sports one") are read as digits.
+- Remote: Right off the keyboard goes to the tiles and Left goes back. Search jumps to the first
+  result. Click on a pick searches it, on a channel watches it, and the page is still there
+  after the player. One Back closes the page from anywhere on it (v512). Compose maps an
+  unclaimed Back to `FocusDirection.Exit`, which moved the focus off the keyboard card first, so
+  it took two presses. The page now takes Back as a key and closes on release.
+- Kids profiles search the Kids row only. Code: `LiveSearch.kt` (pure, `LiveSearchTest`) and
+  `LiveSearchPage.kt`.
+
 ## 1. What the viewer gets
 
 - Sidebar → Live TV opens a channel page instead of "Feature still in development".
@@ -129,6 +152,14 @@ Postgres (read, for the login check), and Caddy: +10 lines sending `/api/live/*`
   - **Kept apart:** the UK and US Boomerang and Cartoon Network feeds.
   - A TV that remembers a copy's id is tuned to the merged entry.
   - **Matching side effect:** a country word at the end of a name now counts as the channel's country. The four Sky Sport NZ channels gained NZ backups, and an Irish channel is not backed by a UK one.
+- **Every channel checked, slowly (build f, live 2026-10-29 10:20 UTC).**
+  - Why: a census of all 237 channels on a throwaway stack (`own/census`) found 164 working and 73 dead, and every dead one looked fine until picked.
+  - Every 30 s, one worker tries the channel checked longest ago, the way a tune would; the whole guide is covered about every 2 h. A dead channel is dimmed, never hidden.
+  - After 14 h: 1,670 steps, 0 errors, 168 working, 69 dimmed.
+  - Off switch: `LIVE_SWEEP=0`.
+- **Working channels first (build g, live 2026-10-30 01:23 UTC).** Each row lists working channels, then unchecked, then dimmed ones, each group in zlive's order.
+  - Football opens with its 13 working channels instead of mixing them among its 24 dead ones.
+  - Channel numbers and Up/Down zapping follow this order.
 - Cost: one Chrome tab per channel per ~2.3 h of viewing, plus a playlist every ~4 s, plus one tab per dead channel per 30 min.
 
 ## 4. TV app (new `livetv/` package)

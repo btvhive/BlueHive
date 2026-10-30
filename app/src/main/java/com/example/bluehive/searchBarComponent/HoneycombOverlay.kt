@@ -83,6 +83,8 @@ import kotlinx.coroutines.delay
 //   * over the SEARCH PAGE, from its bar, to refine (HoneycombKeyboardOverlay).
 //   Search -- or a finished Voice search -- hands the text on and the search
 //   page shows the results.
+//   * on LIVE TV's search page, where the page places it (HoneycombKeyboardInline):
+//   every key filters the page's tiles as it is typed, and Search moves to them.
 //
 // NAME (Shift ... Done), for a profile name on the create and manage screens
 // (HoneycombNamePopup). Shift capitalises the next letter only; Done hands the
@@ -132,6 +134,7 @@ private val PLACEHOLDER  = Color(0x806F7482)       // the hint in the empty box,
 private val COUNT_TEXT   = Color(0xFF6F7482)
 private val LISTEN_BLUE  = Color(0xFF9DB2F0)
 private val ERROR_SOFT   = Color(0xFFFFB4A8)
+private val STATUS_TEXT  = Color(0xFF9AA1B2)       // a host's own line (Live TV: "14 channels · 13 live")
 
 // ── Size ──────────────────────────────────────────────────────────────────────
 private val KEY_W       = 43.dp
@@ -235,6 +238,45 @@ internal fun HoneycombKeyboardOverlay(
     }
 }
 
+/**
+ * What a page that places the card itself tells it (Live TV's search page).
+ * [text] is the page's copy of the query; the box takes it whenever [textSets]
+ * goes up -- the page set it itself, as a quick pick does (typing never bumps
+ * it, so a fast typist cannot be overwritten by a stale copy). [status] is
+ * the page's line under the box; [showFocus] is false while the page has the
+ * focus elsewhere, so no key looks focused; [onEdge] hears a press past the
+ * card's edge, so the page can take the focus.
+ */
+internal class HiveInline(
+    val text: String,
+    val textSets: Int,
+    val placeholder: String,
+    val status: String?,
+    val showFocus: Boolean,
+    val focus: FocusRequester,
+    val onEdge: (HiveDir) -> Unit,
+)
+
+/**
+ * Search on a page that lists what it finds while the viewer types (Live TV):
+ * the card where the page puts it, no pop-up and no scrim. [onTextChange]
+ * follows every key; [onSearch] is the Search key, or a finished Voice search.
+ * BACK goes on to the page.
+ */
+@Composable
+internal fun HoneycombKeyboardInline(
+    inline: HiveInline,
+    onTextChange: (String) -> Unit,
+    onSearch: (String) -> Unit,
+) {
+    HoneycombKeyboardCard(
+        initialText   = inline.text,
+        onSubmit      = onSearch,
+        onDraftChange = onTextChange,
+        inline        = inline,
+    )
+}
+
 @Composable
 private fun CardPopup(onDismiss: () -> Unit, card: @Composable () -> Unit) {
     Popup(
@@ -273,16 +315,23 @@ private fun HoneycombKeyboardCard(
     mode: HiveMode = HiveMode.SEARCH,
     maxLength: Int = MAX_QUERY,
     onDraftChange: (String) -> Unit = {},
+    inline: HiveInline? = null,
 ) {
     val forNames  = mode == HiveMode.NAME
     var draft     by remember { mutableStateOf(initialText.take(maxLength)) }
     var voiceHint by remember { mutableStateOf<String?>(null) }
     var shift     by remember { mutableStateOf(false) }
-    val hostFR    = remember { FocusRequester() }
+    val ownFR     = remember { FocusRequester() }
+    val hostFR    = inline?.focus ?: ownFR
 
     fun setDraft(text: String) {
         draft = text
         onDraftChange(text)
+    }
+
+    // A page that places the card may set the query itself (a quick pick).
+    LaunchedEffect(inline?.textSets) {
+        if (inline != null && inline.textSets > 0) draft = inline.text.take(maxLength)
     }
 
     val voice = rememberVoiceSearch(
@@ -393,9 +442,13 @@ private fun HoneycombKeyboardCard(
         }
     }
 
-    // Every D-pad press belongs to the keyboard; an edge is a silent dead end.
+    // Every D-pad press belongs to the keyboard; an edge is a silent dead end,
+    // unless the page placing the card listens (Live TV moves to its tiles).
     fun navigate(dir: HiveDir) {
-        val next = keyboard.move(spot, dir, stickyX) ?: return
+        val next = keyboard.move(spot, dir, stickyX) ?: run {
+            inline?.onEdge?.invoke(dir)
+            return
+        }
         spot = next
         if (dir == HiveDir.LEFT || dir == HiveDir.RIGHT) stickyX = keyboard.centre(next)
         BlueHiveApplication.playHoverSound()
@@ -448,7 +501,7 @@ private fun HoneycombKeyboardCard(
         DraftField(
             draft       = draft,
             listening   = voice.listening,
-            placeholder = if (forNames) "Enter a name..." else "Search movies, shows and anime",
+            placeholder = inline?.placeholder ?: if (forNames) "Enter a name..." else "Search movies, shows and anime",
             count       = if (forNames) "${draft.length}/$maxLength" else null,
             searchIcon  = !forNames,
         )
@@ -461,11 +514,15 @@ private fun HoneycombKeyboardCard(
                 .padding(start = 14.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
-            val line = if (voice.listening) "Listening… talk into the remote" else voiceHint
+            val line = if (voice.listening) "Listening… talk into the remote" else voiceHint ?: inline?.status
             if (line != null) {
                 Text(
                     text       = line,
-                    color      = if (voice.listening) LISTEN_BLUE else ERROR_SOFT,
+                    color      = when {
+                        voice.listening -> LISTEN_BLUE
+                        voiceHint != null -> ERROR_SOFT
+                        else -> STATUS_TEXT
+                    },
                     fontSize   = 11.sp,
                     fontFamily = AppTypography.interSemiBold,
                     maxLines   = 1,
@@ -476,14 +533,18 @@ private fun HoneycombKeyboardCard(
 
         // Voice and Search (Shift and Done) sit with the keys, nearer them than
         // the box -- the same distance over the comb as the pills are under it.
+        // No key looks focused while the page placing the card has the focus.
+        val shown = if (inline?.showFocus == false) NO_SPOT else spot
         Spacer(Modifier.height(4.dp))
-        ActionRow(keyboard, focused = spot, voice = voice, shiftOn = shift)
+        ActionRow(keyboard, focused = shown, voice = voice, shiftOn = shift)
         Spacer(Modifier.height(14.dp))
-        Honeycomb(keyboard, focused = spot)
+        Honeycomb(keyboard, focused = shown)
         Spacer(Modifier.height(14.dp))
-        PillRow(keyboard, focused = spot)
+        PillRow(keyboard, focused = shown)
     }
 }
+
+private val NO_SPOT = HiveSpot(-1, -1)
 
 @Composable
 private fun DraftField(

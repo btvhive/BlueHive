@@ -23,12 +23,27 @@ internal val CHIP_ON = Color(0xFF2644A6)
 internal val CHIP_OFF = Color(0xFF222340)
 internal val CHIP_TEXT_OFF = Color(0xFFCFD3DC)
 
+// ── Search bar (over the channel list; design B of live_tv_search_designs_abc) ─
+internal val BAR_TOP = 70.6.dp               // 50 px
+internal val BAR_HEIGHT = 39.5.dp            // 28 px
+internal val BAR_RADIUS = 9.9.dp             // 7 px
+internal val BAR_BORDER = 1.4.dp             // 1 px
+internal val BAR_PAD_H = 14.1.dp             // 10 px
+internal val BAR_GAP = 11.3.dp               // 8 px
+internal val BAR_ICON = 18.4.dp              // 13 px
+internal val BAR_TEXT = 16.9.sp              // 12 px
+internal val BAR_BG = Color(0xFF0E0F14)
+internal val BAR_EDGE = Color(0xFF2A2D37)
+internal val BAR_INK = Color(0xFF8B90A0)
+
 // ── Channel list (left) ───────────────────────────────────────────────────────
 internal val LIST_LEFT = 22.6.dp             // 16 px
-internal val LIST_TOP = 70.6.dp              // 50 px
+// 92 px: the bar's 28 px plus 14 px, the same gap as chips to bar (the user
+// found the mockup's 6 px too tight, 2026-10-30).
+internal val LIST_TOP = 129.9.dp
 internal val LIST_WIDTH = 468.8.dp           // 332 px
-internal val LIST_HEIGHT = 446.8.dp          // to 22.6 dp above the bottom: 10 rows
-internal const val LIST_VISIBLE_ROWS = 10
+internal val LIST_HEIGHT = 387.5.dp          // to 22.6 dp above the bottom: 9 rows
+internal const val LIST_VISIBLE_ROWS = 9
 internal val ROW_HEIGHT = 39.5.dp            // 28 px
 internal val ROW_GAP = 2.8.dp                // 2 px
 internal val ROW_PAD_H = 14.1.dp             // 10 px
@@ -102,3 +117,47 @@ internal val KEY_TEXT_COLOR = Color(0xFF111111)
 
 // ── Messages (loading, error) ─────────────────────────────────────────────────
 internal val MESSAGE_TEXT = 16.9.sp
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  The search page (design C of live_tv_search_designs_abc, the user's pick of
+//  2026-10-30, opened from the bar): the same 680 x 382 px frame, so x 1.412.
+//  The keyboard card keeps its own dp sizes; the mockup drew it at them.
+// ─────────────────────────────────────────────────────────────────────────────
+internal val SEARCH_LEFT = 22.6.dp           // 16 px
+internal val SEARCH_TITLE_TOP = 16.9.dp      // 12 px
+internal val SEARCH_TITLE_TEXT = 31.1.sp     // 22 px
+internal val SEARCH_NOTE_TOP = 56.5.dp       // 40 px
+internal val SEARCH_KEYBOARD_TOP = 84.7.dp   // 60 px
+
+internal val TILES_LEFT = 426.4.dp           // 302 px
+internal val TILES_WIDTH = 511.1.dp          // 362 px
+internal val TILES_TITLE_TOP = 19.8.dp       // 14 px
+internal val TILES_TITLE_TEXT = 28.2.sp      // 20 px
+internal val TILES_NOTE_TOP = 56.5.dp        // 40 px
+internal val TILES_TOP = 84.7.dp             // 60 px
+internal val TILE_RADIUS = 9.9.dp            // 7 px
+internal val TILE_PAD_START = 18.4.dp        // 13 px
+internal val TILE_PAD_END = 14.1.dp          // 10 px
+internal val TILE_META_TEXT = 15.5.sp        // 11 px
+
+internal val PICK_WIDTH = 163.8.dp           // 116 px, three across
+internal val PICK_HEIGHT = 89.dp             // 63 px
+internal val PICK_COL_GAP = 9.9.dp           // 7 px
+internal val PICK_ROW_GAP = 8.5.dp           // 6 px
+internal val PICK_BAND = 5.6.dp              // 4 px
+internal val PICK_NAME_TEXT = 25.4.sp        // 18 px
+internal val PICK_META_TOP = 4.2.dp          // 3 px
+
+internal val RESULT_WIDTH = 249.9.dp         // 177 px, two across
+internal val RESULT_HEIGHT = 48.dp           // 34 px
+internal val RESULT_COL_GAP = 11.3.dp        // 8 px
+internal val RESULT_ROW_GAP = 8.5.dp         // 6 px
+internal val RESULT_BAND = 4.2.dp            // 3 px
+internal val RESULT_NAME_TEXT = 21.2.sp      // 15 px
+internal val RESULT_PAD_END = 31.1.dp        // 22 px, room for the dot
+internal val RESULT_DOT_END = 14.1.dp        // 10 px
+internal const val RESULT_VISIBLE_ROWS = 7
+internal val RESULTS_HEIGHT = 387.dp         // 7 rows
+
+internal val SEARCH_HINT_TOP = 482.9.dp      // 342 px
+internal val META_FOCUSED = Color(0xFFDFE6FF)

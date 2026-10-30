@@ -9,6 +9,7 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -46,6 +47,7 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
@@ -67,9 +69,11 @@ import com.example.bluehive.webview.exoplayer_resources.ExoPlayerConfig
 
 /**
  * The Live TV page, design C: category chips along the top, a numbered channel
- * list on the left, the focused channel's details on the right. One focus target
- * (the page) owns the remote: Up/Down move in the list, Left/Right change the
- * category, Click watches, Back leaves (the Activity's handler).
+ * list on the left under a search bar, the focused channel's details on the
+ * right. One focus target (the page) owns the remote: Up/Down move in the list
+ * (Up from the first channel reaches the bar), Left/Right change the category,
+ * Click watches -- or, on the bar, opens the search page (LiveSearchPage.kt,
+ * whose keyboard takes its own keys) -- and Back leaves (the Activity's handler).
  *
  * [resumeTick] goes up each time the page comes back from the player; the list
  * reloads in place (fresh off-air marks, the Recently watched row) and the
@@ -83,7 +87,8 @@ internal fun LiveTvScreen(profileId: Int, resumeTick: Int, onWatch: (LiveTvData.
     var attempt by remember { mutableIntStateOf(0) }
     LaunchedEffect(attempt) { page.load(context, profileId, keepPlace = false) }
     LaunchedEffect(resumeTick) { if (resumeTick > 0) page.load(context, profileId, keepPlace = true) }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    // The search page's keyboard takes the focus while it is open; the page gets it back after.
+    LaunchedEffect(page.search.isOpen) { if (!page.search.isOpen) focus.requestFocus() }
     Box(
         Modifier
             .fillMaxSize()
@@ -102,7 +107,8 @@ internal fun LiveTvScreen(profileId: Int, resumeTick: Int, onWatch: (LiveTvData.
             rows == null && page.failed -> PageMessage("Couldn't load the channel list", retry = true)
             rows == null -> PageMessage("Loading channels…", retry = false)
             rows.isEmpty() -> PageMessage("No channels right now", retry = true)
-            else -> LiveGuide(rows, page.selectedRow, page.focused)
+            page.search.isOpen -> LiveSearchPage(page.search)
+            else -> LiveGuide(page, rows)
         }
     }
 }
@@ -118,6 +124,10 @@ internal class LiveTvPageState {
         private set
     var focused by mutableIntStateOf(0)
         private set
+    /** The search bar over the list has the focus (Up from the first channel). */
+    var onBar by mutableStateOf(false)
+        private set
+    val search = LiveSearchState { rows }
 
     suspend fun load(context: Context, profileId: Int, keepPlace: Boolean) {
         val keepRow = rows?.getOrNull(selectedRow)?.name
@@ -135,15 +145,25 @@ internal class LiveTvPageState {
                     keepPlace -> focused.coerceIn(0, channels.lastIndex)
                     else -> 0
                 }
+                if (!keepPlace) onBar = false
+                search.reconcile()
             }
             .onFailure { if (rows == null) failed = true }
     }
 
-    /** Remote keys. Back is not handled here: the Activity owns it. */
+    /** Remote keys. Back is the Activity's, except while the search page is open. */
     fun onKey(event: KeyEvent, onWatch: (LiveTvData.Row, Int) -> Unit, onRetry: () -> Unit): Boolean {
-        if (event.type != KeyEventType.KeyDown) return false
         val native = event.nativeKeyEvent
         val code = native.keyCode
+        // The search page's Back is taken here, before anything under the page sees
+        // it: one press, on release, closes the page. Left alone, Compose spends an
+        // unclaimed Back on moving the focus out of the keyboard card (Back is its
+        // FocusDirection.Exit), so leaving took two presses (v504-v511).
+        if (search.isOpen && code == AndroidKeyEvent.KEYCODE_BACK) {
+            if (event.type == KeyEventType.KeyUp && !native.isCanceled) search.back()
+            return true
+        }
+        if (event.type != KeyEventType.KeyDown) return false
         val rows = rows
         if (rows.isNullOrEmpty()) {
             if (ExoPlayerConfig.isCenterKey(code) && native.repeatCount == 0 && (failed || rows != null)) {
@@ -153,17 +173,25 @@ internal class LiveTvPageState {
             }
             return ExoPlayerConfig.isCenterKey(code)
         }
+        if (search.isOpen) return search.onKey(code, native.repeatCount, onWatch)
         val last = rows[selectedRow].channels.lastIndex
         when (code) {
-            AndroidKeyEvent.KEYCODE_DPAD_UP -> if (focused > 0) { focused--; BlueHiveApplication.playHoverSound() }
-            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> if (focused < last) { focused++; BlueHiveApplication.playHoverSound() }
+            AndroidKeyEvent.KEYCODE_DPAD_UP -> when {
+                onBar -> Unit
+                focused > 0 -> { focused--; BlueHiveApplication.playHoverSound() }
+                else -> { onBar = true; BlueHiveApplication.playHoverSound() }
+            }
+            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> when {
+                onBar -> { onBar = false; BlueHiveApplication.playHoverSound() }
+                focused < last -> { focused++; BlueHiveApplication.playHoverSound() }
+            }
             AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (selectedRow > 0) moveRow(selectedRow - 1)
             AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> if (selectedRow < rows.lastIndex) moveRow(selectedRow + 1)
             else -> {
                 if (!ExoPlayerConfig.isCenterKey(code)) return false
                 if (native.repeatCount == 0) {
                     BlueHiveApplication.playClickSound()
-                    onWatch(rows[selectedRow], focused)
+                    if (onBar) search.open() else onWatch(rows[selectedRow], focused)
                 }
             }
         }
@@ -178,12 +206,58 @@ internal class LiveTvPageState {
 }
 
 @Composable
-private fun LiveGuide(rows: List<LiveTvData.Row>, selectedRow: Int, focused: Int) {
-    val row = rows[selectedRow]
-    CategoryChips(rows, selectedRow)
-    key(selectedRow) { ChannelList(row.channels, focused) }
-    row.channels.getOrNull(focused)?.let { DetailPanel(it) }
+private fun LiveGuide(page: LiveTvPageState, rows: List<LiveTvData.Row>) {
+    val row = rows[page.selectedRow]
+    CategoryChips(rows, page.selectedRow)
+    SearchBar(LiveSearch.barHint(page.search.channels.size), page.onBar)
+    key(page.selectedRow) { ChannelList(row.channels, page.focused, showFocus = !page.onBar) }
+    if (page.onBar) SearchInvitePanel(rows, page.search.channels)
+    else row.channels.getOrNull(page.focused)?.let { DetailPanel(it) }
     GuideHintBar()
+}
+
+/** Design B's bar: always over the list, one Up from the first channel; Click opens the search page. */
+@Composable
+private fun SearchBar(hint: String, focused: Boolean) {
+    val shape = RoundedCornerShape(BAR_RADIUS)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(BAR_GAP),
+        modifier = Modifier
+            .offset(LIST_LEFT, BAR_TOP)
+            .size(LIST_WIDTH, BAR_HEIGHT)
+            .focusRing(focused, BAR_RADIUS)
+            .background(if (focused) ROW_FOCUSED else BAR_BG, shape)
+            .then(if (focused) Modifier else Modifier.border(BAR_BORDER, BAR_EDGE, shape))
+            .padding(horizontal = BAR_PAD_H),
+    ) {
+        Image(
+            painter = painterResource(R.drawable.magnifying_glass_raw_image),
+            contentDescription = null,
+            colorFilter = ColorFilter.tint(if (focused) Color.White else BAR_INK),
+            modifier = Modifier.size(BAR_ICON),
+        )
+        LiveText(hint, BAR_TEXT, if (focused) NUMBER_FOCUSED else BAR_INK, AppTypography.interSemiBold)
+    }
+}
+
+/** The details panel while the bar has the focus: what the search covers, and how to start. */
+@Composable
+private fun SearchInvitePanel(rows: List<LiveTvData.Row>, channels: List<LiveTvData.Channel>) {
+    val side = Modifier.padding(start = PANEL_SIDE, end = PANEL_SIDE)
+    val tryLine = remember(channels) { LiveSearch.tryLine(channels) }
+    PanelFrame(GOLD) {
+        LiveText("Search channels", PANEL_NAME_TEXT, Color.White, AppTypography.asapCondensedBold,
+            side.padding(top = PANEL_NAME_TOP))
+        LiveText(LiveSearch.scope(rows, channels.size), PANEL_META_TEXT, PANEL_META_COLOR, AppTypography.interSemiBold,
+            side.padding(top = PANEL_META_TOP))
+        LiveText("Type a few letters or say a name", PANEL_META_TEXT, PANEL_META_COLOR, AppTypography.interSemiBold,
+            side.padding(top = PANEL_LIVE_TOP))
+        if (tryLine != null) {
+            LiveText(tryLine, PANEL_NOTE_TEXT, PANEL_NOTE_COLOR, AppTypography.interSemiBold, side.padding(top = PANEL_NOTE_TOP))
+        }
+        HintBox(side.padding(top = PANEL_HINT_TOP).height(PANEL_HINT_HEIGHT)) { KeyHint("Click", "to search") }
+    }
 }
 
 @Composable
@@ -213,14 +287,11 @@ private fun CategoryChip(name: String, on: Boolean) {
 }
 
 @Composable
-private fun ChannelList(channels: List<LiveTvData.Channel>, focused: Int) {
+private fun ChannelList(channels: List<LiveTvData.Channel>, focused: Int, showFocus: Boolean) {
     val state = rememberLazyListState()
     LaunchedEffect(focused) {
-        val first = state.firstVisibleItemIndex
-        when {
-            focused < first -> state.scrollToItem(focused)
-            focused >= first + LIST_VISIBLE_ROWS -> state.scrollToItem(focused - LIST_VISIBLE_ROWS + 1)
-        }
+        keepInView(focused, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset, LIST_VISIBLE_ROWS)
+            ?.let { state.scrollToItem(it) }
     }
     // Grown by the ring's width on every side, rows kept where the mockup puts
     // them: a list clips its children, and the focus ring is drawn outside its row.
@@ -233,7 +304,7 @@ private fun ChannelList(channels: List<LiveTvData.Channel>, focused: Int) {
             .offset(LIST_LEFT - FOCUS_RING, LIST_TOP - FOCUS_RING)
             .size(LIST_WIDTH + FOCUS_RING * 2, LIST_HEIGHT + FOCUS_RING * 2),
     ) {
-        itemsIndexed(channels, key = { _, c -> c.id }) { i, c -> ChannelRow(c, i == focused) }
+        itemsIndexed(channels, key = { _, c -> c.id }) { i, c -> ChannelRow(c, showFocus && i == focused) }
     }
 }
 
@@ -264,10 +335,10 @@ private fun ChannelRow(channel: LiveTvData.Channel, focused: Boolean) {
     }
 }
 
+/** The right-hand panel: [band] across its top, then [content]. */
 @Composable
-private fun DetailPanel(channel: LiveTvData.Channel) {
+private fun PanelFrame(band: Color, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(PANEL_RADIUS)
-    val side = Modifier.padding(start = PANEL_SIDE, end = PANEL_SIDE)
     Column(
         Modifier
             .offset(PANEL_LEFT, PANEL_TOP)
@@ -276,7 +347,15 @@ private fun DetailPanel(channel: LiveTvData.Channel) {
             .background(PANEL_BG)
             .border(PANEL_BORDER, PANEL_BORDER_COLOR, shape)
     ) {
-        Box(Modifier.fillMaxWidth().height(PANEL_BAND).background(Color(channel.rowColor)))
+        Box(Modifier.fillMaxWidth().height(PANEL_BAND).background(band))
+        content()
+    }
+}
+
+@Composable
+private fun DetailPanel(channel: LiveTvData.Channel) {
+    val side = Modifier.padding(start = PANEL_SIDE, end = PANEL_SIDE)
+    PanelFrame(Color(channel.rowColor)) {
         LiveText(channel.name, PANEL_NAME_TEXT, Color.White, AppTypography.asapCondensedBold,
             side.padding(top = PANEL_NAME_TOP), maxLines = 2)
         val meta = listOf(channel.row, channel.flag, channel.quality).filter { it.isNotEmpty() }.joinToString(" · ")
@@ -353,12 +432,12 @@ private fun Tag(text: String) {
 }
 
 @Composable
-private fun Dot(color: Color) {
+internal fun Dot(color: Color) {
     Box(Modifier.size(DOT_SIZE).background(color, CircleShape))
 }
 
 @Composable
-private fun HintBox(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
+internal fun HintBox(modifier: Modifier, content: @Composable RowScope.() -> Unit) {
     val shape = RoundedCornerShape(HINT_RADIUS)
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -372,7 +451,7 @@ private fun HintBox(modifier: Modifier, content: @Composable RowScope.() -> Unit
 }
 
 @Composable
-private fun KeyHint(key: String, label: String) {
+internal fun KeyHint(key: String, label: String) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Box(
             contentAlignment = Alignment.Center,
@@ -389,12 +468,26 @@ private fun KeyHint(key: String, label: String) {
 }
 
 @Composable
-private fun HintSeparator() {
+internal fun HintSeparator() {
     LiveText("|", HINT_TEXT, HINT_SEPARATOR, AppTypography.interSemiBold)
 }
 
+/**
+ * Where a list of [visible] whole rows must scroll so the [focused] one is whole:
+ * to it when it sits above the first visible row, or IS that row but partly
+ * scrolled off; to [visible] - 1 rows above it when it is below the window;
+ * null when it is in view. A list can only scroll to its end, which can stop
+ * mid-row (ten channels under nine rows' room), so on the way back up row 0
+ * stayed half under the search bar until the offset was checked too (v509).
+ */
+internal fun keepInView(focused: Int, first: Int, firstOffset: Int, visible: Int): Int? = when {
+    focused < first || (focused == first && firstOffset > 0) -> focused
+    focused >= first + visible -> focused - visible + 1
+    else -> null
+}
+
 /** The mockup's `box-shadow: 0 0 0 2px #fff`: a white ring drawn OUTSIDE the row. */
-private fun Modifier.focusRing(show: Boolean, radius: Dp): Modifier = if (!show) this else drawBehind {
+internal fun Modifier.focusRing(show: Boolean, radius: Dp): Modifier = if (!show) this else drawBehind {
     val ring = FOCUS_RING.toPx()
     drawRoundRect(
         color = Color.White,
