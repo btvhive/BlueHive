@@ -13,7 +13,7 @@ The plan is in `docs/details-redesign-architecture.md`, and the sizes after each
 | TvInfoLabels.kt | seasons, status, release date, language; missing ones close up (`shared/layout/DetailsInfoLines`) |
 | TvPlayArea.kt | the episode row between its caps, the season cap + accordion |
 | SeasonAvailability.kt | aired/unaired rules + season check (pure, tested) |
-| SeasonAccordion.kt | the season picker inside the left cap: a list with a raised gold row and a pointer arrow (v502; was the card wheel 2026-10-27..v501) |
+| SeasonAccordion.kt | the season picker inside the left cap: a list; OK to choose (white tile + gold arrow), OK to play (charcoal tile), Back to cancel (v504; list since v502, card wheel before) |
 | EpisodesState.kt | season loads, prefetch, first focus, watched markers |
 | EpisodeRow.kt | the episode row + hold-to-repeat |
 | EpisodeCard.kt | one episode tile |

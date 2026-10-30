@@ -126,6 +126,7 @@ internal fun BoxScope.TvPlayArea(
         focusMap        = focusMap,
         passionFont     = passionFont,
         coroutineScope  = coroutineScope,
+        rowEntry        = rowEntry,
     )
 
     Image(

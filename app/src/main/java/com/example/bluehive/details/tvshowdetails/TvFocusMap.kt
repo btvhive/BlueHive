@@ -29,7 +29,7 @@ class TvFocusMap internal constructor(
     /** The season accordion (SeasonAccordion): one focus target for every season. */
     val seasonPicker = FocusRequester()
 
-    /** The picker has focus: its gold row is bright, and focusSeasonPicker() knows it landed. */
+    /** The picker has focus: the white line rings its panel, and focusSeasonPicker() knows it landed. */
     var seasonPickerFocused by mutableStateOf(false)
 
     /**
