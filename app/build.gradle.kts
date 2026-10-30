@@ -553,10 +553,13 @@ val checkMethodSizes by tasks.registering {
                 simple.startsWith("TVShowsDetailsScreenCompose") ||
                 simple.startsWith("MoviesDetailsScreenCompose")
         }
+        // ModularButton too (v524): every button on every screen runs through it,
+        // so an R8 miscompile there would take down the whole app.
         fun inBudget(origin: String): Boolean =
             inDetails(origin) || origin.startsWith("com.example.bluehive.favorites.") ||
                 origin.startsWith("com.example.bluehive.home.") ||
-                origin.startsWith("com.example.bluehive.livetv.")
+                origin.startsWith("com.example.bluehive.livetv.") ||
+                origin.startsWith("com.example.bluehive.utilities.ModularButtonKt")
 
         data class Method(val key: String, val origin: String, val units: Int, val registers: Int)
         val methods = ArrayList<Method>()
@@ -609,7 +612,7 @@ val checkMethodSizes by tasks.registering {
                     "(budget $maxUnits / $maxRegisters). Split it -- see the note above checkMethodSizes."
             }
         }
-        logger.lifecycle("checkMethodSizes: largest methods in details/, favorites/, home/ and livetv/ (budget $maxUnits units / $maxRegisters registers):")
+        logger.lifecycle("checkMethodSizes: largest methods in details/, favorites/, home/, livetv/ and ModularButton (budget $maxUnits units / $maxRegisters registers):")
         budgeted.sortedByDescending { it.units }.take(5).forEach { m ->
             logger.lifecycle("  %6d units %4d regs  %s".format(m.units, m.registers, m.key))
         }

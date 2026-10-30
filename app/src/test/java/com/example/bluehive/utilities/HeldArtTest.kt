@@ -52,7 +52,7 @@ class HeldArtTest {
         }
         assertEquals(emptyList<String>(), offenders)
         // The buttons' glows are held too, and drawn the same way.
-        assertTrue(MainSource.code("utilities/ModularButton.kt").contains("painter = heldPainter(it),"))
+        assertTrue(MainSource.code("utilities/ModularButton.kt").contains("painter = heldPainter(res),"))
     }
 
     @Test

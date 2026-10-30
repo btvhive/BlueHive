@@ -41,6 +41,8 @@ import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.layout.BoxScope
+import androidx.annotation.DrawableRes
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.BlueHiveApplication
@@ -467,8 +469,8 @@ fun ModularButton(
     )
 
 
-    // NEW BLOCK ADDED
-    val glowAlpha by animateFloatAsState(
+    // Read only in the glow's layer (ModularButtonGlow).
+    val glowAlpha = animateFloatAsState(
         targetValue = when {
             !isFocusable                                  -> 0f
             !isFocused                                    -> 0f
@@ -556,25 +558,7 @@ fun ModularButton(
                 else
                     glowConfig.defaultRes
 
-            glowRes?.let {
-                Image(
-                    painter = heldPainter(it),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(
-                            width = dimensions.glowWidth,
-                            height = dimensions.glowHeight
-                        )
-                        .align(Alignment.TopStart)
-                        .offset(x = glowConfig.offsetX, y = glowConfig.offsetY)
-                        .graphicsLayer {
-                            clip = true
-                            shape = RoundedCornerShape(glowConfig.cornerRadius)
-                            alpha = glowAlpha
-                        },
-                    contentScale = ContentScale.FillBounds
-                )
-            }
+            glowRes?.let { ModularButtonGlow(it, dimensions, glowConfig, glowAlpha) }
         }
 
         // 🔹 Main button body + shadow
@@ -749,49 +733,101 @@ fun ModularButton(
                         handleButtonClick()
                     }
             ) {
-                if (textConfig.iconRes != null) {
-                    val iconShadow = textConfig.shadow
-                    if (iconShadow != null) {
-                        val density = LocalDensity.current
-                        val dx = with(density) { iconShadow.offset.x.toDp() }
-                        val dy = with(density) { iconShadow.offset.y.toDp() }
-                        val blur = with(density) { (iconShadow.blurRadius / 2f).toDp() }
-                        Image(
-                            painter = painterResource(id = textConfig.iconRes),
-                            contentDescription = null,
-                            colorFilter = ColorFilter.tint(iconShadow.color),
-                            modifier = Modifier
-                                .size(textConfig.iconSize)
-                                .offsetWithY(textConfig.offsetX + dx) { textYOffset.value + dy }
-                                // Blur needs API 31. Below it Modifier.blur draws nothing but
-                                // still adds a layer (Unbounded: no clip either) under each
-                                // shadowed icon on the Fire TV sticks -- so it is left off there (v516).
-                                .then(if (blurDrawsOn(Build.VERSION.SDK_INT)) Modifier.blur(blur, BlurredEdgeTreatment.Unbounded) else Modifier)
-                        )
-                    }
-                    Image(
-                        painter = painterResource(id = textConfig.iconRes),
-                        contentDescription = labelText,
-                        colorFilter = ColorFilter.tint(labelColor),
-                        modifier = Modifier
-                            .size(textConfig.iconSize)
-                            .offsetWithY(textConfig.offsetX) { textYOffset.value }
-                    )
-                } else {
-                    Text(
-                        text = labelText,
-                        color = labelColor,
-                        fontSize = textConfig.fontSize.sp,
-                        fontFamily = fontFamily,
-                        textAlign = TextAlign.Center,
-                        style = LocalTextStyle.current.let { base -> if (textConfig.shadow != null) base.copy(shadow = textConfig.shadow) else base },
-                        modifier = Modifier
-                            .offsetWithY(textConfig.offsetX) { textYOffset.value }
-                            .semantics { contentDescription = labelText }
-                    )
-                }
+                ModularButtonLabel(textConfig, labelText, labelColor, fontFamily, textYOffset)
             }
         }
+    }
+}
+
+/*
+ * ModularButton's pieces, each its own restartable composable (v524): Box is
+ * inline, so everything drawn inside the button compiled into ModularButton's
+ * own method -- 2,926 dex units and 97 registers, close to the 100 at which
+ * R8 miscompiled the TV details screen (v371-v375). Every button on every
+ * screen runs through it, so checkMethodSizes now holds it to the same budget
+ * as the details screens. A child composable is a method of its own that R8
+ * does not fold back in.
+ */
+
+/** The focus glow behind the button; [alpha] is read only in its layer. */
+@Composable
+private fun BoxScope.ModularButtonGlow(
+    @DrawableRes res: Int,
+    dimensions: ModularButtonDimensions,
+    glowConfig: ModularButtonGlowConfig,
+    alpha: State<Float>,
+) {
+    Image(
+        painter = heldPainter(res),
+        contentDescription = null,
+        modifier = Modifier
+            .size(
+                width = dimensions.glowWidth,
+                height = dimensions.glowHeight
+            )
+            .align(Alignment.TopStart)
+            .offset(x = glowConfig.offsetX, y = glowConfig.offsetY)
+            .graphicsLayer {
+                clip = true
+                shape = RoundedCornerShape(glowConfig.cornerRadius)
+                this.alpha = alpha.value
+            },
+        contentScale = ContentScale.FillBounds
+    )
+}
+
+/**
+ * The button's label: an icon (with its blurred shadow) or text. [textYOffset]
+ * is the press-in, read while placing (offsetWithY).
+ */
+@Composable
+private fun ModularButtonLabel(
+    textConfig: ModularButtonTextConfig,
+    labelText: String,
+    labelColor: Color,
+    fontFamily: FontFamily,
+    textYOffset: State<Dp>,
+) {
+    if (textConfig.iconRes != null) {
+        val iconShadow = textConfig.shadow
+        if (iconShadow != null) {
+            val density = LocalDensity.current
+            val dx = with(density) { iconShadow.offset.x.toDp() }
+            val dy = with(density) { iconShadow.offset.y.toDp() }
+            val blur = with(density) { (iconShadow.blurRadius / 2f).toDp() }
+            Image(
+                painter = painterResource(id = textConfig.iconRes),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(iconShadow.color),
+                modifier = Modifier
+                    .size(textConfig.iconSize)
+                    .offsetWithY(textConfig.offsetX + dx) { textYOffset.value + dy }
+                    // Blur needs API 31. Below it Modifier.blur draws nothing but
+                    // still adds a layer (Unbounded: no clip either) under each
+                    // shadowed icon on the Fire TV sticks -- so it is left off there (v516).
+                    .then(if (blurDrawsOn(Build.VERSION.SDK_INT)) Modifier.blur(blur, BlurredEdgeTreatment.Unbounded) else Modifier)
+            )
+        }
+        Image(
+            painter = painterResource(id = textConfig.iconRes),
+            contentDescription = labelText,
+            colorFilter = ColorFilter.tint(labelColor),
+            modifier = Modifier
+                .size(textConfig.iconSize)
+                .offsetWithY(textConfig.offsetX) { textYOffset.value }
+        )
+    } else {
+        Text(
+            text = labelText,
+            color = labelColor,
+            fontSize = textConfig.fontSize.sp,
+            fontFamily = fontFamily,
+            textAlign = TextAlign.Center,
+            style = LocalTextStyle.current.let { base -> if (textConfig.shadow != null) base.copy(shadow = textConfig.shadow) else base },
+            modifier = Modifier
+                .offsetWithY(textConfig.offsetX) { textYOffset.value }
+                .semantics { contentDescription = labelText }
+        )
     }
 }
 
