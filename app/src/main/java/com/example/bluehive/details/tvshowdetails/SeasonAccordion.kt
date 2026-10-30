@@ -69,8 +69,8 @@ import kotlin.math.abs
  *   - CHOOSING: the line goes (v506), the season on show turns GREY, and a
  *     bright white tile with the gold arrow beside it moves between seasons
  *     on Up / Down, STOPPING at the ends (no wrap). OK plays that season (its
- *     tile presses in) and goes back to FOCUSED; Back goes back without
- *     changing anything.
+ *     tile presses in) and stays CHOOSING (v507); Back goes back to FOCUSED,
+ *     the white tile returning to the season on show.
  *   - Focus elsewhere: no line; the season on show is a DULL WHITE tile.
  * Four rows show at a time. While choosing, a gold caret at either end of the
  * arrow's track says there are more seasons that way, and the list fades out
@@ -339,7 +339,7 @@ internal fun BoxScope.SeasonAccordion(
                             press.animateTo(1f, tween(PRESS_DOWN_MS))
                             press.animateTo(0f, tween(PRESS_UP_MS, easing = PressSpring))
                         }
-                        choosing = false
+                        // Choosing carries on (v507, the user's call): only Back ends it.
                         if (episodesState.selectedSeason != shown) {
                             episodesState.selectedSeason = shown
                             episodesState.loadSeasonEpisodes(shown)
@@ -394,7 +394,7 @@ internal fun BoxScope.SeasonAccordion(
 /**
  * A key while choosing: Up / Down move the white tile (stopping at either
  * end, once the last move has landed), OK runs [onPlay], Back runs [onBack];
- * every other key is held here, so choosing ends only by OK or Back.
+ * every other key is held here, so choosing ends only by Back.
  */
 private fun onChoosingKey(
     key: Key,
@@ -483,7 +483,8 @@ private fun DrawScope.drawSeasonList(text: SeasonListText, frame: SeasonListFram
         }
         drawTile(playing, left, rowTop(frame.loaded - 1f), right - left, rowHeight, sink)
         if (frame.choosing > 0f) {
-            drawTile(BRIGHT_TILE, left, rowTop(frame.cursor), right - left, rowHeight, 0f, frame.choosing)
+            // OK presses in the season just played, which is the white tile's (v507).
+            drawTile(BRIGHT_TILE, left, rowTop(frame.cursor), right - left, rowHeight, sink, frame.choosing)
         }
         for (season in 1..frame.total) {
             val y = rowTop(season - 1f)
