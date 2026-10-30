@@ -61,18 +61,20 @@ import kotlin.math.abs
  * (v502, replacing the v488-v501 card wheel; the user's advisor found the
  * wheel too artistic for older viewers).
  *
- * Two steps since v504, so Up / Down never pick a season by accident (the
+ * Two steps since v505, so Up / Down never pick a season by accident (the
  * user's flow and the 2026-10-29/30 mockups):
- *   - FOCUSED: a thin glowing white line rings the black panel. The season on
- *     show is a raised charcoal tile. Up goes to the header, Down to the
- *     recommended row, Right to the episodes; OK starts CHOOSING.
- *   - CHOOSING: a raised white tile, with the gold arrow beside it, moves
- *     between seasons on Up / Down and STOPS at the ends (no wrap). OK plays
- *     that season (the charcoal tile moves there and presses in) and goes back
- *     to FOCUSED; Back goes back without changing anything.
+ *   - FOCUSED: a thin glowing white line rings the black panel and the season
+ *     on show is a raised BRIGHT WHITE tile. Up goes to the header, Down to
+ *     the recommended row, Right to the episodes; OK starts CHOOSING.
+ *   - CHOOSING: the line goes (v506), the season on show turns GREY, and a
+ *     bright white tile with the gold arrow beside it moves between seasons
+ *     on Up / Down, STOPPING at the ends (no wrap). OK plays that season (its
+ *     tile presses in) and goes back to FOCUSED; Back goes back without
+ *     changing anything.
+ *   - Focus elsewhere: no line; the season on show is a DULL WHITE tile.
  * Four rows show at a time. While choosing, a gold caret at either end of the
  * arrow's track says there are more seasons that way, and the list fades out
- * there. Focus elsewhere: no line, just the charcoal tile.
+ * there.
  *
  * The geometry is the cap image's: drawn at 4 px per dp (537 x 489 px ->
  * 134.25 x 122.25 dp), its recessed panel runs x 51-467 and y 40-447 px. The
@@ -123,8 +125,18 @@ private class TilePaint(
     val label: Color,
 )
 
-/** The season on show: mockup F's "lit charcoal" tile (the user's pick, 2026-10-30). */
-private val PLAYING_TILE = TilePaint(
+/** Blends two tiles' paint, [t] of the way from [a] to [b]. */
+private fun lerpTile(a: TilePaint, b: TilePaint, t: Float): TilePaint =
+    if (t <= 0f) a else if (t >= 1f) b else TilePaint(
+        face = a.face.indices.map { lerp(a.face[it], b.face[it], t) },
+        lip = lerp(a.lip, b.lip, t),
+        shine = lerp(a.shine, b.shine, t),
+        ink = lerp(a.ink, b.ink, t),
+        label = lerp(a.label, b.label, t),
+    )
+
+/** The season on show while choosing another: mockup F's "lit charcoal" grey (the user's pick, 2026-10-30). */
+private val GREY_TILE = TilePaint(
     face = listOf(Color(0xFF4A4A54), Color(0xFF36363E), Color(0xFF2C2C33)),
     lip = Color(0xFF151518),
     shine = Color(0x66FFFFFF),
@@ -132,13 +144,22 @@ private val PLAYING_TILE = TilePaint(
     label = Color(0xFFC9C9D2),
 )
 
-/** The season being chosen: the bright white tile (the user's pick, 2026-10-30). */
-private val CHOOSING_TILE = TilePaint(
+/** The season being chosen, and the season on show while the picker has focus: bright white. */
+private val BRIGHT_TILE = TilePaint(
     face = listOf(Color(0xFFFAFAFC), Color(0xFFDCDDE2), Color(0xFFC3C4CB)),
     lip = Color(0xFF6B6C74),
     shine = Color(0xE6FFFFFF),
     ink = Color(0xFF16161B),
     label = Color(0xFF3C3C46),
+)
+
+/** The season on show with focus elsewhere: a slightly dull white (the user's mockup, 2026-10-30). */
+private val DULL_TILE = TilePaint(
+    face = listOf(Color(0xFFC9CACF), Color(0xFFB1B2B9), Color(0xFF9D9EA6)),
+    lip = Color(0xFF4F5057),
+    shine = Color(0x59FFFFFF),
+    ink = Color(0xFF24242A),
+    label = Color(0xFF45454F),
 )
 private val TILE_FACE_STOPS = floatArrayOf(0f, 0.55f, 1f)
 private val TILE_LIP_DEPTH = 2.5.dp
@@ -193,7 +214,7 @@ internal const val SEASON_TURN_GAP_MS = LIST_MOVE_MS.toLong()
 /** A move at [now] is allowed when the last one, at [last], has landed. Pure, so it is tested. */
 internal fun seasonTurnAllowed(now: Long, last: Long): Boolean = now - last >= SEASON_TURN_GAP_MS
 
-/** OK presses the charcoal tile in: down [PRESS_SINK] in [PRESS_DOWN_MS], then springs back in [PRESS_UP_MS]. */
+/** OK presses the playing tile in: down [PRESS_SINK] in [PRESS_DOWN_MS], then springs back in [PRESS_UP_MS]. */
 private val PRESS_SINK = 2.dp
 private const val PRESS_DOWN_MS = 80
 private const val PRESS_UP_MS = 300
@@ -245,7 +266,8 @@ private class SeasonListFrame(
     val choosing: Float,
     val scroll: Float,
     val press: Float,
-    val focusLine: Float,
+    /** How far the picker has focus (0 to 1). */
+    val focus: Float,
 )
 
 /** Season 1 through [listedSeasons]: the newest with an aired episode (SeasonAvailability). */
@@ -276,7 +298,7 @@ internal fun BoxScope.SeasonAccordion(
     // recomposes nothing until it moves -- see SEASON_TURN_GAP_MS.
     val lastTurn = remember { longArrayOf(Long.MIN_VALUE / 2) }
     // Read only in drawing: the white tile's row, the list's scroll (rows),
-    // the charcoal tile's press, the white tile's fade and the focus line's.
+    // the playing tile's press, the choosing fade and the focus fade.
     val cursor = remember(total) { Animatable(shown - 1f) }
     val scroll = remember(total) { Animatable(seasonListScroll(shown, total)) }
     val press = remember { Animatable(0f) }
@@ -362,7 +384,7 @@ internal fun BoxScope.SeasonAccordion(
                         choosing = choosingFade.value,
                         scroll = scroll.value,
                         press = press.value,
-                        focusLine = focusFade.value,
+                        focus = focusFade.value,
                     ),
                 )
             }
@@ -448,16 +470,20 @@ private fun DrawScope.drawSeasonList(text: SeasonListText, frame: SeasonListFram
     val rowTop = { row: Float -> top + (row - frame.scroll) * step }
     val sink = PRESS_SINK.toPx() * frame.press
 
-    if (frame.focusLine > 0f) drawFocusLine(frame.focusLine)
+    // The line shows while focused, and goes while choosing (v506).
+    val line = frame.focus * (1f - frame.choosing)
+    if (line > 0f) drawFocusLine(line)
+    // The season on show: dull white, bright white while focused, grey while choosing.
+    val playing = lerpTile(lerpTile(DULL_TILE, BRIGHT_TILE, frame.focus), GREY_TILE, frame.choosing)
     clipRect(left = left, top = top, right = right, bottom = bottom) {
         for (season in 1..frame.total) {
             val y = rowTop(season - 1f)
             if (y > bottom || y + rowHeight < top) continue
             drawSlot(left, y, right - left, rowHeight)
         }
-        drawTile(PLAYING_TILE, left, rowTop(frame.loaded - 1f), right - left, rowHeight, sink)
+        drawTile(playing, left, rowTop(frame.loaded - 1f), right - left, rowHeight, sink)
         if (frame.choosing > 0f) {
-            drawTile(CHOOSING_TILE, left, rowTop(frame.cursor), right - left, rowHeight, 0f, frame.choosing)
+            drawTile(BRIGHT_TILE, left, rowTop(frame.cursor), right - left, rowHeight, 0f, frame.choosing)
         }
         for (season in 1..frame.total) {
             val y = rowTop(season - 1f)
@@ -469,13 +495,13 @@ private fun DrawScope.drawSeasonList(text: SeasonListText, frame: SeasonListFram
             val label = text.label
             drawText(
                 label,
-                color = lerp(if (isLoaded) PLAYING_TILE.label else INK_OFF, CHOOSING_TILE.label, on),
+                color = lerp(if (isLoaded) playing.label else INK_OFF, BRIGHT_TILE.label, on),
                 topLeft = Offset(left + ROW_TEXT_PAD.toPx(), centre - label.size.height / 2f),
             )
             val number = text.numbers[season - 1]
             drawText(
                 number,
-                color = lerp(if (isLoaded) PLAYING_TILE.ink else INK_OFF, CHOOSING_TILE.ink, on),
+                color = lerp(if (isLoaded) playing.ink else INK_OFF, BRIGHT_TILE.ink, on),
                 topLeft = Offset(right - ROW_TEXT_PAD.toPx() - number.size.width, centre - number.size.height / 2f),
             )
         }
