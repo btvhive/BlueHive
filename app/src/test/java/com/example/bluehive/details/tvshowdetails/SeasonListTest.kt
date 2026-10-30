@@ -42,9 +42,9 @@ class SeasonListTest {
 
     @Test
     fun `a move waits for the last one to land`() {
-        assertEquals(320L, SEASON_TURN_GAP_MS)
-        assertEquals(false, seasonTurnAllowed(now = 1_000 + 319, last = 1_000))
-        assertEquals(true, seasonTurnAllowed(now = 1_000 + 320, last = 1_000))
+        assertEquals(150L, SEASON_TURN_GAP_MS)
+        assertEquals(false, seasonTurnAllowed(now = 1_000 + 149, last = 1_000))
+        assertEquals(true, seasonTurnAllowed(now = 1_000 + 150, last = 1_000))
         // The first press of all: the start value never blocks it, nor overflows.
         assertEquals(true, seasonTurnAllowed(now = 5, last = Long.MIN_VALUE / 2))
     }

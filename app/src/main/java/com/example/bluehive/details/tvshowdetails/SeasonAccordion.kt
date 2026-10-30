@@ -143,8 +143,8 @@ private val CARET_DOWN_TOP = 94.1.dp
 /** The fades over a cut-off end of the list. */
 private val FADE_DEPTH = 9.9.dp
 
-/** One move: the gold row slides and the list scrolls together (the mockup's .32 s cubic-bezier(.2, .8, .2, 1)). */
-private const val LIST_MOVE_MS = 320
+/** One move: the gold row slides and the list scrolls together (the mockup's cubic-bezier(.2, .8, .2, 1)). */
+private const val LIST_MOVE_MS = 150   // 320 in v502; "a lot faster", the user (2026-10-29)
 private val ListEase = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 
 /**
