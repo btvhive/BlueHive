@@ -176,8 +176,8 @@ fun ExtractionLoadingOverlay(
                 fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 4.sp,
-                // 8 px higher on the TV (4 dp), the owner's call; an offset, so
-                // nothing else moves.
+                // 18 px higher on the TV (9 dp; 8 px in v576, 10 more in v577),
+                // the owner's call; an offset, so nothing else moves.
                 modifier = Modifier.offset(y = TITLE_RAISE),
             )
 
@@ -334,8 +334,8 @@ internal fun chainHeadline(attempt: Int, planned: Int, source: String?): String 
     }
 }
 
-/** How far the title is lifted: 8 px on the 2 px-per-dp TV. */
-internal val TITLE_RAISE = (-4).dp
+/** How far the title is lifted: 18 px on the 2 px-per-dp TV. */
+internal val TITLE_RAISE = (-9).dp
 
 /** The fixed text slots that keep the block one height (see the overlay's doc). */
 internal val HEADLINE_SLOT = 28.dp

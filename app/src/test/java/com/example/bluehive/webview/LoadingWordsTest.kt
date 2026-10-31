@@ -54,8 +54,8 @@ class LoadingWordsTest {
     }
 
     @Test
-    fun `fixed slots keep the block one height, the title 8 px higher`() {
-        assertEquals((-4).dp, TITLE_RAISE)
+    fun `fixed slots keep the block one height, the title 18 px higher`() {
+        assertEquals((-9).dp, TITLE_RAISE)
         assertEquals(28.dp, HEADLINE_SLOT)
         assertEquals(44.dp, STATUS_SLOT)
         assertEquals(36.dp, NOTE_SLOT)
