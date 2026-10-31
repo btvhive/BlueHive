@@ -36,14 +36,16 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.bluehive.utilities.AppTypography
 
-// ── Up Next (v580, v581) ────────────────────────────────────────────────────
+// ── Up Next (v580-v582) ─────────────────────────────────────────────────────
 //
 // The last minute of an episode shows the next one -- its still, its number
 // and title -- over the player while the credits keep playing, counting down
 // from 60, and the details screen opens it through the usual backend
 // extraction when this one ends. Every third episode in a row nobody touches
-// the remote for, a "Still watching?" prompt comes up 20 s before the card;
-// unanswered, the card still shows, but playback stops when the episode does.
+// the remote for, a "Still watching?" prompt comes up five minutes before the
+// end (v582). Answered, the card follows at the minute and the next episode
+// plays; unanswered, no card shows and the player closes when the episode
+// ends. A press in that last minute still brings the card back.
 // TV shows (HlsPlayerActivity) and anime (MiruroPlayerActivity) alike -- see
 // UpNextDirector.
 //
@@ -53,8 +55,8 @@ import com.example.bluehive.utilities.AppTypography
 /** The card shows, and counts down, over the episode's last this-many ms (v581: a minute). */
 internal const val UP_NEXT_WINDOW_MS = 60_000L
 
-/** The Still Watching prompt shows this long before the end: 20 s before the card. */
-internal const val STILL_WATCHING_LEAD_MS = 80_000L
+/** The Still Watching prompt shows this long before the end, until the card's minute (v582: five minutes). */
+internal const val STILL_WATCHING_LEAD_MS = 5L * 60_000L
 
 /** The episode, counted in a row without a remote press, that asks "Still watching?". */
 internal const val UNATTENDED_LIMIT = 3
@@ -87,9 +89,12 @@ internal fun upNextPhaseFor(
     cancelled: Boolean,
     askStillWatching: Boolean,
     promptDismissed: Boolean,
+    /** Still Watching went unanswered: this episode is the last, so no card. */
+    stopAfterThis: Boolean = false,
 ): UpNextPhase = when {
     !hasNext || durationMs < UP_NEXT_MIN_DURATION_MS || remainingMs < 0 -> UpNextPhase.Hidden
-    remainingMs <= UP_NEXT_WINDOW_MS -> if (cancelled) UpNextPhase.Hidden else UpNextPhase.Card
+    remainingMs <= UP_NEXT_WINDOW_MS ->
+        if (cancelled || stopAfterThis) UpNextPhase.Hidden else UpNextPhase.Card
     remainingMs <= STILL_WATCHING_LEAD_MS && askStillWatching && !promptDismissed -> UpNextPhase.StillWatching
     else -> UpNextPhase.Hidden
 }
@@ -131,16 +136,13 @@ private fun Modifier.bottomScrim(fromFraction: Float, strength: Float) = backgro
 /**
  * The Up Next card: the still on the right with the countdown along its
  * bottom, the number and title right-aligned beside it, then "Watch next
- * episode" and Cancel. [focus] 0 is Watch, 1 is Cancel. [counting] false is
- * the card after an unanswered Still Watching: no number, no bar, nothing
- * plays by itself.
+ * episode" and Cancel. [focus] 0 is Watch, 1 is Cancel.
  */
 @Composable
 internal fun BoxScope.UpNextCard(
     next: NextEpisode,
     remainingMs: Long,
     focus: Int,
-    counting: Boolean,
 ) {
     Box(Modifier.matchParentSize().bottomScrim(0.74f, 0.92f))
     Row(
@@ -155,7 +157,7 @@ internal fun BoxScope.UpNextCard(
             verticalArrangement = Arrangement.Bottom,
         ) {
             Text(
-                text = if (counting) "Next episode in ${upNextSeconds(remainingMs)}" else "Up next",
+                text = "Next episode in ${upNextSeconds(remainingMs)}",
                 color = UP_NEXT_LABEL,
                 fontSize = 8.sp,
                 fontFamily = AppTypography.interSemiBold,
@@ -193,18 +195,16 @@ internal fun BoxScope.UpNextCard(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize(),
             )
-            if (counting) {
-                // Fills from the right toward the words, as the seconds go.
-                val elapsed = (1f - remainingMs.toFloat() / UP_NEXT_WINDOW_MS).coerceIn(0f, 1f)
+            // Fills from the right toward the words, as the seconds go.
+            val elapsed = (1f - remainingMs.toFloat() / UP_NEXT_WINDOW_MS).coerceIn(0f, 1f)
+            Box(
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.5.dp)
+                    .background(Color.White.copy(alpha = 0.24f))
+            ) {
                 Box(
-                    Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.5.dp)
-                        .background(Color.White.copy(alpha = 0.24f))
-                ) {
-                    Box(
-                        Modifier.align(Alignment.CenterEnd).fillMaxHeight()
-                            .fillMaxWidth(elapsed).background(UP_NEXT_BLUE)
-                    )
-                }
+                    Modifier.align(Alignment.CenterEnd).fillMaxHeight()
+                        .fillMaxWidth(elapsed).background(UP_NEXT_BLUE)
+                )
             }
         }
     }
@@ -212,7 +212,7 @@ internal fun BoxScope.UpNextCard(
 
 /**
  * "Still watching {show}?" with Keep watching and I'm done. [focus] 0 is Keep
- * watching. [progress] runs 0..1 over the 20 s before the card.
+ * watching. [progress] runs 0..1 over the four minutes before the card's.
  */
 @Composable
 internal fun BoxScope.StillWatchingPrompt(showTitle: String?, focus: Int, progress: Float) {

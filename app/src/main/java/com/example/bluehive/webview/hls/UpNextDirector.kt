@@ -41,8 +41,8 @@ internal class UpNextDirector(
     private var remainingMs by mutableLongStateOf(0L)
     /** 0 = Watch next episode / Keep watching, 1 = Cancel / I'm done. */
     private var focus by mutableIntStateOf(0)
-    /** False after an unanswered prompt: the card counts nothing and nothing plays by itself. */
-    private var autoplay by mutableStateOf(true)
+    /** False while the prompt goes unanswered: no card, and the player closes at the end. */
+    private var autoplay = true
 
     /** Any remote press during this episode. */
     private var touched = false
@@ -97,7 +97,8 @@ internal class UpNextDirector(
             if (askThisEpisode) Log.i(tag, "⏭ ${unattendedBefore + 1} episodes without a press — asking Still watching")
         }
         autoplay = !askThisEpisode || touched
-        val now = upNextPhaseFor(remaining, dur, next != null, cancelled, askThisEpisode, promptDismissed)
+        val now = upNextPhaseFor(remaining, dur, next != null, cancelled, askThisEpisode, promptDismissed,
+                                 stopAfterThis = !autoplay)
         if (now != phase) {
             Log.d(tag, "⏭ up next: $now at ${remaining}ms left (autoplay=$autoplay)")
             phase = now
@@ -184,7 +185,7 @@ internal class UpNextDirector(
     fun Overlay(box: BoxScope) {
         val n = next ?: return
         when (phase) {
-            UpNextPhase.Card -> box.UpNextCard(n, remainingMs, focus, counting = autoplay)
+            UpNextPhase.Card -> box.UpNextCard(n, remainingMs, focus)
             UpNextPhase.StillWatching -> box.StillWatchingPrompt(
                 showTitle = showTitle,
                 focus     = focus,

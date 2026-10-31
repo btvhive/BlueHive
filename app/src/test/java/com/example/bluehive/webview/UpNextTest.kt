@@ -26,9 +26,10 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * v580/v581: the last minute of an episode shows the next one, counting down
+ * v580-v582: the last minute of an episode shows the next one, counting down
  * from 60, and it opens when the stream ends; every third untouched episode
- * asks "Still watching?" 20 s before the card. TV shows and anime alike.
+ * asks "Still watching?" five minutes out, and unanswered, that episode is the
+ * last. TV shows and anime alike.
  */
 class UpNextTest {
 
@@ -53,13 +54,21 @@ class UpNextTest {
     }
 
     @Test
-    fun `the prompt shows 80 s out, then the card 20 s later`() {
-        assertEquals(80_000L, STILL_WATCHING_LEAD_MS)
-        assertEquals(UpNextPhase.Hidden, phase(80_001, ask = true))
-        assertEquals(UpNextPhase.StillWatching, phase(80_000, ask = true))
+    fun `the prompt shows five minutes out, then the card at the minute`() {
+        assertEquals(300_000L, STILL_WATCHING_LEAD_MS)
+        assertEquals(UpNextPhase.Hidden, phase(300_001, ask = true))
+        assertEquals(UpNextPhase.StillWatching, phase(300_000, ask = true))
         assertEquals(UpNextPhase.StillWatching, phase(60_001, ask = true))
-        assertEquals(UpNextPhase.Card, phase(60_000, ask = true))
+        assertEquals(UpNextPhase.Card, phase(60_000, ask = true, dismissed = true))
         assertEquals(UpNextPhase.Hidden, phase(70_000, ask = true, dismissed = true))
+    }
+
+    @Test
+    fun `unanswered, no card shows and that episode is the last`() {
+        assertEquals(UpNextPhase.Hidden,
+            upNextPhaseFor(30_000, dur, true, false, true, false, stopAfterThis = true))
+        assertEquals(UpNextPhase.Card,
+            upNextPhaseFor(30_000, dur, true, false, true, false, stopAfterThis = false))
     }
 
     @Test
