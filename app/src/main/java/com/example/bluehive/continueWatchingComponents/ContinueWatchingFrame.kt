@@ -104,12 +104,17 @@ private val CW_THUMB_WIDTH      = 58.dp
 private val CW_ROW_SHAPE        = RoundedCornerShape(0.dp)
 private val CW_THUMB_SHAPE      = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp)
 private val CW_BG_COLOR         = Color(0xFF131313) // 0xFF121314
-private val CW_BG_FOCUSED       = Color(0xFF2D58AA) // focused row fill — light blue (tune to taste)
+// The focused row is light: a soft white base a shade under the bright white
+// border, so the border still reads, with black text (owner, 2026-10-31; it
+// was a blue fill with white text).
+private val CW_BG_FOCUSED       = Color(0xFFD9D9DE)
 private val CW_BORDER_UNFOCUSED = Color(0xFF262525)
 private val CW_BORDER_FOCUSED   = Color.White
-private val CW_TITLE_FOCUSED    = Color.White
-private val CW_TITLE_DEFAULT    = Color.White          // media title — bright white (both states)
+private val CW_BORDER_FOCUSED_W = 1.5.dp
+private val CW_TITLE_FOCUSED    = Color.Black
+private val CW_TITLE_DEFAULT    = Color.White          // media title — bright white
 private val CW_SUBTITLE_COLOR   = Color(0xFFDFDFDF)    // subtitle — off-white (the title's former tone)
+private val CW_SUBTITLE_FOCUSED = Color(0xFF2A2A30)    // subtitle on the light focused row
 private const val CW_MAX_ITEMS  = 15
 
 // ⬆️⬇️ Hold-to-repeat navigation speed for the Continue Watching list: the minimum
@@ -146,7 +151,7 @@ private fun ContinueWatchingItem(
             .clip(CW_ROW_SHAPE)
             .background(if (isFocused) CW_BG_FOCUSED else CW_BG_COLOR)
             .border(
-                width = if (isFocused) 0.8.dp else 1.dp,
+                width = if (isFocused) CW_BORDER_FOCUSED_W else 1.dp,
                 color = if (isFocused) CW_BORDER_FOCUSED else CW_BORDER_UNFOCUSED,
                 shape = CW_ROW_SHAPE,
             )
@@ -263,7 +268,7 @@ private fun ContinueWatchingItem(
                 if (subtitle.isNotBlank()) {
                     Text(
                         text       = subtitle,
-                        color      = CW_SUBTITLE_COLOR,
+                        color      = if (isFocused) CW_SUBTITLE_FOCUSED else CW_SUBTITLE_COLOR,
                         fontSize   = 7.5.sp,
                         fontFamily = AppTypography.passionRegular,
                         maxLines   = 1,
@@ -492,7 +497,7 @@ fun HomeScreenContinueWatchingCompose(
         }
     }
 
-    // Back exits Selected -> Focused (shadow clears, focus back to frame)
+    // Back exits Selected -> Focused (gold clears, focus back to frame)
     BackHandler(enabled = frameState is ContinueWatchingFrameState.Selected) {
         Log.d("CONTINUE_WATCHING", "⬅️ Back pressed - exiting Selected")
         frameState = ContinueWatchingFrameState.Focused
@@ -510,13 +515,7 @@ fun HomeScreenContinueWatchingCompose(
     val focusedH = 238.dp
     val focusedX = 13.dp
     val focusedY = (-18).dp
-    val focusedZ = 0f // Behind shadow
-
-    val shadowW = 243.6.dp
-    val shadowH = 229.dp
-    val shadowX = 14.dp
-    val shadowY = (-13).dp
-    val shadowZ = 1f // Between focused and base
+    val focusedZ = 0f // Behind the base
 
     // List positioning — sits inside the base frame area with a few dp inner padding
     // Tweak listOffsetX / listOffsetY if your frame PNG has a thicker inner border
@@ -569,29 +568,10 @@ fun HomeScreenContinueWatchingCompose(
             colorFilter = ColorFilter.tint(frameTint, BlendMode.Modulate)
         )
 
-        // ✅ SHADOW: visible ONLY when Selected.
-        //
-        // INVERTED FROM ITS ORIGINAL SENSE, on purpose. It used to sit under the
-        // panel at rest and vanish on entry, which spent the effect on the two
-        // states the viewer is in most of the time and removed it at the one
-        // moment something had actually changed.
-        //
-        // Focused and Selected are otherwise near-identical here -- the focus
-        // overlay is drawn for both -- so this is the ONLY thing separating "I
-        // am on this panel" from "I am inside it", and inside is the state that
-        // needs saying: it is where LEFT/RIGHT stop moving between sections and
-        // start moving within the list.
-        Image(
-            painter = painterResource(id = R.drawable.continue_watching_frame_shadow),
-            contentDescription = "Continue Watching Shadow",
-            modifier = Modifier
-                .offset(x = shadowX, y = shadowY)
-                .width(shadowW)
-                .height(shadowH)
-                .zIndex(shadowZ)
-                .graphicsLayer(alpha = if (frameState is ContinueWatchingFrameState.Selected) 1f else 0f),
-            contentScale = ContentScale.FillBounds
-        )
+        // NO SHADOW LAYER. A dark shadow used to be drawn over the focus
+        // overlay while Selected, right on top of the gold underglow (owner,
+        // 2026-10-31), as on the trailer and trending panels. The gold tint
+        // already marks "inside the list", so it was removed.
 
         // ✅ BASE FRAME: always visible (front layer, focusable + clickable target)
         Image(
@@ -670,7 +650,7 @@ fun HomeScreenContinueWatchingCompose(
                     }
                 }
 
-                // Click selects it (shadow appears + nav locks)
+                // Click selects it (frame turns gold + nav locks)
                 .clickable(
                     interactionSource = frameInteraction,
                     indication = null

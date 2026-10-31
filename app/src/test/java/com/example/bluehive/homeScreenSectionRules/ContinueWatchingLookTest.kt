@@ -1,0 +1,40 @@
+package com.example.bluehive.homeScreenSectionRules
+
+import com.example.bluehive.testutil.MainSource
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+
+/**
+ * Continue Watching (owner, 2026-10-31): no shadow layer over the gold
+ * underglow while Selected, as on the trailer and trending panels, and the
+ * focused row is light -- a soft white base, a bright white border, black text.
+ */
+class ContinueWatchingLookTest {
+
+    private val code = MainSource.code("continueWatchingComponents/ContinueWatchingFrame.kt")
+
+    @Test
+    fun `no shadow is drawn over the frame, and its art is gone`() {
+        assertFalse(code.contains("_frame_shadow"))
+        assertFalse(Regex("""\bshadow[WHXYZ]\b""").containsMatchIn(code))
+        assertTrue(code.contains("PANEL_HINT_GOLD"))
+        val res = listOf(File("src/main/res"), File("app/src/main/res")).first { it.isDirectory }
+        val left = res.walkTopDown().filter { it.name.startsWith("continue_watching_frame_shadow.") }.toList()
+        assertTrue(left.toString(), left.isEmpty())
+    }
+
+    @Test
+    fun `the focused row is a light base with a bright white border and black text`() {
+        assertTrue(code.contains("private val CW_BG_FOCUSED       = Color(0xFFD9D9DE)"))
+        assertTrue(code.contains("private val CW_BORDER_FOCUSED   = Color.White"))
+        assertTrue(code.contains("private val CW_TITLE_FOCUSED    = Color.Black"))
+        assertTrue(code.contains("width = if (isFocused) CW_BORDER_FOCUSED_W else 1.dp"))
+        assertTrue(code.contains("color = if (isFocused) CW_BORDER_FOCUSED else CW_BORDER_UNFOCUSED"))
+        assertTrue(code.contains("color      = if (isFocused) CW_TITLE_FOCUSED else CW_TITLE_DEFAULT"))
+        // The subtitle darkens too; its off-white would vanish on the light row.
+        assertTrue(code.contains("color      = if (isFocused) CW_SUBTITLE_FOCUSED else CW_SUBTITLE_COLOR"))
+        assertFalse(code.contains("0xFF2D58AA"))
+    }
+}
