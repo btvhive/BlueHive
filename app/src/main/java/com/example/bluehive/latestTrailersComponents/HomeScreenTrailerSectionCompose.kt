@@ -276,6 +276,11 @@ fun HomeScreenTrailerSectionCompose(
     val frameX = 62.5.dp
     val frameY = 38.5.dp
 
+    // The chin's status light (TrailerStatusLight.kt), centred on the socket
+    // in the frame art; make_trailer_frame.py prints this too.
+    val statusLightX = 397.5.dp
+    val statusLightY = 244.859.dp
+
     val viewportW = 325.19415283203125.dp
     val viewportH = 182.35919189453125.dp
     val viewportX = 77.5.dp
@@ -317,6 +322,13 @@ fun HomeScreenTrailerSectionCompose(
                 .width(frameW)
                 .height(frameH),
             contentScale = ContentScale.FillBounds
+        )
+
+        // Red when idle or focused, neon green in select mode.
+        TrailerStatusLight(
+            selected = trailerState is TrailerFrameState.Selected,
+            centerX  = statusLightX,
+            centerY  = statusLightY,
         )
 
         // Carousel viewport (drawn ABOVE frame)

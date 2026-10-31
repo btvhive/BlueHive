@@ -4,7 +4,8 @@ mock-ups' "level 2" tones, as C read too dark on the TV; v559 to "level 1";
 v560 moved the rim highlight to the top-right and bottom-left; v562 softened
 the glare and thinned the line, option E / 0.8 px from the mock-ups; v564
 darkened the metal toward the top-left, option B with the bottom-right kept;
-v565 took both dark corners 5% darker):
+v565 took both dark corners 5% darker; v566 centred the label and added the
+chin's buttons and status-light socket):
 
   app/src/main/res/drawable-xhdpi/trailer_frame.webp
       the set: a dark metal rim (RIM_TOP -> RIM_BOTTOM) around a darker panel
@@ -50,6 +51,11 @@ RIM_HIGHLIGHT = 0.40         # the rim's light line at its brightest (top-right,
 RIM_LINE_PX = 0.8            # its width: a hairline (v562; 1.3 before)
 GLARE = 0.06                 # the soft white glare on the metal behind it, at its brightest
 GLARE_RADIUS_DP = 10.0       # how far the glare spreads from each corner
+# The chin's controls (v566): four buttons and the status light's socket.
+BUTTON_W_DP, BUTTON_H_DP, BUTTON_GAP_DP = 7.0, 4.5, 3.0
+LIGHT_INSET_DP = 3.0         # the light's centre, in from the panel's rounded corner
+LIGHT_TO_BUTTONS_DP = 6.0    # from the light's centre to the nearest button's edge
+LIGHT_SOCKET_DP = 3.2        # radius of the dark socket the light sits in
 RIM_TL_DARKEN = 0.30         # how much darker the metal gets at the top-left corner
 RIM_BR_DARKEN = 0.05         # ... and at the bottom-right corner
 LABEL = 'LATEST TRAILERS'
@@ -186,9 +192,31 @@ def make_frame():
     # Behind the picture: plain black (the carousel draws over it).
     ImageDraw.Draw(img).rectangle(pic, fill=(0, 0, 0, 255))
     font = ImageFont.truetype(FONT, round(px(LABEL_SP)))
-    spaced_text(img, w / 2, pic[3] + px(PANEL_PAD_DP) + px(CHIN_DP) / 2, LABEL, font, LABEL_RGB + (255,), px(LABEL_SPACING_DP))
+    # Centred in the chin, the strip from the picture's bottom to the panel's.
+    chin_cy = pic[3] + (px(PANEL_PAD_DP) + px(CHIN_DP)) / 2
+    spaced_text(img, w / 2, chin_cy, LABEL, font, LABEL_RGB + (255,), px(LABEL_SPACING_DP))
+    # Four small buttons at the chin's right end, then the socket of the status
+    # light. The light itself is drawn by the app (TrailerStatusLight.kt), red
+    # or neon green, centred on the socket at status_light_center().
+    light_cx, light_cy = status_light_center(w, h)
+    bw, bh, gap = px(BUTTON_W_DP), px(BUTTON_H_DP), px(BUTTON_GAP_DP)
+    first_right = light_cx - px(LIGHT_TO_BUTTONS_DP)
+    for i in range(4):
+        right = first_right - i * (bw + gap)
+        box = (right - bw, chin_cy - bh / 2, right, chin_cy + bh / 2)
+        bm = rr_mask(size, box, px(1.2))
+        img.paste(vgrad(size, (0x4A, 0x4B, 0x52), (0x30, 0x31, 0x36), box[1], box[3]), (0, 0), bm)
+        img.paste(white, (0, 0), rr_outline(size, box, px(1.2), 0.8).point(lambda v: round(v * 0.12)))
+    r = px(LIGHT_SOCKET_DP)
+    ImageDraw.Draw(img).ellipse((light_cx - r, light_cy - r, light_cx + r, light_cy + r), fill=(6, 6, 7, 255))
     img.save(FRAME_OUT, 'WEBP', lossless=True)
     return size
+
+
+def status_light_center(w, h):
+    """The status light's centre on the frame (px): in the chin, at its right end."""
+    pic_bottom = px(RIM_DP + PANEL_PAD_DP) + px(VIEWPORT_H)
+    return w - px(RIM_DP) - px(PANEL_CORNER_DP) - px(LIGHT_INSET_DP), pic_bottom + (px(PANEL_PAD_DP) + px(CHIN_DP)) / 2
 
 
 def make_glow(frame_size):
@@ -238,6 +266,8 @@ def main():
     print('specs for HomeScreenTrailerSectionCompose.kt:')
     print(f'  frameX = {fx:g}.dp, frameY = {fy:g}.dp, frameW = {fw / PX_PER_DP:g}.dp, frameH = {fh / PX_PER_DP:g}.dp')
     print(f'  focusedX = {fx - e:g}.dp, focusedY = {fy - e:g}.dp, focusedW = {gw / PX_PER_DP:g}.dp, focusedH = {gh / PX_PER_DP:g}.dp')
+    lx, ly = status_light_center(fw, fh)
+    print(f'  status light centre = {fx + lx / PX_PER_DP:g}.dp, {fy + ly / PX_PER_DP:g}.dp')
 
 
 if __name__ == '__main__':
