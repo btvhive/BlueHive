@@ -238,7 +238,7 @@ fun HomeScreenTrailerSectionCompose(
 
     // Back exits Selected -> Focused and returns focus to hitbox (only if video not visible)
     // Leaving Selected is a back-out: it undoes the press that entered, and the
-    // panel visibly changes state (the shadow clears). Without it the only exit
+    // panel visibly changes state (the frame's gold clears). Without it the only exit
     // from the carousel was silent while the way in spoke.
     //
     // NOT on the isVideoVisible handler above -- that one closes a PLAYING
@@ -259,11 +259,6 @@ fun HomeScreenTrailerSectionCompose(
     )
 
     // ===== specs =====
-    val shadowW = 387.dp
-    val shadowH = 247.dp
-    val shadowX = 47.dp
-    val shadowY = 28.dp
-
     val focusedW = 390.5.dp
     val focusedH = 255.7.dp
     val focusedX = 45.dp
@@ -301,25 +296,10 @@ fun HomeScreenTrailerSectionCompose(
             colorFilter = ColorFilter.tint(frameTint, BlendMode.Modulate)
         )
 
-        // Shadow — visible ONLY when Selected.
-        //
-        // INVERTED FROM ITS ORIGINAL SENSE, matching the Continue Watching
-        // panel. The focus overlay is drawn for BOTH Focused and Selected, so
-        // this shadow is the only thing separating "I am on this panel" from
-        // "I am inside it" -- and inside is the state worth marking, because it
-        // is where LEFT/RIGHT stop moving between sections and start turning
-        // the carousel. Spending the effect at rest and removing it on entry
-        // said the least at the moment something actually changed.
-        Image(
-            painter = painterResource(id = R.drawable.trailer_frame_shadow),
-            contentDescription = "Trailer frame shadow",
-            modifier = Modifier
-                .offset(x = shadowX, y = shadowY)
-                .width(shadowW)
-                .height(shadowH)
-                .graphicsLayer(alpha = if (trailerState is TrailerFrameState.Selected) 1f else 0f),
-            contentScale = ContentScale.FillBounds
-        )
+        // NO SHADOW LAYER. A dark shadow used to be drawn over the focus
+        // overlay while Selected, and it sat right on top of the gold
+        // underglow, muddying it (owner, 2026-10-31). The gold tint and the
+        // hint bar already mark "inside the panel", so it was removed.
 
         // Frame image BEHIND the carousel (so trailers remain visible)
         Image(

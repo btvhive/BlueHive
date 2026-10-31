@@ -569,7 +569,7 @@ fun HomeScreenTrendingCompose(
     }
 
     // Leaving Selected is a back-out, matching the trailer panel: it undoes the
-    // press that entered, and the shadow clears with it.
+    // press that entered, and the frame's gold clears with it.
     // The detail fetch a Click started, until it has opened the title. ONE at a
     // time: a second Click during the ~1 s fetch used to start a second one and
     // open the details screen twice. Back cancels it -- leaving the panel used to
@@ -598,9 +598,6 @@ fun HomeScreenTrendingCompose(
     // picture 16:9 (see TRENDING_VIEWPORT_W). The three frame images were cut
     // down by the same 70 px rather than squeezed, so these sizes still draw
     // them 1:1. Home moved the panel 35 dp right to keep its right edge.
-    val shadowW = 460.dp;  val shadowH = 295.dp
-    val shadowX = 0.dp;    val shadowY = 1.5.dp
-
     val focusedW = 453.dp; val focusedH = 285.75.dp
     val focusedX = 4.dp;   val focusedY = 6.5.dp
 
@@ -626,26 +623,10 @@ fun HomeScreenTrendingCompose(
             colorFilter = ColorFilter.tint(frameTint, BlendMode.Modulate)
         )
 
-        // Shadow — visible ONLY when Selected.
-        //
-        // INVERTED FROM ITS ORIGINAL SENSE, matching the Continue Watching
-        // panel. The focus overlay is drawn for BOTH Focused and Selected, so
-        // this shadow is the only thing separating "I am on this panel" from
-        // "I am inside it" -- and inside is the state worth marking, because it
-        // is where LEFT/RIGHT stop moving between sections and start turning
-        // the carousel. Spending the effect at rest and removing it on entry
-        // said the least at the moment something actually changed.
-        Image(
-            painter = painterResource(id = R.drawable.hrc_frame_shadow),
-            contentDescription = "Trending frame shadow",
-            modifier = Modifier
-                .offset(x = shadowX, y = shadowY)
-                .width(shadowW)
-                .height(shadowH)
-                .zIndex(1f)
-                .graphicsLayer(alpha = if (trendingState is TrendingFrameState.Selected) 1f else 0f),
-            contentScale = ContentScale.FillBounds
-        )
+        // NO SHADOW LAYER. A dark shadow used to be drawn over the focus
+        // overlay while Selected, and it sat right on top of the gold
+        // underglow, muddying it (owner, 2026-10-31). The gold tint and the
+        // hint bar already mark "inside the panel", so it was removed.
 
         // Frame PNG (front border)
         Image(
