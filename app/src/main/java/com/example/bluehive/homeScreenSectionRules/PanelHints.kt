@@ -85,11 +85,13 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -514,6 +516,11 @@ private fun DrawScope.chevron(cx: Float, cy: Float, half: Float, left: Boolean, 
  * @param reservedStart the width of the badge row at the top-left, which the
  *                      raised caption must stay clear of
  */
+/** The caption's shadow: near-black, a touch below the letters, softly blurred. */
+internal val CAPTION_SHADOW_COLOR = Color(0xE6000000)
+internal val CAPTION_SHADOW_DY = 1.dp
+internal val CAPTION_SHADOW_BLUR = 4.dp
+
 @Composable
 fun PanelCaption(
     title: String,
@@ -535,6 +542,14 @@ fun PanelCaption(
         label         = "captionV"
     )
 
+    // A SOFT DARK SHADOW under every letter (v570, the owner's pick from
+    // mock-ups), so the caption reads on bright backdrops too: in select mode
+    // it sits top-right, where the panel's bottom scrim gives it nothing.
+    val density = LocalDensity.current
+    val shadow = remember(density) {
+        with(density) { Shadow(CAPTION_SHADOW_COLOR, Offset(0f, CAPTION_SHADOW_DY.toPx()), CAPTION_SHADOW_BLUR.toPx()) }
+    }
+
     BoxWithConstraints(modifier.fillMaxSize().padding(8.dp)) {
         val room = (maxWidth - reservedStart - 10.dp).coerceAtLeast(80.dp)
         // Each line aligns by the SAME animated bias as the block, so the
@@ -546,7 +561,7 @@ fun PanelCaption(
             BasicText(
                 text     = title,
                 modifier = Modifier.align(lineAlign),
-                style    = TextStyle(color = Color.White, fontFamily = titleFont, fontSize = 13.sp, lineHeight = 1.05.em),
+                style    = TextStyle(color = Color.White, fontFamily = titleFont, fontSize = 13.sp, lineHeight = 1.05.em, shadow = shadow),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.75.sp, maxFontSize = 13.sp, stepSize = 0.25.sp)
@@ -555,7 +570,7 @@ fun PanelCaption(
                 BasicText(
                     text     = subtitle,
                     modifier = Modifier.align(lineAlign),
-                    style    = TextStyle(color = Color(0xFFD0D0D0), fontFamily = metaFont, fontSize = 8.sp, lineHeight = 1.15.em),
+                    style    = TextStyle(color = Color(0xFFD0D0D0), fontFamily = metaFont, fontSize = 8.sp, lineHeight = 1.15.em, shadow = shadow),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     autoSize = TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 8.sp, stepSize = 0.25.sp)
