@@ -44,7 +44,13 @@ import com.example.bluehive.homeScreenSectionRules.PanelCaption
 private val TRAILER_SCRIM = Brush.verticalGradient(
     colors = listOf(Color.Transparent, Color(0x99000000))
 )
-private val BADGE_SHAPE = RoundedCornerShape(3.dp)
+// The type and count badges are 20% smaller than the trending frame's (v567,
+// the owner's call): 8 sp text, 7.2 x 3.2 dp padding, 2.4 dp corners.
+private val BADGE_SHAPE = RoundedCornerShape(2.4.dp)
+private val BADGE_FONT_SIZE = 8.sp
+private val BADGE_PAD_H = 7.2.dp
+private val BADGE_PAD_V = 3.2.dp
+private val BADGE_GAP = 4.dp
 // A hairline near-black edge so each overlay reads as a distinct chip. It
 // defines the coloured badges cleanly against bright artwork; on the dark
 // chips it is deliberately almost invisible, which keeps them quiet.
@@ -137,7 +143,7 @@ fun HomeScreenTrailerAdapterCompose(
             TrailerPillBadge(
                 text = "${index + 1}/$total",
                 bg = BADGE_COUNT_BG,
-                modifier = Modifier.padding(start = if (trailer.mediaType == null) 0.dp else 5.dp)
+                modifier = Modifier.padding(start = if (trailer.mediaType == null) 0.dp else BADGE_GAP)
             )
         }
     }
@@ -157,15 +163,15 @@ private fun TrailerPillBadge(
                 .clip(BADGE_SHAPE)
                 .background(bg)
                 .border(1.dp, BADGE_BORDER, BADGE_SHAPE)
-                .padding(horizontal = 9.dp, vertical = 4.dp)
+                .padding(horizontal = BADGE_PAD_H, vertical = BADGE_PAD_V)
         ) {
             Text(
                 text = text,
                 color = Color.Black,
                 fontFamily = AppTypography.passionRegular,
-                fontSize = 10.sp,
+                fontSize = BADGE_FONT_SIZE,
                 style = TextStyle(
-                    drawStyle = Stroke(width = 1.5f, join = StrokeJoin.Round)
+                    drawStyle = Stroke(width = 1.2f, join = StrokeJoin.Round)
                 ),
                 maxLines = 1,
                 overflow = TextOverflow.Clip
@@ -174,7 +180,7 @@ private fun TrailerPillBadge(
                 text = text,
                 color = Color.White,
                 fontFamily = AppTypography.passionRegular,
-                fontSize = 10.sp,
+                fontSize = BADGE_FONT_SIZE,
                 maxLines = 1,
                 overflow = TextOverflow.Clip
             )
@@ -186,15 +192,14 @@ private fun TrailerPillBadge(
         text = text,
         color = Color.White,
         fontFamily = AppTypography.passionRegular,
-        // 10sp, matching the trending frame's pills. The two frames sit side
-        // by side on the home screen, so a size that differs between them reads
-        // as a mistake rather than a choice.
-        fontSize = 10.sp,
+        // 20% under the trending frame's 10 sp pills since v567, the owner's
+        // call: the trailer picture got shorter between the film strips.
+        fontSize = BADGE_FONT_SIZE,
         modifier = modifier
             .clip(BADGE_SHAPE)
             .background(bg)
             .border(1.dp, BADGE_BORDER, BADGE_SHAPE)
-            .padding(horizontal = 9.dp, vertical = 4.dp),
+            .padding(horizontal = BADGE_PAD_H, vertical = BADGE_PAD_V),
         maxLines = 1,
         overflow = TextOverflow.Clip
     )

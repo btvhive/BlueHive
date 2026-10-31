@@ -39,10 +39,10 @@ class TrailerFrameArtTest {
     }
 
     @Test
-    fun `the picture sits in the panel, the glow centred on the frame`() {
+    fun `the screen sits in the panel, the glow centred on the frame`() {
         // 11 dp of rim + 4 dp of panel above and left of the picture.
-        assertEquals(spec("viewportX") - 15, spec("frameX"), 0.01)
-        assertEquals(spec("viewportY") - 15, spec("frameY"), 0.01)
+        assertEquals(spec("screenX") - 15, spec("frameX"), 0.01)
+        assertEquals(spec("screenY") - 15, spec("frameY"), 0.01)
         val margin = spec("frameX") - spec("focusedX")
         assertEquals(margin, spec("frameY") - spec("focusedY"), 0.01)
         assertEquals(spec("focusedW"), spec("frameW") + 2 * margin, 0.01)

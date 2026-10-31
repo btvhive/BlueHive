@@ -281,10 +281,19 @@ fun HomeScreenTrailerSectionCompose(
     val statusLightX = 397.5.dp
     val statusLightY = 244.859.dp
 
-    val viewportW = 325.19415283203125.dp
-    val viewportH = 182.35919189453125.dp
-    val viewportX = 77.5.dp
-    val viewportY = 53.5.dp
+    // The TV's screen: the opening in the frame art (make_trailer_frame.py
+    // measures the frame from it). Film strips run along its top and bottom.
+    val screenW = 325.19415283203125.dp
+    val screenH = 182.35919189453125.dp
+    val screenX = 77.5.dp
+    val screenY = 53.5.dp
+
+    // The picture -- carousel, playing trailer and hints -- sits between the
+    // strips (v567): the screen's full width, a strip shorter top and bottom.
+    val viewportW = TRAILER_CARD_WIDTH
+    val viewportH = TRAILER_CARD_HEIGHT
+    val viewportX = screenX
+    val viewportY = screenY + FILM_STRIP_HEIGHT
 
     // trailerGlass specs
     val glassW = 328.dp
@@ -391,6 +400,9 @@ fun HomeScreenTrailerSectionCompose(
         )
 
 
+
+        // The film strips, top and bottom of the screen, running all the time.
+        TrailerFilmStrips(x = screenX, y = screenY, width = screenW, height = screenH)
 
         // ✅ Focus guard: prevents focus from jumping to search bar during close/open transitions
         if (isVideoVisible || pendingReturnToCarousel) {

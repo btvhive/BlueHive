@@ -35,7 +35,7 @@ class TrailerStatusLightTest {
         // In from the frame's right edge: 11 dp rim, 6 dp panel corner, 3 dp.
         assertEquals(spec("frameX") + spec("frameW") - 20, spec("statusLightX"), 0.01)
         // Halfway down the chin: 4 dp of panel + 14 dp under the picture.
-        assertEquals(spec("viewportY") + spec("viewportH") + 9, spec("statusLightY"), 0.01)
+        assertEquals(spec("screenY") + spec("screenH") + 9, spec("statusLightY"), 0.01)
         // Drawn after the frame, so it sits on it.
         assertTrue(section.indexOf("R.drawable.trailer_frame") < section.indexOf("TrailerStatusLight("))
     }
