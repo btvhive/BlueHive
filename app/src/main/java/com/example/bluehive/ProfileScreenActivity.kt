@@ -484,6 +484,20 @@ val SIGNED_IN_LABEL_FONT_SIZE = 7.sp
 val SIGNED_IN_LABEL_COLOR = Color(0xFF3D5CA8)
 
 
+// ── App version, bottom-left ─────────────────────────────────────────────────
+// "BlueHive" over "Version 556 · Oct 31, 2026", level with the Sign Out /
+// Manage strip on the far side (the owner's pick, design 10, 2026-10-31), so
+// anyone can read the build off the TV without opening Settings. Not focusable.
+val VERSION_LABEL_X: Dp = 58.dp
+val VERSION_LABEL_Y: Dp = BOTTOM_STRIP_Y
+val VERSION_LABEL_NAME_COLOR = Color(0xFFC9CDD8)
+val VERSION_LABEL_NAME_SIZE = 9.sp
+
+/** The second line: the version name and the day the APK was built. */
+internal fun versionLine(versionName: String, buildDate: String): String =
+    "Version $versionName  ·  $buildDate"
+
+
 // ── Profile card focus glow config ───────────────────────────────────────────
 val PROFILE_CARD_GLOW_WIDTH: Dp    = 152.5.dp
 val PROFILE_CARD_GLOW_HEIGHT: Dp   = 152.dp
@@ -1286,6 +1300,29 @@ fun ProfileScreen(
                 modifier   = Modifier
                     .align(Alignment.TopStart)
                     .offset(x = SIGNED_IN_LABEL_X, y = SIGNED_IN_LABEL_Y),
+            )
+        }
+
+        // ── App version ───────────────────────────────────────────────────────
+        // Bottom-left, two lines; see VERSION_LABEL_X. A label, not a control.
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .offset(x = VERSION_LABEL_X, y = VERSION_LABEL_Y),
+        ) {
+            Text(
+                text       = "BlueHive",
+                color      = VERSION_LABEL_NAME_COLOR,
+                fontFamily = AppTypography.interBold,
+                fontSize   = VERSION_LABEL_NAME_SIZE,
+                maxLines   = 1,
+            )
+            Text(
+                text       = versionLine(BuildConfig.VERSION_NAME, BuildConfig.BUILD_DATE),
+                color      = SIGNED_IN_LABEL_COLOR,
+                fontFamily = AppTypography.interBold,
+                fontSize   = SIGNED_IN_LABEL_FONT_SIZE,
+                maxLines   = 1,
             )
         }
 

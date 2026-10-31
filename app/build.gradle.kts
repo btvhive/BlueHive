@@ -1,6 +1,9 @@
 // build.gradle.kts
 
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 import java.util.Properties
 import java.util.zip.ZipFile
 
@@ -127,6 +130,12 @@ val appVersionCode = (versionProps.getProperty("versionCode")
 val appVersionName = (versionProps.getProperty("versionName")
     ?: error("versionName missing from version.properties")).trim()
 
+// The day this APK was built ("Oct 31, 2026"), shown with the version on the
+// profile picker so a viewer can read both off the TV. The build machine's
+// clock, read when the build is configured.
+val appBuildDate: String = LocalDate.now()
+    .format(DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US))
+
 // ── Release signing ──────────────────────────────────────────────────────
 // Credentials live in keystore.properties at the project root — GITIGNORED,
 // never committed. The keystore file itself lives OUTSIDE the repo entirely.
@@ -149,6 +158,7 @@ android {
         targetSdk = 35
         versionCode = appVersionCode
         versionName = appVersionName
+        buildConfigField("String", "BUILD_DATE", "\"$appBuildDate\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
