@@ -57,8 +57,10 @@ class LoadingWordsTest {
     fun `fixed slots keep the block one height, the title 18 px higher`() {
         assertEquals((-9).dp, TITLE_RAISE)
         assertEquals(28.dp, HEADLINE_SLOT)
-        assertEquals(44.dp, STATUS_SLOT)
+        assertEquals(24.dp, STATUS_SLOT)
         assertEquals(36.dp, NOTE_SLOT)
+        assertEquals(16.dp, BAR_GAP)
+        assertEquals(98.dp, TOP_SPACE)
         val overlay = MainSource.code("webview/ExtractionLoadingOverlay.kt")
         assertTrue(overlay.contains("Box(Modifier.height(HEADLINE_SLOT)"))
         assertTrue(overlay.contains("Box(Modifier.height(STATUS_SLOT)"))
@@ -72,5 +74,17 @@ class LoadingWordsTest {
         assertTrue(MainSource.code("api/ExtractAwait.kt").contains("poll.step?.let { onStep?.invoke(it) }"))
         assertTrue(MainSource.code("details/shared/playback/SourcePlaybackController.kt").contains("onStep  = { session.extractStep = it },"))
         assertTrue(MainSource.code("details/shared/playback/PlaybackOverlays.kt").contains("session.extractStep?.let(::stepWords) ?: stageWords(session.extractStage)"))
+    }
+
+    @Test
+    fun `the words sit just above the bar, the warning below the dots`() {
+        val overlay = MainSource.code("webview/ExtractionLoadingOverlay.kt")
+        val status = overlay.indexOf("Box(Modifier.height(STATUS_SLOT)")
+        val gap = overlay.indexOf("Spacer(Modifier.height(BAR_GAP))")
+        val bar = overlay.indexOf(".width(220.dp)")
+        val dots = overlay.indexOf("repeat(5) { i ->")
+        val note = overlay.indexOf("Box(Modifier.height(NOTE_SLOT)")
+        assertTrue(status < gap && gap < bar && bar < dots && dots < note)
+        assertTrue(overlay.indexOf("Spacer(Modifier.height(TOP_SPACE))") < overlay.indexOf("\"B L U E H I V E\""))
     }
 }

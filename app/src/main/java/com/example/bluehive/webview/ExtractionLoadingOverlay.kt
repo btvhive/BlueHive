@@ -27,6 +27,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.imageResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.R
@@ -129,10 +130,16 @@ fun ExtractionFocusTrap(content: @Composable () -> Unit) {
  * @param source the source being tried, by its button label, for the headline.
  *
  * THE SAME LAYOUT ON EVERY TV (v576). Every text line has a fixed slot -- the
- * headline, a two-line detail and a two-line warning -- whether or not it is
+ * headline, a one-line detail and a two-line warning -- whether or not it is
  * showing, so the block is always the same height and sits exactly centred:
- * nothing jumps when a warning appears or a line wraps. Sizes are in dp and
- * sp, which scale with the screen, so the proportions match on any set.
+ * nothing jumps when a warning appears. Sizes are in dp and sp, which scale
+ * with the screen, so the proportions match on any set.
+ *
+ * THE DETAIL SITS RIGHT ABOVE THE BAR, and the warning's slot BELOW the dots
+ * (v578): with the empty warning slot and a second detail line between them,
+ * the globe and the words floated ~70 dp above the bar, cut off from it.
+ * [TOP_SPACE] then holds the bar at its old height on screen, so it is the
+ * title, globe and words that came down -- 50 dp -- not the bar that went up.
  */
 @Composable
 fun ExtractionLoadingOverlay(
@@ -170,6 +177,10 @@ fun ExtractionLoadingOverlay(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            // Keeps the loading bar where it always was while the title, globe
+            // and words above it move down to meet it (v578; see the doc).
+            Spacer(Modifier.height(TOP_SPACE))
+
             Text(
                 "B L U E H I V E",
                 color = Color(0xFF4477FF).copy(alpha = 0.65f),
@@ -246,37 +257,14 @@ fun ExtractionLoadingOverlay(
                         fontWeight    = FontWeight.Light,
                         textAlign     = TextAlign.Center,
                         letterSpacing = 0.3.sp,
-                        maxLines      = 2,
-                        modifier      = Modifier.widthIn(max = 340.dp)
+                        maxLines      = 1,
+                        overflow      = TextOverflow.Ellipsis,
+                        modifier      = Modifier.widthIn(max = 480.dp)
                     )
                 }
             }
 
-            // Persistent warning line (a source failed). Fades in and then
-            // STAYS, independent of the status line churning above it; its
-            // slot is kept even when empty, so it never pushes anything.
-            Box(Modifier.height(NOTE_SLOT), contentAlignment = Alignment.TopCenter) {
-                if (note != null) {
-                    AnimatedContent(
-                        targetState = note,
-                        transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
-                        label = "note"
-                    ) { n ->
-                        Text(
-                            n,
-                            color         = Color(0xFFFFB74D).copy(0.95f),
-                            fontSize      = 13.sp,
-                            fontWeight    = FontWeight.Normal,
-                            textAlign     = TextAlign.Center,
-                            letterSpacing = 0.3.sp,
-                            maxLines      = 2,
-                            modifier      = Modifier.widthIn(max = 340.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(BAR_GAP))
 
             Box(
                 Modifier
@@ -318,6 +306,31 @@ fun ExtractionLoadingOverlay(
                     )
                 }
             }
+
+            // Persistent warning line (a source failed), under the dots. Fades
+            // in and then STAYS, independent of the status line above; its slot
+            // is kept even when empty, so it never pushes anything.
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.height(NOTE_SLOT), contentAlignment = Alignment.TopCenter) {
+                if (note != null) {
+                    AnimatedContent(
+                        targetState = note,
+                        transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
+                        label = "note"
+                    ) { n ->
+                        Text(
+                            n,
+                            color         = Color(0xFFFFB74D).copy(0.95f),
+                            fontSize      = 13.sp,
+                            fontWeight    = FontWeight.Normal,
+                            textAlign     = TextAlign.Center,
+                            letterSpacing = 0.3.sp,
+                            maxLines      = 2,
+                            modifier      = Modifier.widthIn(max = 340.dp)
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -339,7 +352,17 @@ internal val TITLE_RAISE = (-9).dp
 
 /** The fixed text slots that keep the block one height (see the overlay's doc). */
 internal val HEADLINE_SLOT = 28.dp
-internal val STATUS_SLOT = 44.dp
+internal val STATUS_SLOT = 24.dp
+
+/** From the detail line to the loading bar. */
+internal val BAR_GAP = 16.dp
+
+/**
+ * Empty space above the title. 98 dp keeps the bar where it was before v578:
+ * 50 dp came out above the bar and 48 went in below the dots (the warning's
+ * slot), and the block is centred, so the bar holds still with S / 2 = 49.
+ */
+internal val TOP_SPACE = 98.dp
 internal val NOTE_SLOT = 36.dp
 
 @Composable
