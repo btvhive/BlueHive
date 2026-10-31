@@ -38,4 +38,15 @@ class ContinueWatchingLookTest {
         assertTrue(code.contains("color      = CW_SUBTITLE_COLOR,"))
         for (gone in listOf("0xFFC9CACF", "0xFFD9D9DE", "0xFF2D58AA", "CW_SUBTITLE_FOCUSED")) assertFalse(gone, code.contains(gone))
     }
+
+    @Test
+    fun `the season and episode line is Inter Bold at 7sp under the Passion title`() {
+        // The owner's pick (no. 2), 2026-10-31.
+        assertTrue(code.contains("private val CW_SUBTITLE_SIZE    = 7.sp"))
+        val subtitle = code.substringAfter("text       = subtitle,").substringBefore(")")
+        assertTrue(subtitle.contains("fontSize   = CW_SUBTITLE_SIZE,"))
+        assertTrue(subtitle.contains("fontFamily = AppTypography.interBold,"))
+        val title = code.substringAfter("text       = item.media_title ?: \"\",").substringBefore("maxLines")
+        assertTrue(title.contains("fontFamily = AppTypography.passionRegular,"))
+    }
 }
