@@ -1,6 +1,6 @@
 """Makes the Latest Trailers panel's art, the metal TV the trailers play in
 (v557, option C from the owner's mock-ups, 2026-10-31; v558 lifted to the
-mock-ups' "level 2" tones, as C read too dark on the TV):
+mock-ups' "level 2" tones, as C read too dark on the TV; v559 to "level 1"):
 
   app/src/main/res/drawable-xhdpi/trailer_frame.webp
       the set: a dark metal rim (RIM_TOP -> RIM_BOTTOM) around a darker panel
@@ -39,9 +39,9 @@ CHIN_DP = 14.0               # extra panel under the picture, for the label
 RIM_DP = 11.0                # metal rim around the panel
 RIM_CORNER_DP = 10.0
 PANEL_CORNER_DP = 6.0
-RIM_TOP, RIM_BOTTOM = (0x27, 0x28, 0x2D), (0x16, 0x17, 0x1A)
+RIM_TOP, RIM_BOTTOM = (0x2C, 0x2D, 0x32), (0x1A, 0x1B, 0x1E)
 PANEL_TOP, PANEL_BOTTOM = (0x1A, 0x1A, 0x1E), (0x0B, 0x0B, 0x0D)
-RIM_HIGHLIGHT = 0.50         # the rim's top-edge highlight (a quarter of it runs all round)
+RIM_HIGHLIGHT = 0.55         # the rim's top-edge highlight (a quarter of it runs all round)
 LABEL = 'LATEST TRAILERS'
 LABEL_SP, LABEL_SPACING_DP, LABEL_RGB = 8.5, 3.0, (205, 210, 222)
 GLOW_PLATE_OUT_DP = 1.5      # how far the glow's solid plate shows beyond the rim
