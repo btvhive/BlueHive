@@ -120,8 +120,10 @@ private val TRENDING_VIEWPORT_H = 218.7.dp
 
 // Hoisted gradient — single allocation for the lifetime of the process.
 // Brush.verticalGradient inside a composable allocates on every recompose.
+// Clear at the top to 40% black at the bottom (v573; 80% before, which the
+// owner found far too dark).
 private val BACKDROP_SCRIM = Brush.verticalGradient(
-    colors = listOf(Color.Transparent, Color(0xCC000000))
+    colors = listOf(Color.Transparent, Color(0x66000000))
 )
 
 
