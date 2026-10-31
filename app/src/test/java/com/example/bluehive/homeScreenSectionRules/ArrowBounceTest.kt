@@ -24,7 +24,7 @@ class ArrowBounceTest {
 
     @Test
     fun `the bounce dips, overshoots very slightly, and ends at exactly its size`() {
-        assertTrue(ARROW_BOUNCE_DOWN in 0.8f..0.92f)
+        assertTrue(ARROW_BOUNCE_DOWN in 0.75f..0.84f)
         assertTrue(ARROW_BOUNCE_OVER in 1.02f..1.08f)
         val disc = hints.substringAfter("private fun BrowseDisc(").substringBefore("private fun DrawScope.chevron(")
         val down = disc.indexOf("animateTo(ARROW_BOUNCE_DOWN")

@@ -427,7 +427,7 @@ class ArrowPresses {
 }
 
 /** How far an arrow dips at the start of its bounce, and how far it overshoots. */
-internal const val ARROW_BOUNCE_DOWN = 0.86f
+internal const val ARROW_BOUNCE_DOWN = 0.80f   // 0.86 in v542; a deeper dip, the user's call
 internal const val ARROW_BOUNCE_OVER = 1.06f
 
 /** Room around a disc for its overshoot, so a fade never clips it (see PulsingBrowseChip). */
