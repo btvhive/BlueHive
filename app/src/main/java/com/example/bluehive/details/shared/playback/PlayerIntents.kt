@@ -73,6 +73,10 @@ object PlayerIntents {
         mediaTitle: String,
         /** Where to start, in ms: 0 for a press, the dead source's spot for a failover. */
         startAtMs: Long,
+        /** The episode after this one, for the Up Next card; none at a season's end or for a film. */
+        next: UpNextEpisode? = null,
+        /** Episodes in a row before this one played with no remote press -- see HlsPlayerActivity.EXTRA_UNATTENDED. */
+        unattended: Int = 0,
     ): List<PlayerExtra> = listOf(
         PlayerExtra.Text("M3U8_URL", body.m3u8),
         // DIRECT FIRST, relay only after a confirmed failure. Re-extracting
@@ -115,7 +119,16 @@ object PlayerIntents {
             body.servers?.firstOrNull { it.is_default }?.name),
         PlayerExtra.Text("SUBTITLE_URL", body.subtitle_url),
         PlayerExtra.Millis(HlsPlayerActivity.EXTRA_START_AT_MS, startAtMs),
-    )
+    ) + upNextExtras(next, unattended)
+
+    /** Up Next's extras, only when there is a next episode: a launch without one is unchanged. */
+    private fun upNextExtras(next: UpNextEpisode?, unattended: Int): List<PlayerExtra> =
+        if (next == null) emptyList() else listOf(
+            PlayerExtra.Whole(HlsPlayerActivity.EXTRA_NEXT_EPISODE, next.episode),
+            PlayerExtra.Text(HlsPlayerActivity.EXTRA_NEXT_TITLE, next.title),
+            PlayerExtra.Text(HlsPlayerActivity.EXTRA_NEXT_STILL, next.stillUrl),
+            PlayerExtra.Whole(HlsPlayerActivity.EXTRA_UNATTENDED, unattended),
+        )
 
     fun hlsPlayer(
         context: Context,
@@ -127,8 +140,10 @@ object PlayerIntents {
         mediaType: String,
         mediaTitle: String,
         startAtMs: Long,
+        next: UpNextEpisode? = null,
+        unattended: Int = 0,
     ): Intent = Intent(context, HlsPlayerActivity::class.java).putPlayerExtras(
-        hlsPlayerExtras(request, body, embedUrl, sourceName, profileId, mediaType, mediaTitle, startAtMs)
+        hlsPlayerExtras(request, body, embedUrl, sourceName, profileId, mediaType, mediaTitle, startAtMs, next, unattended)
     )
 
     // ── MiruroPlayerActivity after an ON-DEVICE extract (MiruroExtractorActivity's result) ──

@@ -51,3 +51,14 @@ val PlaybackRequest.animeType: String
  * screen, "extraction failed" on the TV screen, and so on. Logs only.
  */
 internal val PlaybackRequest.logPrefix: String get() = if (this is PlaybackRequest.Movie) "movie " else ""
+
+/**
+ * The episode after the one played, for the player's Up Next card (v580): its
+ * number in the same season, its title and TMDB's small w300 still. None at a
+ * season's end, so the card never shows there.
+ */
+data class UpNextEpisode(
+    val episode: Int,
+    val title: String?,
+    val stillUrl: String?,
+)

@@ -56,6 +56,10 @@ class SourcePlaybackController internal constructor(
     private val request: () -> PlaybackRequest,
     /** Before a press starts: the movie screen stops the trailer; the TV screen also records the episode. */
     private val onStart: () -> Unit,
+    /** The episode after the requested one, for the player's Up Next card; none on the movie screen. */
+    private val nextEpisode: () -> UpNextEpisode? = { null },
+    /** Up Next: make (season, episode, title) the requested episode, as a press on it would. */
+    private val onNextEpisode: (Int, Int, String?) -> Unit = { _, _, _ -> },
 ) {
     internal lateinit var playerLauncher: ActivityResultLauncher<Intent>
 
@@ -70,11 +74,20 @@ class SourcePlaybackController internal constructor(
     // (dead source, where it died in ms) -- the next source starts there.
     internal var playbackFailedSource by mutableStateOf<Pair<String, Long>?>(null)
 
+    // Up Next's hop, the same way: set by the player launcher when the player
+    // ended on its Up Next card, consumed by the effect in rememberSourcePlayback.
+    internal var playNextHop by mutableStateOf<PlayNextHop?>(null)
+
+    // Episodes in a row played with no remote press, as the last player
+    // counted them. A press on a source button starts the count again.
+    private var unattended = 0
+
     /**
      * A source button. One body shared by every way a press starts the
      * built-in player, so they cannot drift apart.
      */
     fun start(src: StreamSource) {
+        unattended = 0
         onStart()
         try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
         session.extractJob = scope.launch { extractAndPlay(src) }
@@ -243,18 +256,60 @@ class SourcePlaybackController internal constructor(
                 mediaType  = mediaType,
                 mediaTitle = mediaTitle,
                 startAtMs  = startAtMs,
+                next       = if (req is PlaybackRequest.Episode) nextEpisode() else null,
+                unattended = unattended,
             )
         )
     }
 
     /** The player's result: a source that died in playback is handed to the hop. */
     internal fun onPlayerResult(result: ActivityResult) {
+        if (result.resultCode == HlsPlayerActivity.RESULT_PLAY_NEXT) {
+            val data = result.data ?: return
+            val episode = data.getIntExtra(HlsPlayerActivity.EXTRA_PLAY_EPISODE, 0)
+            if (episode <= 0) return
+            playNextHop = PlayNextHop(
+                season     = data.getIntExtra(HlsPlayerActivity.EXTRA_PLAY_SEASON, 0),
+                episode    = episode,
+                title      = data.getStringExtra(HlsPlayerActivity.EXTRA_PLAY_TITLE),
+                source     = data.getStringExtra(HlsPlayerActivity.EXTRA_PLAY_SOURCE).orEmpty(),
+                unattended = data.getIntExtra(HlsPlayerActivity.EXTRA_UNATTENDED, 0),
+            )
+            return
+        }
         if (result.resultCode == HlsPlayerActivity.RESULT_SOURCE_FAILED) {
             val atMs = result.data?.getLongExtra(HlsPlayerActivity.EXTRA_FAILED_AT_MS, 0L) ?: 0L
             result.data?.getStringExtra(HlsPlayerActivity.EXTRA_FAILED_SOURCE)
                 ?.takeIf { it.isNotBlank() }
                 ?.let { playbackFailedSource = it to atMs }
         }
+    }
+
+    /**
+     * Up Next: the player's episode ended on its card, so open the next one --
+     * the same source first, then the chain, with the loading screen, exactly
+     * as a press on that episode's source button would. Run by the effect
+     * keyed on the hop -- see there.
+     */
+    internal fun continueToNextEpisode() {
+        val hop = playNextHop ?: return
+        playNextHop = null
+        unattended = hop.unattended
+        onNextEpisode(hop.season, hop.episode, hop.title)
+        val req = request()
+        val sources = SourceCatalog.sources(
+            BlueHiveApplication.appContext, req.apiType, req.tmdbId, req.catalogSeason, req.catalogEpisode,
+        ).filter { usesBackendExtraction(it.name) }
+        val src = sources.firstOrNull { it.name.equals(hop.source, ignoreCase = true) }
+            ?: sources.firstOrNull()
+        if (src == null) {
+            Log.e("scraper-vidfast", "up next: no source for s${hop.season}e${hop.episode}")
+            return
+        }
+        Log.i("scraper-vidfast", "\u23ED up next: s${hop.season}e${hop.episode} on ${src.name} " +
+                "(unattended ${hop.unattended})")
+        try { BlueHiveApplication.coilImageLoader.memoryCache?.clear() } catch (_: Exception) {}
+        session.extractJob = scope.launch { extractAndPlay(StreamSource(src.label, src.name, src.url)) }
     }
 
     /** The playback half of the failover; run by the effect keyed on the hop -- see there. */
@@ -295,6 +350,16 @@ class SourcePlaybackController internal constructor(
     }
 }
 
+/** The player's hand-over for Up Next. */
+internal data class PlayNextHop(
+    val season: Int,
+    val episode: Int,
+    val title: String?,
+    /** The routing name the last episode played from, tried first. */
+    val source: String,
+    val unattended: Int,
+)
+
 // Each screen's own log wording, kept (see logPrefix). Logs only -- nothing reads them.
 private val PlaybackRequest.cancelLogTag: String get() = if (this is PlaybackRequest.Movie) "scraper-vidapi" else "scraper-vidfast"
 private fun PlaybackRequest.playingLabel(src: StreamSource): String = when (this) {
@@ -320,15 +385,21 @@ fun rememberSourcePlayback(
     mediaTitle: String,
     request: () -> PlaybackRequest,
     onStart: () -> Unit,
+    nextEpisode: () -> UpNextEpisode? = { null },
+    onNextEpisode: (Int, Int, String?) -> Unit = { _, _, _ -> },
 ): SourcePlaybackController {
     val context = LocalContext.current
     val currentRequest by rememberUpdatedState(request)
     val currentOnStart by rememberUpdatedState(onStart)
+    val currentNext by rememberUpdatedState(nextEpisode)
+    val currentOnNext by rememberUpdatedState(onNextEpisode)
     val controller = remember(session, scope, context, profileId, mediaType, mediaTitle) {
         SourcePlaybackController(
             session = session, scope = scope, context = context,
             profileId = profileId, mediaType = mediaType, mediaTitle = mediaTitle,
             request = { currentRequest() }, onStart = { currentOnStart() },
+            nextEpisode = { currentNext() },
+            onNextEpisode = { season, episode, title -> currentOnNext(season, episode, title) },
         )
     }
     controller.playerLauncher = rememberLauncherForActivityResult(
@@ -365,5 +436,11 @@ private fun SourcePlaybackEffects(controller: SourcePlaybackController) {
     // Holding it in extractJob also lets BACK cancel it like any other attempt.
     LaunchedEffect(controller.playbackFailedSource) {
         controller.continueAfterPlaybackFailure()
+    }
+    // ── UP NEXT ─────────────────────────────────────────────────────────────
+    // The player ended on its Up Next card: the next episode starts here, in the
+    // screen's scope, for the same reason as the failover above.
+    LaunchedEffect(controller.playNextHop) {
+        controller.continueToNextEpisode()
     }
 }

@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,6 +40,7 @@ import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.RelayGrantRequest
 import com.example.bluehive.api.SubtitleSyncRequest
 import com.example.bluehive.auth.SessionManager
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.datasource.DataSpec
@@ -201,6 +204,28 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
      * URL is still worth a try, a repeat never is.
      */
     private val failedStreamUrls = mutableSetOf<String>()
+
+    // ── Up Next (v580) -- see UpNext.kt ─────────────────────────────────────
+    /** The episode after this one, from the intent; null at a season's end or for a film. */
+    private var nextEpisode: NextEpisode? = null
+    /** Episodes in a row before this one that played with no remote press. */
+    private var unattendedBefore = 0
+    /** Any remote press during this episode. */
+    private var touchedThisEpisode = false
+    /** Cancel on the card: this episode ends the old way. */
+    private var upNextCancelled = false
+    /** Whether this episode asks "Still watching?" -- decided once, 30 s from the end. */
+    private var askThisEpisode = false
+    private var askDecided = false
+    /** Keep watching (or any button) answered the prompt. */
+    private var promptDismissed = false
+    private var upNextJob: Job? = null
+    private var upNextPhase by mutableStateOf(UpNextPhase.Hidden)
+    private var upNextRemainingMs by mutableLongStateOf(0L)
+    /** 0 = Watch next episode / Keep watching, 1 = Cancel / I'm done. */
+    private var upNextFocus by mutableIntStateOf(0)
+    /** False after an unanswered prompt: the card counts nothing and nothing plays by itself. */
+    private var upNextAutoplay by mutableStateOf(true)
 
     /**
      * Give up on this source and say so, rather than closing silently.
@@ -717,7 +742,144 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         if (resumePositionMs > 0)
             Log.e(TAG, "▶ failover hand-off — starting at ${resumePositionMs}ms")
 
+        nextEpisode = intent.getIntExtra(EXTRA_NEXT_EPISODE, 0).takeIf { it > 0 }?.let {
+            NextEpisode(
+                season   = intent.getIntExtra("SEASON_NUMBER", 0),
+                episode  = it,
+                title    = intent.getStringExtra(EXTRA_NEXT_TITLE),
+                stillUrl = intent.getStringExtra(EXTRA_NEXT_STILL),
+            )
+        }
+        unattendedBefore = intent.getIntExtra(EXTRA_UNATTENDED, 0).coerceAtLeast(0)
+        if (nextEpisode != null) {
+            Log.d(TAG, "⏭ up next armed: s${nextEpisode?.season}e${nextEpisode?.episode} " +
+                    "(unattended before: $unattendedBefore)")
+            upNextJob = lifecycleScope.launch {
+                while (isActive) {
+                    tickUpNext()
+                    delay(UP_NEXT_TICK_MS)
+                }
+            }
+        }
+
         startPlayback(url)
+    }
+
+    /**
+     * Up Next's clock: the stream's position against its duration, read every
+     * [UP_NEXT_TICK_MS]. Paused or stalled, it holds; seeked back, it re-arms.
+     */
+    private fun tickUpNext() {
+        val p = player ?: return
+        val dur = p.duration
+        if (dur == C.TIME_UNSET || dur <= 0 || p.isCurrentMediaItemLive) {
+            upNextPhase = UpNextPhase.Hidden
+            return
+        }
+        val remaining = (dur - p.currentPosition).coerceAtLeast(0L)
+        if (remaining > STILL_WATCHING_LEAD_MS) {
+            // Back before the window (a seek): everything re-arms.
+            upNextCancelled = false
+            askDecided = false
+            promptDismissed = false
+        } else if (!askDecided) {
+            askThisEpisode = shouldAskStillWatching(unattendedBefore, touchedThisEpisode)
+            askDecided = true
+            if (askThisEpisode) Log.i(TAG, "⏭ ${unattendedBefore + 1} episodes without a press — asking Still watching")
+        }
+        upNextAutoplay = !askThisEpisode || touchedThisEpisode
+        val phase = upNextPhaseFor(remaining, dur, nextEpisode != null, upNextCancelled, askThisEpisode, promptDismissed)
+        if (phase != upNextPhase) {
+            Log.d(TAG, "⏭ up next: $phase at ${remaining}ms left (autoplay=$upNextAutoplay)")
+            upNextPhase = phase
+            upNextFocus = 0
+        }
+        if (phase != UpNextPhase.Hidden) upNextRemainingMs = remaining
+    }
+
+    /** At the end of the stream: does the next episode start by itself? */
+    private fun autoplayAtEnd(): Boolean {
+        if (nextEpisode == null || upNextCancelled) return false
+        val dur = player?.duration ?: return false
+        if (dur == C.TIME_UNSET || dur < UP_NEXT_MIN_DURATION_MS) return false
+        val ask = if (askDecided) askThisEpisode else shouldAskStillWatching(unattendedBefore, touchedThisEpisode)
+        return !ask || touchedThisEpisode
+    }
+
+    /**
+     * Close this player and have the details screen open the next episode --
+     * the same source first, through the usual backend extraction.
+     */
+    private fun playNextEpisode(why: String) {
+        val next = nextEpisode ?: return
+        upNextJob?.cancel()
+        upNextPhase = UpNextPhase.Hidden
+        Log.i(TAG, "⏭ up next: opening s${next.season}e${next.episode} ($why)")
+        setResult(
+            RESULT_PLAY_NEXT,
+            Intent()
+                .putExtra(EXTRA_PLAY_SEASON, next.season)
+                .putExtra(EXTRA_PLAY_EPISODE, next.episode)
+                .putExtra(EXTRA_PLAY_TITLE, next.title)
+                .putExtra(EXTRA_PLAY_SOURCE, intent.getStringExtra("SOURCE_NAME").orEmpty())
+                .putExtra(EXTRA_UNATTENDED, unattendedAfter(unattendedBefore, touchedThisEpisode)),
+        )
+        IdleWatcher.setPlaying(IdleWatcher.SOURCE_HLS, false)
+        player?.pause()
+        finish()  // EXIT: dismissed -- the episode ended on its Up Next card; nothing failed
+    }
+
+    /**
+     * The remote while the card or the prompt is up: left and right pick a
+     * button, OK presses it, BACK closes the card (or answers the prompt).
+     * Anything else on the prompt also answers it -- "press any button".
+     */
+    private fun handleUpNextKey(event: KeyEvent): Boolean {
+        val phase = upNextPhase
+        if (phase == UpNextPhase.Hidden) return false
+        val down = event.action == KeyEvent.ACTION_DOWN
+        when {
+            event.keyCode == KeyEvent.KEYCODE_DPAD_LEFT -> { if (down) upNextFocus = 0; return true }
+            event.keyCode == KeyEvent.KEYCODE_DPAD_RIGHT -> { if (down) upNextFocus = 1; return true }
+            event.keyCode == KeyEvent.KEYCODE_DPAD_UP || event.keyCode == KeyEvent.KEYCODE_DPAD_DOWN -> return true
+            ExoPlayerConfig.isCenterKey(event.keyCode) -> {
+                if (down && event.repeatCount == 0) {
+                    when {
+                        phase == UpNextPhase.Card && upNextFocus == 0 -> playNextEpisode("watch next pressed")
+                        phase == UpNextPhase.Card -> cancelUpNext()
+                        upNextFocus == 0 -> dismissStillWatching()
+                        else -> {
+                            Log.i(TAG, "⏭ still watching: I'm done — closing")
+                            upNextJob?.cancel()
+                            finish()  // EXIT: dismissed
+                        }
+                    }
+                }
+                return true
+            }
+            event.keyCode == KeyEvent.KEYCODE_BACK -> {
+                if (down) { if (phase == UpNextPhase.Card) cancelUpNext() else dismissStillWatching() }
+                return true
+            }
+            phase == UpNextPhase.StillWatching -> {
+                if (down) dismissStillWatching()
+                return true
+            }
+            else -> return false   // play/pause, seeks: the player's as ever
+        }
+    }
+
+    private fun cancelUpNext() {
+        Log.d(TAG, "⏭ up next cancelled")
+        upNextCancelled = true
+        upNextPhase = UpNextPhase.Hidden
+    }
+
+    private fun dismissStillWatching() {
+        Log.d(TAG, "⏭ still watching: keep watching")
+        promptDismissed = true
+        upNextAutoplay = true
+        upNextPhase = UpNextPhase.Hidden
     }
 
     /** Builds (or rebuilds) the ExoPlayer for a given m3u8. Safe to call on retry. */
@@ -892,7 +1054,9 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
                         // report ENDED on a transient upstream gap, and closing the
                         // player under someone watching live would be a far worse
                         // bug than the one this fixes.
-                        if (state == Player.STATE_ENDED && player?.isCurrentMediaItemLive != true) {
+                        if (state == Player.STATE_ENDED && player?.isCurrentMediaItemLive != true && autoplayAtEnd()) {
+                            playNextEpisode("episode ended")
+                        } else if (state == Player.STATE_ENDED && player?.isCurrentMediaItemLive != true) {
                             Log.i(TAG, "🏁 playback ended — closing player")
                             IdleWatcher.setPlaying(IdleWatcher.SOURCE_HLS, false)
                             finish()  // EXIT: dismissed
@@ -1242,6 +1406,21 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
                     )
 
                     SubtitleLayer()
+
+                    // UP NEXT, LAST: over the player, its control bar and the
+                    // captions alike.
+                    val next = nextEpisode
+                    when (upNextPhase) {
+                        UpNextPhase.Card -> if (next != null)
+                            UpNextCard(next, upNextRemainingMs, upNextFocus, counting = upNextAutoplay)
+                        UpNextPhase.StillWatching -> StillWatchingPrompt(
+                            showTitle = intent.getStringExtra("MEDIA_TITLE"),
+                            focus     = upNextFocus,
+                            progress  = (STILL_WATCHING_LEAD_MS - upNextRemainingMs).toFloat() /
+                                        (STILL_WATCHING_LEAD_MS - UP_NEXT_WINDOW_MS),
+                        )
+                        UpNextPhase.Hidden -> Unit
+                    }
                 }
             }
         }
@@ -1652,6 +1831,8 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
     // on every site's player.
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Somebody is there: any press resets Up Next's unattended count.
+        if (event.action == KeyEvent.ACTION_DOWN) touchedThisEpisode = true
         // THE SUBTITLE UI IS MODAL: while any of it is up, every key belongs to
         // it. Without this the activity keeps stealing centre (play/pause) and
         // the channel keys (seek) before Compose ever sees them, so rows could be
@@ -1664,6 +1845,8 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         if (pickerOpen || subMenuOpen || fixSeqOpen || styleOpen) {
             return super.dispatchKeyEvent(event)
         }
+        // Up Next's card and prompt take the remote while they are up.
+        if (handleUpNextKey(event)) return true
         // BEFORE the centre handling below, which toggles play/pause and never
         // lets the key reach Compose -- so the hint has to be answered here or
         // it could not be pressed at all.
@@ -1764,6 +1947,7 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         // at position 0 and undo the whole point of tracking it.
         stopWatchSession()
         progressJob?.cancel()
+        upNextJob?.cancel()
         recoveryWatchdogJob?.cancel()
         progressiveRefreshJob?.cancel()
         stallWatchdogJob?.cancel()
@@ -1797,6 +1981,21 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
 
         /** The server that served the stream ("Beta", "vidapi", "finalsignal"); see fillPlayerTitle. */
         const val EXTRA_SERVER_NAME = "SERVER_NAME"
+
+        // ── Up Next (v580) ──
+        /** "Open the next episode": the episode ended on its card, or Watch next episode was pressed. */
+        const val RESULT_PLAY_NEXT = android.app.Activity.RESULT_FIRST_USER + 1
+        /** In: the next episode's number in this season, its title and its small still. */
+        const val EXTRA_NEXT_EPISODE = "NEXT_EPISODE_NUMBER"
+        const val EXTRA_NEXT_TITLE = "NEXT_EPISODE_TITLE"
+        const val EXTRA_NEXT_STILL = "NEXT_EPISODE_STILL"
+        /** In: episodes in a row before this one with no remote press. Out: the count for the next one. */
+        const val EXTRA_UNATTENDED = "UNATTENDED_EPISODES"
+        /** Out, with RESULT_PLAY_NEXT: what to open, and the source to try first. */
+        const val EXTRA_PLAY_SEASON = "PLAY_SEASON"
+        const val EXTRA_PLAY_EPISODE = "PLAY_EPISODE"
+        const val EXTRA_PLAY_TITLE = "PLAY_TITLE"
+        const val EXTRA_PLAY_SOURCE = "PLAY_SOURCE"
 
         /**
          * How many times to re-draw a segment CDN before giving up.

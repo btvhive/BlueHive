@@ -288,6 +288,9 @@ fun TvShowDetailsScreen(
         mediaTitle = args.mediaTitle,
         request    = { PlaybackRequest.Episode(args.mediaId, episodesState.pendingSeason, episodesState.pendingEpisode, episodesState.pendingEpisodeName) },
         onStart    = { stopTrailerForLaunch() },
+        // Up Next: the player is told the episode after, and opens it through here.
+        nextEpisode   = { episodesState.nextAfterPending(todayYmd) },
+        onNextEpisode = { season, episode, title -> episodesState.recordUpNext(season, episode, title) },
     )
 
 
