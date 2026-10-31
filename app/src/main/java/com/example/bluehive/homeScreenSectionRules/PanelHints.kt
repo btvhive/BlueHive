@@ -90,8 +90,17 @@ import androidx.compose.ui.unit.sp
 import com.example.bluehive.utilities.AppTypography
 import kotlin.math.ceil
 
-/** The gold that marks "the button to press" and "you are inside the panel". */
+/** The gold that marks "the button to press" in the hints. */
 val PANEL_HINT_GOLD = Color(0xFFD19814)
+
+/**
+ * The tint a home panel's focus frame takes while it is entered (Selected):
+ * the bright end of the side bar's selected-row gradient (2563EB), so "you
+ * are inside this" reads the same in the menu and the panels. Gold until
+ * v541 (owner, 2026-10-31). The frame art is near-white, so a Modulate tint
+ * IS this colour.
+ */
+val PANEL_SELECTED_TINT = Color(0xFF2563EB)
 
 /** The bar's edge while its countdown runs, so the bright line reads against it. */
 private val PANEL_HINT_GOLD_DIM = Color(0xFF5E4510)

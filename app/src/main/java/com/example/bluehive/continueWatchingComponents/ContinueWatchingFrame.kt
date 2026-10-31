@@ -52,7 +52,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.ColorFilter
-import com.example.bluehive.homeScreenSectionRules.PANEL_HINT_GOLD
+import com.example.bluehive.homeScreenSectionRules.PANEL_SELECTED_TINT
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -503,7 +503,7 @@ fun HomeScreenContinueWatchingCompose(
         }
     }
 
-    // Back exits Selected -> Focused (gold clears, focus back to frame)
+    // Back exits Selected -> Focused (blue clears, focus back to frame)
     BackHandler(enabled = frameState is ContinueWatchingFrameState.Selected) {
         Log.d("CONTINUE_WATCHING", "⬅️ Back pressed - exiting Selected")
         frameState = ContinueWatchingFrameState.Focused
@@ -530,14 +530,14 @@ fun HomeScreenContinueWatchingCompose(
     val listWidth   = 183.75.dp
     val listHeight  = 169.dp
 
-    // Gold while inside the list, matching the Latest Trailers and Highest
+    // Blue (PANEL_SELECTED_TINT) while inside the list, matching the Latest Trailers and Highest
     // Trending panels (PanelHints.kt), so all three home panels say "you are
     // inside me" the same way. The frame art is near-white, so a Modulate tint
     // IS the colour, and white leaves it untouched. Follows frameState through
     // the pause/resume demote-and-restore below, so a viewer back from a show
-    // lands in the list with the frame already gold.
+    // lands in the list with the frame already blue.
     val frameTint by animateColorAsState(
-        targetValue   = if (frameState is ContinueWatchingFrameState.Selected) PANEL_HINT_GOLD else Color.White,
+        targetValue   = if (frameState is ContinueWatchingFrameState.Selected) PANEL_SELECTED_TINT else Color.White,
         animationSpec = tween(250),
         label         = "continueWatchingFrameTint"
     )
@@ -575,8 +575,8 @@ fun HomeScreenContinueWatchingCompose(
         )
 
         // NO SHADOW LAYER. A dark shadow used to be drawn over the focus
-        // overlay while Selected, right on top of the gold underglow (owner,
-        // 2026-10-31), as on the trailer and trending panels. The gold tint
+        // overlay while Selected, right on top of the coloured underglow (owner,
+        // 2026-10-31), as on the trailer and trending panels. The blue tint
         // already marks "inside the list", so it was removed.
 
         // ✅ BASE FRAME: always visible (front layer, focusable + clickable target)
@@ -656,7 +656,7 @@ fun HomeScreenContinueWatchingCompose(
                     }
                 }
 
-                // Click selects it (frame turns gold + nav locks)
+                // Click selects it (frame turns blue + nav locks)
                 .clickable(
                     interactionSource = frameInteraction,
                     indication = null

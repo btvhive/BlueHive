@@ -84,7 +84,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.onSizeChanged
-import com.example.bluehive.homeScreenSectionRules.PANEL_HINT_GOLD
+import com.example.bluehive.homeScreenSectionRules.PANEL_SELECTED_TINT
 import com.example.bluehive.homeScreenSectionRules.PanelCaption
 import com.example.bluehive.homeScreenSectionRules.PanelHintLayer
 
@@ -569,7 +569,7 @@ fun HomeScreenTrendingCompose(
     }
 
     // Leaving Selected is a back-out, matching the trailer panel: it undoes the
-    // press that entered, and the frame's gold clears with it.
+    // press that entered, and the frame's blue clears with it.
     // The detail fetch a Click started, until it has opened the title. ONE at a
     // time: a second Click during the ~1 s fetch used to start a second one and
     // open the details screen twice. Back cancels it -- leaving the panel used to
@@ -584,10 +584,10 @@ fun HomeScreenTrendingCompose(
     }
 
     // ── Remote hints (PanelHints.kt) ─────────────────────────────────────────
-    // Gold while entered, exactly as the trailer panel: near-white frame art,
+    // Blue (PANEL_SELECTED_TINT) while entered, exactly as the trailer panel: near-white frame art,
     // so a Modulate tint IS the colour and white leaves it untouched.
     val frameTint by animateColorAsState(
-        targetValue   = if (trendingState is TrendingFrameState.Selected) PANEL_HINT_GOLD else Color.White,
+        targetValue   = if (trendingState is TrendingFrameState.Selected) PANEL_SELECTED_TINT else Color.White,
         animationSpec = tween(250),
         label         = "trendingFrameTint"
     )
@@ -624,8 +624,8 @@ fun HomeScreenTrendingCompose(
         )
 
         // NO SHADOW LAYER. A dark shadow used to be drawn over the focus
-        // overlay while Selected, and it sat right on top of the gold
-        // underglow, muddying it (owner, 2026-10-31). The gold tint and the
+        // overlay while Selected, and it sat right on top of the coloured
+        // underglow, muddying it (owner, 2026-10-31). The blue tint and the
         // hint bar already mark "inside the panel", so it was removed.
 
         // Frame PNG (front border)

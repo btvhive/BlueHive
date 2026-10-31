@@ -19,7 +19,7 @@ class ContinueWatchingLookTest {
     fun `no shadow is drawn over the frame, and its art is gone`() {
         assertFalse(code.contains("_frame_shadow"))
         assertFalse(Regex("""\bshadow[WHXYZ]\b""").containsMatchIn(code))
-        assertTrue(code.contains("PANEL_HINT_GOLD"))
+        assertTrue(code.contains("PANEL_SELECTED_TINT"))
         val res = listOf(File("src/main/res"), File("app/src/main/res")).first { it.isDirectory }
         val left = res.walkTopDown().filter { it.name.startsWith("continue_watching_frame_shadow.") }.toList()
         assertTrue(left.toString(), left.isEmpty())

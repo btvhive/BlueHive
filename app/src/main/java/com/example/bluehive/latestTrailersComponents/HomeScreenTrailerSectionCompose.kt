@@ -44,7 +44,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import com.example.bluehive.homeScreenSectionRules.PANEL_HINT_GOLD
+import com.example.bluehive.homeScreenSectionRules.PANEL_SELECTED_TINT
 import com.example.bluehive.homeScreenSectionRules.PANEL_PLAY_HINT_MS
 import com.example.bluehive.homeScreenSectionRules.PanelHintLayer
 
@@ -238,7 +238,7 @@ fun HomeScreenTrailerSectionCompose(
 
     // Back exits Selected -> Focused and returns focus to hitbox (only if video not visible)
     // Leaving Selected is a back-out: it undoes the press that entered, and the
-    // panel visibly changes state (the frame's gold clears). Without it the only exit
+    // panel visibly changes state (the frame's blue clears). Without it the only exit
     // from the carousel was silent while the way in spoke.
     //
     // NOT on the isVideoVisible handler above -- that one closes a PLAYING
@@ -249,11 +249,11 @@ fun HomeScreenTrailerSectionCompose(
         hitboxFocusRequester.requestFocus()
     }
 
-    // The focus frame turns gold while the panel is entered, so "on the panel"
+    // The focus frame turns blue (PANEL_SELECTED_TINT) while the panel is entered, so "on the panel"
     // and "inside it" look different at a glance. The frame art is near-white,
     // so a Modulate tint IS the tint colour, and white leaves it untouched.
     val frameTint by animateColorAsState(
-        targetValue   = if (trailerState is TrailerFrameState.Selected) PANEL_HINT_GOLD else Color.White,
+        targetValue   = if (trailerState is TrailerFrameState.Selected) PANEL_SELECTED_TINT else Color.White,
         animationSpec = tween(250),
         label         = "trailerFrameTint"
     )
@@ -297,8 +297,8 @@ fun HomeScreenTrailerSectionCompose(
         )
 
         // NO SHADOW LAYER. A dark shadow used to be drawn over the focus
-        // overlay while Selected, and it sat right on top of the gold
-        // underglow, muddying it (owner, 2026-10-31). The gold tint and the
+        // overlay while Selected, and it sat right on top of the coloured
+        // underglow, muddying it (owner, 2026-10-31). The blue tint and the
         // hint bar already mark "inside the panel", so it was removed.
 
         // Frame image BEHIND the carousel (so trailers remain visible)

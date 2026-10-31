@@ -24,8 +24,8 @@ class PanelNoShadowTest {
             val code = MainSource.code(path)
             assertFalse(path, code.contains("_frame_shadow"))
             assertFalse(path, Regex("""\bshadow[WHXY]\b""").containsMatchIn(code))
-            // The gold tint on the focus overlay is what marks Selected now.
-            assertTrue(path, code.contains("PANEL_HINT_GOLD"))
+            // The blue tint on the focus overlay is what marks Selected now.
+            assertTrue(path, code.contains("PANEL_SELECTED_TINT"))
         }
     }
 
