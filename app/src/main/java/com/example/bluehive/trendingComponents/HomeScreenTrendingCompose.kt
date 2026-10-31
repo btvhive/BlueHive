@@ -83,10 +83,10 @@ import androidx.compose.runtime.key
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.onSizeChanged
 import com.example.bluehive.homeScreenSectionRules.ArrowPresses
 import com.example.bluehive.homeScreenSectionRules.PANEL_SELECTED_TINT
-import com.example.bluehive.homeScreenSectionRules.PanelCaption
+import com.example.bluehive.homeScreenSectionRules.FILM_STRIP_HEIGHT
+import com.example.bluehive.homeScreenSectionRules.PanelFilmStrips
 import com.example.bluehive.homeScreenSectionRules.PanelHintLayer
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -146,11 +146,6 @@ private fun TrendingItemAdapterCompose(
     modifier: Modifier = Modifier
 ) {
     val context     = LocalContext.current
-    val titleFont   = AppTypography.pattayaRegular
-    val metaFont    = AppTypography.passionRegular
-    val density     = androidx.compose.ui.platform.LocalDensity.current
-    // How much of the top row the badges take, so the raised title stays clear.
-    var badgesWidth by remember { mutableStateOf(0.dp) }
 
     Box(modifier = modifier.fillMaxSize()) {
 
@@ -178,25 +173,15 @@ private fun TrendingItemAdapterCompose(
                 .background(BACKDROP_SCRIM)
         )
 
-        // Title + release year: bottom-left, or top-right while the panel is
-        // entered. Was a bottom-left Column capped at 200 dp that wrapped to two
-        // lines; PanelCaption keeps each to one line and shrinks it to fit.
-        PanelCaption(
-            title         = item.title,
-            subtitle      = item.releaseDate?.take(4),
-            raised        = raised,
-            reservedStart = badgesWidth,
-            titleFont     = titleFont,
-            metaFont      = metaFont
-        )
+        // NO TITLE OR YEAR (v572, a test at the owner's request): the film
+        // strips (PanelFilmStrips) take the panel's character instead.
 
         // Top-left badges: media type + content rating + rank
         Row(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 // 8dp so the larger badges are not crowded against the frame.
-                .padding(start = 8.dp, top = 8.dp)
-                .onSizeChanged { badgesWidth = with(density) { it.width.toDp() } },
+                .padding(start = 8.dp, top = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TrendingPillBadge(
@@ -613,8 +598,12 @@ fun HomeScreenTrendingCompose(
     val frameW   = 420.dp; val frameH   = 252.75.dp
     val frameX   = 20.dp;  val frameY   = 23.dp
 
-    val viewportW = TRENDING_VIEWPORT_W; val viewportH = TRENDING_VIEWPORT_H
-    val viewportX = 36.5.dp;  val viewportY = 38.5.dp
+    // The screen: the opening in the frame art. Film strips run along its top
+    // and bottom (v572 test); the picture sits between them, full width.
+    val screenW = TRENDING_VIEWPORT_W; val screenH = TRENDING_VIEWPORT_H
+    val screenX = 36.5.dp;  val screenY = 38.5.dp
+    val viewportW = screenW; val viewportH = screenH - FILM_STRIP_HEIGHT * 2
+    val viewportX = screenX;  val viewportY = screenY + FILM_STRIP_HEIGHT
 
     Box(modifier = modifier) {
 
@@ -811,6 +800,9 @@ fun HomeScreenTrendingCompose(
                 }
                 .focusable(interactionSource = hitboxInteraction)
         )
+
+        // The film strips, top and bottom of the screen, over the carousel.
+        PanelFilmStrips(x = screenX, y = screenY, width = screenW, height = screenH, modifier = Modifier.zIndex(5.5f))
 
         // Remote hints over the picture, above the carousel (zIndex 5). Not
         // focusable and handles no keys, so the focus model above is untouched.
