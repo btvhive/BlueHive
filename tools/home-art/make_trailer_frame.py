@@ -3,7 +3,8 @@
 mock-ups' "level 2" tones, as C read too dark on the TV; v559 to "level 1";
 v560 moved the rim highlight to the top-right and bottom-left; v562 softened
 the glare and thinned the line, option E / 0.8 px from the mock-ups; v564
-darkened the metal toward the top-left, option B with the bottom-right kept):
+darkened the metal toward the top-left, option B with the bottom-right kept;
+v565 took both dark corners 5% darker):
 
   app/src/main/res/drawable-xhdpi/trailer_frame.webp
       the set: a dark metal rim (RIM_TOP -> RIM_BOTTOM) around a darker panel
@@ -49,7 +50,8 @@ RIM_HIGHLIGHT = 0.40         # the rim's light line at its brightest (top-right,
 RIM_LINE_PX = 0.8            # its width: a hairline (v562; 1.3 before)
 GLARE = 0.06                 # the soft white glare on the metal behind it, at its brightest
 GLARE_RADIUS_DP = 10.0       # how far the glare spreads from each corner
-RIM_TL_DARKEN = 0.25         # how much darker the metal gets at the top-left corner
+RIM_TL_DARKEN = 0.30         # how much darker the metal gets at the top-left corner
+RIM_BR_DARKEN = 0.05         # ... and at the bottom-right corner
 LABEL = 'LATEST TRAILERS'
 LABEL_SP, LABEL_SPACING_DP, LABEL_RGB = 8.5, 3.0, (205, 210, 222)
 GLOW_PLATE_OUT_DP = 1.5      # how far the glow's solid plate shows beyond the rim
@@ -132,10 +134,10 @@ def make_frame():
     om = rr_mask(size, outer, px(RIM_CORNER_DP))
     # Shaded only (no lit edge), so the top-left corner stays dark; the light
     # is the glare below.
-    # The metal darkens toward the top-left (v564): RIM_TL_DARKEN at the
-    # corner, fading out toward the lit corners and gone before the
-    # bottom-right, which keeps its tone. The panel is drawn over this, so it
-    # is untouched.
+    # The metal darkens toward the dark corners: RIM_TL_DARKEN at the
+    # top-left and RIM_BR_DARKEN at the bottom-right (v565: 30% / 5%; v564
+    # 25% / 0%), fading out toward the lit corners. The panel is drawn over
+    # this, so it is untouched.
     face = vgrad(size, RIM_TOP, RIM_BOTTOM, 0, h)
     dark = Image.new('L', size, 0)
     dp_ = dark.load()
@@ -143,7 +145,8 @@ def make_frame():
         for x in range(w):
             toward_lit = abs(x / w - y / h)                     # 1 at the lit corners
             toward_br = smoothstep(0.7, 1.3, x / w + y / h)     # 1 toward the bottom-right
-            dp_[x, y] = round(255 * RIM_TL_DARKEN * (1 - smoothstep(0.0, 0.9, toward_lit)) * (1 - toward_br))
+            dp_[x, y] = round(255 * (1 - smoothstep(0.0, 0.9, toward_lit))
+                              * (RIM_TL_DARKEN * (1 - toward_br) + RIM_BR_DARKEN * toward_br))
     face = Image.composite(Image.new('RGB', size, (0, 0, 0)), face, dark)
     rim = lit(face, om, 4, 4.0, 0.0, 0.45)
     img.paste(rim, (0, 0), om)
