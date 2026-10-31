@@ -15,8 +15,8 @@ package com.example.bluehive.homeScreenSectionRules
 //    trailer on     bottom of the picture:     [Click] to pause | [↩] Close
 //                   for PANEL_PLAY_HINT_MS, with a gold hairline counting down
 //
-//  THEY ARE PERMANENT. The "Click to browse" chip shows for as long as a panel
-//  has focus, and the bar for as long as a panel is entered, every time. They
+//  THEY ARE PERMANENT. The "Click to browse" chip shows -- pulsing -- for as
+//  long as a panel has focus, and the bar for as long as a panel is entered, every time. They
 //  used to retire after three uses per profile, and the owner's verdict on
 //  seeing the bar vanish mid-test (2026-10-22) was that it must never go: the
 //  layout is unusual enough that a hint which leaves reads as a bug. Only the
@@ -30,7 +30,12 @@ package com.example.bluehive.homeScreenSectionRules
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -65,6 +70,7 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -169,9 +175,7 @@ fun PanelHintLayer(
                        slideInVertically(tween(250, delayMillis = 200, easing = PANEL_EASE)) { -it / 4 },
             exit     = fadeOut(tween(120))
         ) {
-            HintChip(edge = HINT_EDGE_FOCUS) {
-                HintItem(lastCompact[0], main = true) { ClickKey() }
-            }
+            PulsingBrowseChip(lastCompact[0])
         }
 
         AnimatedVisibility(
@@ -207,6 +211,34 @@ fun PanelHintLayer(
                 }
                 HintItem(lastLegend[1] ?: "Exit", main = false) { BackKey() }
             }
+        }
+    }
+}
+
+/** How far the "Click to browse" chip grows at the top of each pulse. */
+internal const val BROWSE_PULSE_SCALE = 1.15f
+
+/** One way of the pulse (small to big, or back); a whole beat is twice this. */
+internal const val BROWSE_PULSE_MS = 650
+
+/**
+ * The "Click to browse" chip, pulsing big and back for as long as it shows,
+ * so the cue is hard to miss (owner's call, 2026-10-30). It only exists while
+ * a panel has focus, so the pulse starts and stops with that focus. The scale
+ * is read in the layer, so a pulse never recomposes the panel; it grows from
+ * its centre, which the 8 dp corner padding has room for.
+ */
+@Composable
+private fun PulsingBrowseChip(label: String) {
+    val scale = rememberInfiniteTransition(label = "browsePulse").animateFloat(
+        initialValue  = 1f,
+        targetValue   = BROWSE_PULSE_SCALE,
+        animationSpec = infiniteRepeatable(tween(BROWSE_PULSE_MS, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label         = "browsePulseScale"
+    )
+    Box(Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value }) {
+        HintChip(edge = HINT_EDGE_FOCUS) {
+            HintItem(label, main = true) { ClickKey() }
         }
     }
 }
