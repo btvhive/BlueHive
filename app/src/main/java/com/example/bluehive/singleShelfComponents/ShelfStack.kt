@@ -220,6 +220,9 @@ private const val SHELF_WINDOW_RADIUS = 1
 private const val HEADER_REAPPEAR_DELAY_MS   = 100L
 private const val HEADER_FADE_IN_DURATION_MS = 250
 
+// The row title over the shelves ("What's Popular" and the rest).
+internal val SHELF_TITLE_SIZE = 21.sp
+
 // How long the rows take to fade out before a scrollToShelf jump swaps them.
 private const val SCROLL_FADE_OUT_MS = 120
 
@@ -767,13 +770,15 @@ fun ShelfStack(
         val focusedShelfTitle = remember(focusedShelf, mediaType) {
             repository.getShelfTitle(mediaType, focusedShelf)
         }
+        // 21sp since v551 (23 before, the owner's call), and 1dp lower so the
+        // smaller line keeps its centre beside the MOVIES / TV SHOWS / ANIME tabs.
         Text(
             text = focusedShelfTitle,
             color = Color.White,
-            fontSize = 23.sp,
+            fontSize = SHELF_TITLE_SIZE,
             fontFamily = AppTypography.passionRegular,
             modifier = Modifier
-                .offset(x = (-29).dp, y = (-70).dp)
+                .offset(x = (-29).dp, y = (-69).dp)
                 .graphicsLayer { alpha = headerAlpha },
         )
     }

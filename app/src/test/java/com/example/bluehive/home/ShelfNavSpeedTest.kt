@@ -3,6 +3,8 @@ package com.example.bluehive.home
 import androidx.compose.animation.core.Spring
 import com.example.bluehive.singleShelfComponents.SHELF_NAV_COOLDOWN_MS
 import com.example.bluehive.singleShelfComponents.SHELF_SLIDE_STIFFNESS
+import com.example.bluehive.singleShelfComponents.SHELF_TITLE_SIZE
+import androidx.compose.ui.unit.sp
 import com.example.bluehive.testutil.MainSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -23,6 +25,13 @@ class ShelfNavSpeedTest {
         assertTrue(SHELF_SLIDE_STIFFNESS > Spring.StiffnessMediumLow && SHELF_SLIDE_STIFFNESS < Spring.StiffnessMedium)
         assertTrue(code.contains("if (now - lastShelfNavTime < SHELF_NAV_COOLDOWN_MS) return false"))
         assertTrue(code.contains("stiffness = SHELF_SLIDE_STIFFNESS,"))
+    }
+
+    @Test
+    fun `the row title is 21 sp, 2 sp under its old 23`() {
+        assertEquals(21.sp, SHELF_TITLE_SIZE)
+        assertTrue(code.contains("fontSize = SHELF_TITLE_SIZE,"))
+        assertTrue(!code.contains("fontSize = 23.sp"))
     }
 
     @Test
