@@ -1,5 +1,6 @@
 """Makes the Latest Trailers panel's art, the metal TV the trailers play in
-(v557, option C from the owner's mock-ups, 2026-10-31):
+(v557, option C from the owner's mock-ups, 2026-10-31; v558 lifted to the
+mock-ups' "level 2" tones, as C read too dark on the TV):
 
   app/src/main/res/drawable-xhdpi/trailer_frame.webp
       the set: a dark metal rim (RIM_TOP -> RIM_BOTTOM) around a darker panel
@@ -38,8 +39,9 @@ CHIN_DP = 14.0               # extra panel under the picture, for the label
 RIM_DP = 11.0                # metal rim around the panel
 RIM_CORNER_DP = 10.0
 PANEL_CORNER_DP = 6.0
-RIM_TOP, RIM_BOTTOM = (0x1C, 0x1C, 0x1C), (0x13, 0x13, 0x13)
-PANEL_TOP, PANEL_BOTTOM = (0x11, 0x11, 0x11), (0x07, 0x07, 0x07)
+RIM_TOP, RIM_BOTTOM = (0x27, 0x28, 0x2D), (0x16, 0x17, 0x1A)
+PANEL_TOP, PANEL_BOTTOM = (0x1A, 0x1A, 0x1E), (0x0B, 0x0B, 0x0D)
+RIM_HIGHLIGHT = 0.50         # the rim's top-edge highlight (a quarter of it runs all round)
 LABEL = 'LATEST TRAILERS'
 LABEL_SP, LABEL_SPACING_DP, LABEL_RGB = 8.5, 3.0, (205, 210, 222)
 GLOW_PLATE_OUT_DP = 1.5      # how far the glow's solid plate shows beyond the rim
@@ -123,8 +125,8 @@ def make_frame():
     top = top.filter(ImageFilter.GaussianBlur(50))
     edge = rr_outline(size, (0.5, 0.5, w - 0.5, h - 0.5), px(RIM_CORNER_DP), 1.3)
     white = Image.new('RGB', size, (255, 255, 255))
-    img.paste(white, (0, 0), ImageChops.multiply(edge, top).point(lambda v: round(v * 0.36)))
-    img.paste(white, (0, 0), edge.point(lambda v: round(v * 0.09)))
+    img.paste(white, (0, 0), ImageChops.multiply(edge, top).point(lambda v: round(v * RIM_HIGHLIGHT)))
+    img.paste(white, (0, 0), edge.point(lambda v: round(v * RIM_HIGHLIGHT * 0.25)))
     # The panel, set a step into the rim.
     im = rr_mask(size, inner, px(PANEL_CORNER_DP))
     panel = lit(vgrad(size, PANEL_TOP, PANEL_BOTTOM, inner[1], inner[3]), ImageChops.invert(im), 2.5, 3.4, 0.12, 0.55)
