@@ -263,15 +263,18 @@ fun HomeScreenTrailerSectionCompose(
     val arrowPresses = remember { ArrowPresses() }
 
     // ===== specs =====
-    val focusedW = 390.5.dp
-    val focusedH = 255.7.dp
-    val focusedX = 45.dp
-    val focusedY = 21.dp
+    // The frame (the metal TV, v557) and its focus glow are generated to fit the
+    // viewport by tools/home-art/make_trailer_frame.py, which prints these four
+    // pairs; change them together with the art.
+    val focusedW = 389.dp
+    val focusedH = 260.5.dp
+    val focusedX = 45.5.dp
+    val focusedY = 21.5.dp
 
-    val frameW = 357.dp
-    val frameH = 222.528.dp
-    val frameX = 61.7.dp
-    val frameY = 37.7.dp
+    val frameW = 355.dp
+    val frameH = 226.5.dp
+    val frameX = 62.5.dp
+    val frameY = 38.5.dp
 
     val viewportW = 325.19415283203125.dp
     val viewportH = 182.35919189453125.dp
