@@ -215,12 +215,20 @@ private const val SHELF_WINDOW_RADIUS = 1
 // 150 + 300 = 450ms fits inside the 500ms window, so the title now lands between
 // presses instead of chasing them. The delay still does its original job of not
 // flashing a title during a fast scroll; it just no longer outlives the scroll.
-// Keep the sum under shelfNavCooldownMs if that value changes.
-private const val HEADER_REAPPEAR_DELAY_MS   = 150L
-private const val HEADER_FADE_IN_DURATION_MS = 300
+// Keep the sum under SHELF_NAV_COOLDOWN_MS if that value changes: 100 + 250 =
+// 350ms since the cooldown came down to 380ms (v550; 150 + 300 before).
+private const val HEADER_REAPPEAR_DELAY_MS   = 100L
+private const val HEADER_FADE_IN_DURATION_MS = 250
 
 // How long the rows take to fade out before a scrollToShelf jump swaps them.
 private const val SCROLL_FADE_OUT_MS = 120
+
+// The shortest gap between two shelf moves; see canNavigateShelvesNow.
+internal const val SHELF_NAV_COOLDOWN_MS = 380L
+
+// The row slide's spring stiffness: between StiffnessMediumLow (400, until
+// v550) and StiffnessMedium (1500); a quicker slide that still glides.
+internal const val SHELF_SLIDE_STIFFNESS = 700f
 
 
 @Composable
@@ -338,12 +346,15 @@ fun ShelfStack(
     // true and does nothing), so mashing cannot bank up moves that fire later.
     // Raising this much further starts to read as an unresponsive remote rather
     // than a deliberate pace.
+    //
+    // 380ms SINCE v550 (SHELF_NAV_COOLDOWN_MS): the owner wanted moving between
+    // rows a bit faster. A held button now walks about 2.6 shelves a second, and
+    // the stiffer slide below settles inside the gap.
     var lastShelfNavTime by remember { mutableLongStateOf(0L) }
-    val shelfNavCooldownMs = 500L
     fun canNavigateShelvesNow(): Boolean {
         if (tracker.isNavigating) return false
         val now = SystemClock.uptimeMillis()
-        if (now - lastShelfNavTime < shelfNavCooldownMs) return false
+        if (now - lastShelfNavTime < SHELF_NAV_COOLDOWN_MS) return false
         lastShelfNavTime = now
         return true
     }
@@ -378,7 +389,7 @@ fun ShelfStack(
         targetValue = -focusedShelfIndex * rowSpacingPx,
         animationSpec = if (snapNextMove) snap() else spring(
             dampingRatio = Spring.DampingRatioNoBouncy,
-            stiffness = Spring.StiffnessMediumLow,
+            stiffness = SHELF_SLIDE_STIFFNESS,
             visibilityThreshold = 0.5f,
         ),
         label = "stackTranslationY",
