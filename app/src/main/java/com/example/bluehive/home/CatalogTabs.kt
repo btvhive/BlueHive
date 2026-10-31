@@ -371,8 +371,15 @@ internal fun BoxScope.HomeCatalogTabs(
     focusMap: HomeFocusMap,
 ) {
     val radioNavSound: () -> Unit = {
-        if (tabs.radioSoundArmed) BlueHiveApplication.playNavClickSound()
-        else tabs.radioSoundArmed = true
+        if (android.os.SystemClock.uptimeMillis() < tabs.radioClickHandOffUntil) {
+            // The hand-off after a click (CatalogTabsState): the click spoke.
+            tabs.radioClickHandOffUntil = 0L
+            tabs.radioSoundArmed = true
+        } else if (tabs.radioSoundArmed) {
+            BlueHiveApplication.playNavClickSound()
+        } else {
+            tabs.radioSoundArmed = true
+        }
     }
 
     // ====================================================================================> Radio Buttons

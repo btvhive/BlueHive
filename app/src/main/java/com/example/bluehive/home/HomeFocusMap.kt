@@ -86,6 +86,8 @@ internal fun HomeFocusEffects(focusMap: HomeFocusMap, sidebar: HomeSidebarState,
     LaunchedEffect(tabs.pendingFocusRequester) {
         tabs.pendingFocusRequester?.let { requester ->
             kotlinx.coroutines.android.awaitFrame()
+            // Part of the click, not a move: the tab it lands on stays quiet.
+            tabs.radioClickHandOffUntil = android.os.SystemClock.uptimeMillis() + RADIO_CLICK_HANDOFF_MS
             requester.requestFocus()
             tabs.pendingFocusRequester = null
             // Target button now owns focus — release the parking node.

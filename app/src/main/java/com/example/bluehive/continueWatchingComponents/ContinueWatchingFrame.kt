@@ -650,11 +650,18 @@ fun HomeScreenContinueWatchingCompose(
                     }
                 }
 
-                // Click selects it (frame turns blue + nav locks)
+                // Click selects it (frame turns blue + nav locks).
+                //
+                // THE CLICK SOUND IS HERE TOO. The remote's OK reaches this
+                // clickable before the CENTER branch above (clickable takes the
+                // key down to track the press, then clicks on key up), so that
+                // branch's sound never played and entering the list was silent
+                // (owner, 2026-10-31). Only one of the two ever runs for a press.
                 .clickable(
                     interactionSource = frameInteraction,
                     indication = null
                 ) {
+                    BlueHiveApplication.playClickSound()
                     frameState = ContinueWatchingFrameState.Selected
                     Log.d("CONTINUE_WATCHING", "🖱️ Clicked - entering Selected")
                 }
