@@ -48,15 +48,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.key
 
 
-/** The trailer picture: the TV screen's full width (HomeScreenTrailerSectionCompose). */
-internal val TRAILER_CARD_WIDTH = 325.19415283203125.dp
-
-/**
- * ...and its height, between the film strips (TrailerFilmStrips): the screen's
- * 182.36 dp less a strip top and bottom (v567). The backdrops are cropped to it.
- */
-internal val TRAILER_CARD_HEIGHT = 182.35919189453125.dp - FILM_STRIP_HEIGHT * 2
-
 @Composable
 fun HomeScreenTrailerNavigationCompose(
     trailers: List<LatestTrailer>,
@@ -203,7 +194,7 @@ fun HomeScreenTrailerNavigationCompose(
     Box(
         modifier = modifier
             // D-pad navigation only when interactive
-            .size(TRAILER_CARD_WIDTH, TRAILER_CARD_HEIGHT)
+            .size(325.19415283203125.dp, 182.35919189453125.dp)
             .clipToBounds()
             .onKeyEvent { event ->
                 if (!isInteractive) return@onKeyEvent false
@@ -281,7 +272,7 @@ fun HomeScreenTrailerNavigationCompose(
             }
     ) {
         val density = LocalDensity.current
-        val cardWidthPx = with(density) { TRAILER_CARD_WIDTH.toPx() }
+        val cardWidthPx = with(density) { 325.19415283203125.dp.toPx() }
 
         val inc = incomingIndex
         val shown = shownIndex

@@ -44,8 +44,8 @@ import com.example.bluehive.homeScreenSectionRules.PanelCaption
 private val TRAILER_SCRIM = Brush.verticalGradient(
     colors = listOf(Color.Transparent, Color(0x99000000))
 )
-// The type and count badges are 20% smaller than the trending frame's (v567,
-// the owner's call): 8 sp text, 7.2 x 3.2 dp padding, 2.4 dp corners.
+// The type and count badges are 20% smaller than the trending frame's (since
+// v567, the owner's call): 8 sp text, 7.2 x 3.2 dp padding, 2.4 dp corners.
 private val BADGE_SHAPE = RoundedCornerShape(2.4.dp)
 private val BADGE_FONT_SIZE = 8.sp
 private val BADGE_PAD_H = 7.2.dp
@@ -193,7 +193,7 @@ private fun TrailerPillBadge(
         color = Color.White,
         fontFamily = AppTypography.passionRegular,
         // 20% under the trending frame's 10 sp pills since v567, the owner's
-        // call: the trailer picture got shorter between the film strips.
+        // call.
         fontSize = BADGE_FONT_SIZE,
         modifier = modifier
             .clip(BADGE_SHAPE)
