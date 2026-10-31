@@ -147,6 +147,9 @@ internal fun TvShowsRadioButton(
     upNeighbor: FocusRequester,
     leftNeighbor: FocusRequester,
     rightNeighbor: FocusRequester,
+    // RIGHT leaves the row for Continue Watching (no tab to its right), which
+    // makes no sound of its own when focus lands, so this button plays it.
+    rightLeavesRow: Boolean = false,
     onOpenSidebar: () -> Unit,
     shouldOpenSidebar: Boolean = false,
     onFocused: () -> Unit = {},
@@ -189,11 +192,16 @@ internal fun TvShowsRadioButton(
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
-                        // LEFT and RIGHT land on another radio button, which
-                        // announces its own arrival, so speaking here too would
-                        // play the same sample twice.
-                        Key.DirectionLeft,
-                        Key.DirectionRight -> false
+                        // LEFT lands on another radio button, which announces
+                        // its own arrival, so speaking here too would play the
+                        // same sample twice. RIGHT does too -- unless it leaves
+                        // the row for Continue Watching, which has no arrival
+                        // sound, so that move is made here (rightLeavesRow).
+                        Key.DirectionLeft -> false
+                        Key.DirectionRight -> {
+                            if (rightLeavesRow) BlueHiveApplication.playNavClickSound()
+                            false
+                        }
 
                         // UP AND DOWN BOTH LEAVE THE ROW, and neither place they
                         // land says anything: the trailer frame above has no
@@ -256,6 +264,9 @@ internal fun AnimeRadioButton(
     upNeighbor: FocusRequester,
     leftNeighbor: FocusRequester,
     rightNeighbor: FocusRequester,
+    // RIGHT leaves the row for Continue Watching (no tab to its right), which
+    // makes no sound of its own when focus lands, so this button plays it.
+    rightLeavesRow: Boolean = false,
     onFocused: () -> Unit = {},
     // Fired when focus LANDS here from anywhere. The old sound fired from this
     // button's own key handler, so it could only speak when it already had
@@ -284,11 +295,16 @@ internal fun AnimeRadioButton(
             .onKeyEvent { event ->
                 if (event.type == KeyEventType.KeyDown) {
                     when (event.key) {
-                        // LEFT and RIGHT land on another radio button, which
-                        // announces its own arrival, so speaking here too would
-                        // play the same sample twice.
-                        Key.DirectionLeft,
-                        Key.DirectionRight -> false
+                        // LEFT lands on another radio button, which announces
+                        // its own arrival, so speaking here too would play the
+                        // same sample twice. RIGHT does too -- unless it leaves
+                        // the row for Continue Watching, which has no arrival
+                        // sound, so that move is made here (rightLeavesRow).
+                        Key.DirectionLeft -> false
+                        Key.DirectionRight -> {
+                            if (rightLeavesRow) BlueHiveApplication.playNavClickSound()
+                            false
+                        }
 
                         // UP AND DOWN BOTH LEAVE THE ROW, and neither place they
                         // land says anything: the trailer frame above has no
@@ -426,6 +442,7 @@ internal fun BoxScope.HomeCatalogTabs(
         } else {
             focusMap.animeToggleButtonFocusRequester
         },
+        rightLeavesRow = tabs.selectedTab == CatalogTab.ANIME && shelves.continueWatchingShown(entry),
         onSelect = {
             tabs.radioParkingEnabled = true
             focusMap.radioParkingRequester.requestFocus()
@@ -451,6 +468,7 @@ internal fun BoxScope.HomeCatalogTabs(
         // With no panel there is nothing to the right; stay put.
         rightNeighbor = if (shelves.continueWatchingShown(entry)) focusMap.continueWatchingRequester
                         else FocusRequester.Cancel,
+        rightLeavesRow = shelves.continueWatchingShown(entry),
         onSelect = {
             tabs.radioParkingEnabled = true
             focusMap.radioParkingRequester.requestFocus()
