@@ -115,11 +115,11 @@ private val CW_BORDER_FOCUSED_W = 1.5.dp
 private val CW_TITLE_FOCUSED    = Color.White
 private val CW_TITLE_DEFAULT    = Color.White          // media title — bright white
 private val CW_SUBTITLE_COLOR   = Color(0xFFDFDFDF)    // subtitle — off-white (the title's former tone)
-// The "Season: 2, Episode: 10" line is Inter Bold at 7sp, under the Passion
-// title: the owner's pick (no. 2) from mock-ups on the real screen, 2026-10-31.
-// It was Passion at 7.5sp; Inter reads cleaner at this size and steps back
-// from the title.
-private val CW_SUBTITLE_SIZE    = 7.sp
+// The "Season: 2, Episode: 10" line is Inter Bold at 6sp, under the Passion
+// title: the owner's pick (no. 2) from mock-ups on the real screen, 2026-10-31,
+// then 1sp smaller (v563; 7sp in v561). It was Passion at 7.5sp; Inter reads
+// cleaner at this size and steps back from the title.
+private val CW_SUBTITLE_SIZE    = 6.sp
 private const val CW_MAX_ITEMS  = 15
 
 // ⬆️⬇️ Hold-to-repeat navigation speed for the Continue Watching list: the minimum

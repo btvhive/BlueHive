@@ -40,9 +40,9 @@ class ContinueWatchingLookTest {
     }
 
     @Test
-    fun `the season and episode line is Inter Bold at 7sp under the Passion title`() {
-        // The owner's pick (no. 2), 2026-10-31.
-        assertTrue(code.contains("private val CW_SUBTITLE_SIZE    = 7.sp"))
+    fun `the season and episode line is Inter Bold at 6sp under the Passion title`() {
+        // The owner's pick (no. 2), 2026-10-31; 1sp smaller since v563.
+        assertTrue(code.contains("private val CW_SUBTITLE_SIZE    = 6.sp"))
         val subtitle = code.substringAfter("text       = subtitle,").substringBefore(")")
         assertTrue(subtitle.contains("fontSize   = CW_SUBTITLE_SIZE,"))
         assertTrue(subtitle.contains("fontFamily = AppTypography.interBold,"))
