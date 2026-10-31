@@ -341,9 +341,9 @@ private val SWITCH_PROFILE_ON_HL = Color(0xFFDBEAFE)    // on the blue highlight
 private val SEARCH_TOP           = 66.dp
 private val SEARCH_HEIGHT        = 26.dp
 private val SEARCH_SIDE          = 6.dp
-// The keyboard overlay's own search box rounding (HoneycombOverlay FIELD_SHAPE,
-// 10 dp), so the bar and the box it opens match (owner, 2026-10-31; was a pill).
-private val SEARCH_SHAPE         = RoundedCornerShape(10.dp)
+// A little squarer than the keyboard overlay's search box (10 dp): a pill in
+// v547, 10 dp in v548, 7 dp since v549 (owner, 2026-10-31).
+private val SEARCH_SHAPE         = RoundedCornerShape(7.dp)
 private val SEARCH_FILL          = Color(0xFF26262E)
 private val SEARCH_EDGE          = Color(0xFF44444F)
 private val SEARCH_EDGE_ON       = Color(0xFF60A5FA)

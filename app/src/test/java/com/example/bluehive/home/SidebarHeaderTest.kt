@@ -30,10 +30,8 @@ class SidebarHeaderTest {
     fun `the Search Bar row is a rounded search field that highlights when selected`() {
         val field = code.substringAfter("private fun SidebarSearchField(").substringBefore("private fun SidebarMenuRow(")
         assertTrue(field.contains(".clip(SEARCH_SHAPE)"))
-        // Rounded as the keyboard overlay's search box (FIELD_SHAPE), not a pill.
-        assertTrue(code.contains("private val SEARCH_SHAPE         = RoundedCornerShape(10.dp)"))
-        val overlay = MainSource.code("searchBarComponent/HoneycombOverlay.kt")
-        assertTrue(overlay.contains("private val FIELD_SHAPE = RoundedCornerShape(10.dp)"))
+        // Slightly rounded (7 dp), not a pill.
+        assertTrue(code.contains("private val SEARCH_SHAPE         = RoundedCornerShape(7.dp)"))
         assertTrue(field.contains("if (selected) Modifier.background(ROW_HIGHLIGHT) else Modifier.background(SEARCH_FILL)"))
         assertTrue(field.contains("\"Search titles\\u2026\""))
         // It is still menu item 1: OK on it opens the keyboard, as before.
