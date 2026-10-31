@@ -50,6 +50,18 @@ class TrailerFrameArtTest {
     }
 
     @Test
+    fun `the focus glow keeps its full halo`() {
+        // The halo is sampled from the original art, never from the last
+        // output: resampling the output faded it a little every run, to 21 of
+        // 255 by v566 (v574 fix). (The JVM cannot decode WebP, so the
+        // strength itself was checked when the art was made: peak 100.)
+        val root = listOf(File("."), File("..")).first { File(it, "tools/home-art").isDirectory }
+        val script = File(root, "tools/home-art/make_trailer_frame.py").readText()
+        assertTrue(script.contains("src = Image.open(HALO_SOURCE).convert('RGBA')"))
+        assertTrue(File(root, "tools/home-art/trailer_glow_halo_source.webp").isFile)
+    }
+
+    @Test
     fun `the generator is in the repo`() {
         val root = listOf(File("."), File("..")).first { File(it, "tools/home-art").isDirectory }
         val script = File(root, "tools/home-art/make_trailer_frame.py").readText()

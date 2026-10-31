@@ -17,8 +17,8 @@ chin's buttons and status-light socket):
   app/src/main/res/drawable-xhdpi/new_trailer_frame_focused.webp
       the focus glow behind it, fitted to the new outline: a near-white plate
       GLOW_PLATE_OUT_DP beyond the rim, with the halo -- falloff, colour and
-      grain -- sampled from the glow's own left edge (so running this again
-      keeps the same halo). The app tints it blue in select mode.
+      grain -- sampled from the original glow art, trailer_glow_halo_source.webp
+      next to this script. The app tints it blue in select mode.
 
 Everything is measured from the picture the carousel draws (VIEWPORT_*, from
 HomeScreenTrailerSectionCompose.kt), so the picture always sits exactly in the
@@ -70,6 +70,10 @@ REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 RES = os.path.join(REPO, 'app', 'src', 'main', 'res')
 FRAME_OUT = os.path.join(RES, 'drawable-xhdpi', 'trailer_frame.webp')
 GLOW_OUT = os.path.join(RES, 'drawable-xhdpi', 'new_trailer_frame_focused.webp')
+# The halo is always sampled from the ORIGINAL focus glow (v556's art, kept
+# here), never from GLOW_OUT: resampling its own output lost strength every
+# run, and by v566 the halo had faded to a sixth of its brightness.
+HALO_SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'trailer_glow_halo_source.webp')
 FONT = os.path.join(RES, 'font', 'asap_condensed_bold.ttf')
 
 
@@ -221,7 +225,7 @@ def status_light_center(w, h):
 
 def make_glow(frame_size):
     random.seed(SEED)
-    src = Image.open(GLOW_OUT).convert('RGBA')
+    src = Image.open(HALO_SOURCE).convert('RGBA')
     sw, sh = src.size
     plate_l = next(x for x in range(sw) if src.getpixel((x, sh // 2))[3] >= 250)
     rows = [y for y in range(sh) if src.getpixel((plate_l + 2, y))[3] >= 250 and abs(y - sh // 2) < sh * 0.18]
