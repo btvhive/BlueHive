@@ -25,12 +25,12 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.imageResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.R
+import com.example.bluehive.utilities.AppTypography
 import kotlinx.coroutines.android.awaitFrame
 import kotlin.math.*
 
@@ -129,6 +129,10 @@ fun ExtractionFocusTrap(content: @Composable () -> Unit) {
  *               that are not a chain (anime, server check).
  * @param source the source being tried, by its button label, for the headline.
  *
+ * INTER, NOT THE SYSTEM FONT (v579, option B from the owner's mock-ups): the
+ * title and headline in Inter Bold, the detail and the warning in Inter
+ * SemiBold -- clearly readable from the couch, the headline still first.
+ *
  * THE SAME LAYOUT ON EVERY TV (v576). Every text line has a fixed slot -- the
  * headline, a one-line detail and a two-line warning -- whether or not it is
  * showing, so the block is always the same height and sits exactly centred:
@@ -185,7 +189,7 @@ fun ExtractionLoadingOverlay(
                 "B L U E H I V E",
                 color = Color(0xFF4477FF).copy(alpha = 0.65f),
                 fontSize = 16.sp,
-                fontWeight = FontWeight.ExtraBold,
+                fontFamily = AppTypography.interBold,
                 letterSpacing = 4.sp,
                 // 18 px higher on the TV (9 dp; 8 px in v576, 10 more in v577),
                 // the owner's call; an offset, so nothing else moves.
@@ -230,7 +234,7 @@ fun ExtractionLoadingOverlay(
                             h,
                             color         = Color.White.copy(0.95f),
                             fontSize      = 19.sp,
-                            fontWeight    = FontWeight.Normal,
+                            fontFamily    = AppTypography.interBold,
                             textAlign     = TextAlign.Center,
                             letterSpacing = 0.3.sp,
                             maxLines      = 1,
@@ -254,7 +258,7 @@ fun ExtractionLoadingOverlay(
                         // step back; alone they are the message, as before.
                         color         = Color.White.copy(if (chain != null) 0.6f else 0.88f),
                         fontSize      = if (chain != null) 14.sp else 17.sp,
-                        fontWeight    = FontWeight.Light,
+                        fontFamily    = AppTypography.interSemiBold,
                         textAlign     = TextAlign.Center,
                         letterSpacing = 0.3.sp,
                         maxLines      = 1,
@@ -322,7 +326,7 @@ fun ExtractionLoadingOverlay(
                             n,
                             color         = Color(0xFFFFB74D).copy(0.95f),
                             fontSize      = 13.sp,
-                            fontWeight    = FontWeight.Normal,
+                            fontFamily    = AppTypography.interSemiBold,
                             textAlign     = TextAlign.Center,
                             letterSpacing = 0.3.sp,
                             maxLines      = 2,

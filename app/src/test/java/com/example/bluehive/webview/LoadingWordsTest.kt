@@ -87,4 +87,12 @@ class LoadingWordsTest {
         assertTrue(status < gap && gap < bar && bar < dots && dots < note)
         assertTrue(overlay.indexOf("Spacer(Modifier.height(TOP_SPACE))") < overlay.indexOf("\"B L U E H I V E\""))
     }
+
+    @Test
+    fun `Inter Bold for the title and headline, Inter SemiBold for the rest`() {
+        val overlay = MainSource.code("webview/ExtractionLoadingOverlay.kt")
+        assertEquals(2, Regex("""fontFamily\s*=\s*AppTypography\.interBold""").findAll(overlay).count())
+        assertEquals(2, Regex("""fontFamily\s*=\s*AppTypography\.interSemiBold""").findAll(overlay).count())
+        assertTrue(!overlay.contains("FontWeight.Light"))
+    }
 }
