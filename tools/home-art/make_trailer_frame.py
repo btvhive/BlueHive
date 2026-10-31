@@ -1,13 +1,15 @@
 """Makes the Latest Trailers panel's art, the metal TV the trailers play in
 (v557, option C from the owner's mock-ups, 2026-10-31; v558 lifted to the
-mock-ups' "level 2" tones, as C read too dark on the TV; v559 to "level 1"):
+mock-ups' "level 2" tones, as C read too dark on the TV; v559 to "level 1";
+v560 moved the rim highlight to the top-right and bottom-left):
 
   app/src/main/res/drawable-xhdpi/trailer_frame.webp
       the set: a dark metal rim (RIM_TOP -> RIM_BOTTOM) around a darker panel
       (PANEL_TOP -> PANEL_BOTTOM) that holds the picture, with LATEST TRAILERS
-      spaced out on the panel's chin. Lit from the top left: the rim rolls off
-      at its outer edge and carries a fine highlight along its top, and the
-      panel sits a step into it.
+      spaced out on the panel's chin. The rim rolls off at its outer edge and
+      carries a fine light line and a soft white glare on its top-right and
+      bottom-left corners (the top-left stays dark), and the panel sits a
+      step into it.
   app/src/main/res/drawable-xhdpi/new_trailer_frame_focused.webp
       the focus glow behind it, fitted to the new outline: a near-white plate
       GLOW_PLATE_OUT_DP beyond the rim, with the halo -- falloff, colour and
@@ -41,7 +43,9 @@ RIM_CORNER_DP = 10.0
 PANEL_CORNER_DP = 6.0
 RIM_TOP, RIM_BOTTOM = (0x2C, 0x2D, 0x32), (0x1A, 0x1B, 0x1E)
 PANEL_TOP, PANEL_BOTTOM = (0x1A, 0x1A, 0x1E), (0x0B, 0x0B, 0x0D)
-RIM_HIGHLIGHT = 0.55         # the rim's top-edge highlight (a quarter of it runs all round)
+RIM_HIGHLIGHT = 0.55         # the rim's light line at its brightest (top-right, bottom-left)
+GLARE = 0.30                 # the soft white glare on the metal behind it, at its brightest
+GLARE_RADIUS_DP = 14.0       # how far the glare spreads from each corner
 LABEL = 'LATEST TRAILERS'
 LABEL_SP, LABEL_SPACING_DP, LABEL_RGB = 8.5, 3.0, (205, 210, 222)
 GLOW_PLATE_OUT_DP = 1.5      # how far the glow's solid plate shows beyond the rim
@@ -96,6 +100,11 @@ def lit(face, mask, blur, strength, hi, lo):
     return Image.composite(Image.new('RGB', face.size, (255, 255, 255)), out, hl.point(lambda v: round(v * hi)))
 
 
+def smoothstep(a, b, t):
+    t = max(0.0, min(1.0, (t - a) / (b - a)))
+    return t * t * (3 - 2 * t)
+
+
 def spaced_text(img, cx, cy, text, font, fill, spacing):
     d = ImageDraw.Draw(img)
     widths = [font.getlength(c) for c in text]
@@ -117,16 +126,38 @@ def make_frame():
 
     img = Image.new('RGBA', size, (0, 0, 0, 0))
     om = rr_mask(size, outer, px(RIM_CORNER_DP))
-    rim = lit(vgrad(size, RIM_TOP, RIM_BOTTOM, 0, h), om, 4, 4.0, 0.22, 0.45)
+    # Shaded only (no lit edge), so the top-left corner stays dark; the light
+    # is the glare below.
+    rim = lit(vgrad(size, RIM_TOP, RIM_BOTTOM, 0, h), om, 4, 4.0, 0.0, 0.45)
     img.paste(rim, (0, 0), om)
-    # The rim's highlight: bright along the top, faint all round.
-    top = Image.new('L', size, 0)
-    ImageDraw.Draw(top).rectangle((0, 0, w, h * 0.45), fill=255)
-    top = top.filter(ImageFilter.GaussianBlur(50))
+    # Sun glare on the metal at the top-right and bottom-left corners, behind
+    # the highlight line: a soft white bloom centred on each corner's curve.
+    glare = Image.new('L', size, 0)
+    gd = ImageDraw.Draw(glare)
+    c = px(RIM_CORNER_DP) * 0.6
+    r = px(GLARE_RADIUS_DP)
+    for cx, cy in ((w - c, c), (c, h - c)):
+        gd.ellipse((cx - r, cy - r, cx + r, cy + r), fill=255)
+    glare = glare.filter(ImageFilter.GaussianBlur(px(GLARE_RADIUS_DP) * 0.9))
+    glare = ImageChops.multiply(glare, om).point(lambda v: round(v * GLARE))
+    img.paste(Image.new('RGB', size, (255, 255, 255)), (0, 0), glare)
+    # The rim's highlight (v560, the owner's call): a fine bright line on the
+    # top-right and bottom-left corners, none on the top-left, and the faint
+    # all-round line kept at the bottom-right. Along the outline, the bright
+    # line follows how far a point is toward the top-right/bottom-left
+    # diagonal ends; the faint one fades in toward the bottom-right.
     edge = rr_outline(size, (0.5, 0.5, w - 0.5, h - 0.5), px(RIM_CORNER_DP), 1.3)
     white = Image.new('RGB', size, (255, 255, 255))
-    img.paste(white, (0, 0), ImageChops.multiply(edge, top).point(lambda v: round(v * RIM_HIGHLIGHT)))
-    img.paste(white, (0, 0), edge.point(lambda v: round(v * RIM_HIGHLIGHT * 0.25)))
+    weight = Image.new('L', size, 0)
+    wp = weight.load()
+    for y in range(h):
+        for x in range(w):
+            u = x / w - y / h          # +1 top-right, -1 bottom-left, 0 on the other diagonal
+            v = x / w + y / h          # 0 top-left, 2 bottom-right
+            strong = RIM_HIGHLIGHT * smoothstep(0.2, 0.85, abs(u))
+            faint = RIM_HIGHLIGHT * 0.25 * smoothstep(0.7, 1.3, v)
+            wp[x, y] = round(255 * max(strong, faint))
+    img.paste(white, (0, 0), ImageChops.multiply(edge, weight))
     # The panel, set a step into the rim.
     im = rr_mask(size, inner, px(PANEL_CORNER_DP))
     panel = lit(vgrad(size, PANEL_TOP, PANEL_BOTTOM, inner[1], inner[3]), ImageChops.invert(im), 2.5, 3.4, 0.12, 0.55)
