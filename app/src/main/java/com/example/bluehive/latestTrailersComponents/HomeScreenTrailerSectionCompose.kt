@@ -501,6 +501,7 @@ fun HomeScreenTrailerSectionCompose(
             arrows       = selected && !isVideoVisible,
             arrowScale   = 0.8f,   // 20% smaller than the trending panel's
             arrowPresses = arrowPresses,
+            legendScale  = 0.7f,   // the gold hint bar 30% smaller here (owner's call)
             timer        = if (isVideoVisible && !videoFailed) ({ playHintTimer.value }) else null,
             modifier     = Modifier
                 .offset(x = viewportX, y = viewportY)

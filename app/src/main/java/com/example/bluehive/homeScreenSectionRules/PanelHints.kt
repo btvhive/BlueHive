@@ -86,6 +86,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
@@ -155,6 +156,9 @@ private val KEY_SHAPE  = RoundedCornerShape(9.dp)
  * @param arrowScale   their size relative to the full 52 dp. The trailer panel
  *                     draws them at 0.8: its picture is smaller, and at full size
  *                     they crowded it (owner's call, 2026-10-22)
+ * @param legendScale  the bottom bar's size relative to full. The trailer panel
+ *                     draws it at 0.7 (owner's call, 2026-10-31); scaled from
+ *                     its bottom centre, so it keeps its place
  * @param arrowPresses the carousel's LEFT/RIGHT turns; each one bounces the
  *                     arrow on that side (ArrowPresses)
  * @param timer        1 → 0 progress of the gold line along the bar's bottom
@@ -177,6 +181,7 @@ fun PanelHintLayer(
     modifier: Modifier = Modifier,
     arrowScale: Float = 1f,
     arrowPresses: ArrowPresses? = null,
+    legendScale: Float = 1f,
     timer: (() -> Float)? = null,
 ) {
     // The last content shown, kept so an exit animation still has words to fade.
@@ -222,17 +227,22 @@ fun PanelHintLayer(
                        slideInVertically(tween(300, delayMillis = 150, easing = PANEL_EASE)) { it / 3 },
             exit     = fadeOut(tween(150))
         ) {
-            HintChip(edge = PANEL_HINT_GOLD, timer = timer) {
-                if (lastBrowse[0]) {
-                    HintItem("Browse", main = false) { ArrowsKey() }
-                    HintSeparator()
+            Box(Modifier.graphicsLayer {
+                scaleX = legendScale; scaleY = legendScale
+                transformOrigin = TransformOrigin(0.5f, 1f)
+            }) {
+                HintChip(edge = PANEL_HINT_GOLD, timer = timer) {
+                    if (lastBrowse[0]) {
+                        HintItem("Browse", main = false) { ArrowsKey() }
+                        HintSeparator()
+                    }
+                    val click = lastLegend[0]
+                    if (click != null) {
+                        HintItem(click, main = true) { ClickKey() }
+                        HintSeparator()
+                    }
+                    HintItem(lastLegend[1] ?: "Exit", main = false) { BackKey() }
                 }
-                val click = lastLegend[0]
-                if (click != null) {
-                    HintItem(click, main = true) { ClickKey() }
-                    HintSeparator()
-                }
-                HintItem(lastLegend[1] ?: "Exit", main = false) { BackKey() }
             }
         }
     }
