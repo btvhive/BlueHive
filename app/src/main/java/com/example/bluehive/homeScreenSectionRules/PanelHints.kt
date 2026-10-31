@@ -70,7 +70,7 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -88,6 +88,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.utilities.AppTypography
+import kotlin.math.ceil
 
 /** The gold that marks "the button to press" and "you are inside the panel". */
 val PANEL_HINT_GOLD = Color(0xFFD19814)
@@ -230,11 +231,16 @@ private val BROWSE_PULSE_CLEARANCE = 4.dp
  * a panel has focus, so the pulse starts and stops with that focus. The scale
  * is read in the layer, so a pulse never recomposes the panel.
  *
- * IT SITS IN FROM THE CORNER by exactly what it grows past its own edges at
- * the top of a pulse, plus [BROWSE_PULSE_CLEARANCE]: grown from its centre in
- * the corner itself, it ran into the frame drawn around the picture (owner,
- * 2026-10-30). The shift is fixed, measured from the chip's own size, so it
- * fits whatever the label is.
+ * IT TAKES THE ROOM OF ITS BIGGEST SIZE, plus [BROWSE_PULSE_CLEARANCE], and
+ * sits centred in it: grown from its centre in the corner itself, it ran into
+ * the frame drawn around the picture (owner, 2026-10-30). The room is measured
+ * from the chip, so it fits whatever the label is.
+ *
+ * ROOM, NOT A SHIFT. v535 moved the chip with a layer translation, drawing it
+ * outside its own bounds, and the fade in and out cut it to pieces: a layer
+ * fading at alpha < 1 is drawn offscreen at the size of its bounds, so the
+ * parts outside were lost until the fade ended. Every pixel of the pulse is
+ * inside the bounds now.
  */
 @Composable
 private fun PulsingBrowseChip(label: String) {
@@ -244,13 +250,20 @@ private fun PulsingBrowseChip(label: String) {
         animationSpec = infiniteRepeatable(tween(BROWSE_PULSE_MS, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label         = "browsePulseScale"
     )
-    Box(Modifier.graphicsLayer {
-        val grow = (BROWSE_PULSE_SCALE - 1f) / 2f
-        val clear = BROWSE_PULSE_CLEARANCE.toPx()
-        translationX = -(size.width * grow + clear)
-        translationY = size.height * grow + clear
-        scaleX = scale.value; scaleY = scale.value
-    }) {
+    Box(
+        Modifier
+            .padding(top = BROWSE_PULSE_CLEARANCE, end = BROWSE_PULSE_CLEARANCE)
+            .layout { measurable, constraints ->
+                val chip = measurable.measure(constraints.copy(minWidth = 0, minHeight = 0))
+                val w = ceil(chip.width * BROWSE_PULSE_SCALE).toInt()
+                val h = ceil(chip.height * BROWSE_PULSE_SCALE).toInt()
+                layout(w, h) {
+                    chip.placeWithLayer((w - chip.width) / 2, (h - chip.height) / 2) {
+                        scaleX = scale.value; scaleY = scale.value
+                    }
+                }
+            }
+    ) {
         HintChip(edge = HINT_EDGE_FOCUS) {
             HintItem(label, main = true) { ClickKey() }
         }

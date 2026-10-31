@@ -30,21 +30,31 @@ class BrowseChipPulseTest {
         val pulse = code.substringAfter("private fun PulsingBrowseChip(").substringBefore("private fun HintChip(")
         assertTrue(pulse.contains("rememberInfiniteTransition"))
         assertTrue(pulse.contains("RepeatMode.Reverse"))
-        assertTrue(pulse.contains("scaleX = scale.value; scaleY = scale.value"))
-        assertTrue(pulse.contains("Box(Modifier.graphicsLayer {"))
+        val layer = pulse.substringAfter("placeWithLayer(")
+        assertTrue(Regex("""^[^{}]*\{\s*scaleX = scale\.value; scaleY = scale\.value\s*\}""").containsMatchIn(layer))
         assertTrue(!pulse.contains("by rememberInfiniteTransition"))
     }
 
     @Test
-    fun `at its biggest the chip stays inside where it used to rest, clear of the frame`() {
-        // Grown from its centre, the chip passes its own right and top edges by
-        // half of what it grows; the fixed shift is that, plus the clearance.
+    fun `the chip's bounds hold it at its biggest, so a fade never cuts it to pieces`() {
+        // v535 shifted it with a layer translation, outside its own bounds; a
+        // fading layer is drawn offscreen at the size of its bounds, so the
+        // fade in and out cut off whatever lay outside.
         val pulse = code.substringAfter("private fun PulsingBrowseChip(").substringBefore("private fun HintChip(")
-        assertTrue(pulse.contains("val grow = (BROWSE_PULSE_SCALE - 1f) / 2f"))
-        assertTrue(pulse.contains("translationX = -(size.width * grow + clear)"))
-        assertTrue(pulse.contains("translationY = size.height * grow + clear"))
-        val width = 110f
-        val grownRight = width / 2 + width * BROWSE_PULSE_SCALE / 2 - (width * (BROWSE_PULSE_SCALE - 1f) / 2f + 4f)
-        assertTrue(grownRight <= width - 4f + 0.001f)
+        assertTrue(!pulse.contains("translationX"))
+        assertTrue(!pulse.contains("translationY"))
+        assertTrue(pulse.contains("val w = ceil(chip.width * BROWSE_PULSE_SCALE).toInt()"))
+        assertTrue(pulse.contains("val h = ceil(chip.height * BROWSE_PULSE_SCALE).toInt()"))
+        assertTrue(pulse.contains("placeWithLayer((w - chip.width) / 2, (h - chip.height) / 2)"))
+        // The clearance from the frame is room inside the bounds too.
+        assertTrue(pulse.contains(".padding(top = BROWSE_PULSE_CLEARANCE, end = BROWSE_PULSE_CLEARANCE)"))
+        assertTrue(pulse.indexOf(".padding(") < pulse.indexOf(".layout {"))
+        // Centred in room of its biggest size, a chip at full pulse fits exactly.
+        for (width in listOf(97, 110, 131)) {
+            val room = kotlin.math.ceil(width * BROWSE_PULSE_SCALE).toInt()
+            val left = (room - width) / 2
+            assertTrue(left - width * (BROWSE_PULSE_SCALE - 1f) / 2f >= -0.5f)
+            assertTrue(left + width / 2f + width * BROWSE_PULSE_SCALE / 2f <= room + 0.5f)
+        }
     }
 }
