@@ -341,15 +341,18 @@ private val SWITCH_PROFILE_ON_HL = Color(0xFFDBEAFE)    // on the blue highlight
 private val SEARCH_TOP           = 66.dp
 private val SEARCH_HEIGHT        = 26.dp
 private val SEARCH_SIDE          = 6.dp
-private val SEARCH_SHAPE         = RoundedCornerShape(13.dp)
+// The keyboard overlay's own search box rounding (HoneycombOverlay FIELD_SHAPE,
+// 10 dp), so the bar and the box it opens match (owner, 2026-10-31; was a pill).
+private val SEARCH_SHAPE         = RoundedCornerShape(10.dp)
 private val SEARCH_FILL          = Color(0xFF26262E)
 private val SEARCH_EDGE          = Color(0xFF44444F)
 private val SEARCH_EDGE_ON       = Color(0xFF60A5FA)
 private val SEARCH_HINT          = Color(0xFF9A9AA4)
 
 // The rest of the menu, from Media Catalog down: the old 35 dp step and 28 dp
-// highlight, starting under the search field.
-private val ROWS_TOP             = 100.dp
+// highlight, starting well under the search field -- 28 dp clear of it, so the
+// header and search read as their own group (owner, 2026-10-31; was 8 dp).
+private val ROWS_TOP             = 120.dp
 private val ROW_STEP             = 35.dp
 private val ROW_HEIGHT           = 28.dp
 private val ROW_LABEL_X          = 30.5.dp
