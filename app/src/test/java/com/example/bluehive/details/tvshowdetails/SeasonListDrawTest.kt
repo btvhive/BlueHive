@@ -77,6 +77,13 @@ class SeasonListDrawTest {
     }
 
     @Test
+    fun `the tiles sit 4 dp apart`() {
+        // The user's pick from mock-ups of 2-6 dp (v540; 3 dp before).
+        val code = MainSource.code("details/tvshowdetails/SeasonAccordion.kt")
+        assertTrue(Regex("""private val ROW_GAP = 4\.dp\b""").containsMatchIn(code))
+    }
+
+    @Test
     fun `the list has its own layer, under the cached drawing`() {
         val code = MainSource.code("details/tvshowdetails/SeasonAccordion.kt")
         assertTrue(Regex("""\.graphicsLayer\(\)\s*\.drawWithCache\s*\{""").containsMatchIn(code))

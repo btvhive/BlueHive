@@ -117,7 +117,7 @@ private val LIST_INSET_V = 5.dp
 private val LIST_LEFT = 16.dp
 private val LIST_RIGHT = 5.dp
 private val ROW_STEP = (PANEL_HEIGHT - LIST_INSET_V * 2) / LIST_VISIBLE_ROWS
-private val ROW_GAP = 3.dp      // 2.5 until v533: a little more space between tiles, the user's call
+private val ROW_GAP = 4.dp      // 2.5 until v533, 3 until v540: more space between tiles, the user's call from mock-ups
 private val ROW_CORNER = 4.3.dp
 private val ROW_TEXT_PAD = 7.4.dp
 
