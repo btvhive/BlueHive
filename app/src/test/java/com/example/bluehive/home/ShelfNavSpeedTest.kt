@@ -3,7 +3,10 @@ package com.example.bluehive.home
 import androidx.compose.animation.core.Spring
 import com.example.bluehive.singleShelfComponents.SHELF_NAV_COOLDOWN_MS
 import com.example.bluehive.singleShelfComponents.SHELF_SLIDE_STIFFNESS
+import com.example.bluehive.singleShelfComponents.SHELF_TITLE_BRUSH
 import com.example.bluehive.singleShelfComponents.SHELF_TITLE_SIZE
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.testutil.MainSource
 import org.junit.Assert.assertEquals
@@ -30,8 +33,21 @@ class ShelfNavSpeedTest {
     @Test
     fun `the row title is 21 sp, 2 sp under its old 23`() {
         assertEquals(21.sp, SHELF_TITLE_SIZE)
-        assertTrue(code.contains("fontSize = SHELF_TITLE_SIZE,"))
+        assertTrue(code.contains("fontSize   = SHELF_TITLE_SIZE,"))
         assertTrue(!code.contains("fontSize = 23.sp"))
+    }
+
+    @Test
+    fun `the row title is white through its top fifth, then down to steel grey`() {
+        // The owner's pick "A1" (v552).
+        val expected = Brush.verticalGradient(
+            0f to Color.White,
+            0.2f to Color.White,
+            1f to Color(0xFF7C8190),
+        )
+        assertEquals(expected, SHELF_TITLE_BRUSH)
+        assertTrue(code.contains("brush      = SHELF_TITLE_BRUSH,"))
+        assertTrue(code.contains("style = SHELF_TITLE_STYLE,"))
     }
 
     @Test

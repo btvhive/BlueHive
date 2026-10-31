@@ -41,6 +41,8 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -222,6 +224,22 @@ private const val HEADER_FADE_IN_DURATION_MS = 250
 
 // The row title over the shelves ("What's Popular" and the rest).
 internal val SHELF_TITLE_SIZE = 21.sp
+
+// ITS FILL IS A GRADIENT (v552, the owner's pick "A1" from mock-ups on the real
+// screen): pure white through the top fifth of the line, then down to a deep
+// steel grey at the bottom, so the title reads bright on top and heavy below.
+// Spans the Text's own height (no startY/endY), whatever the title says.
+internal val SHELF_TITLE_BRUSH = Brush.verticalGradient(
+    0f   to Color.White,
+    0.2f to Color.White,
+    1f   to Color(0xFF7C8190),
+)
+
+private val SHELF_TITLE_STYLE = TextStyle(
+    brush      = SHELF_TITLE_BRUSH,
+    fontSize   = SHELF_TITLE_SIZE,
+    fontFamily = AppTypography.passionRegular,
+)
 
 // How long the rows take to fade out before a scrollToShelf jump swaps them.
 private const val SCROLL_FADE_OUT_MS = 120
@@ -772,11 +790,10 @@ fun ShelfStack(
         }
         // 21sp since v551 (23 before, the owner's call), and 1dp lower so the
         // smaller line keeps its centre beside the MOVIES / TV SHOWS / ANIME tabs.
+        // Filled with SHELF_TITLE_BRUSH since v552.
         Text(
             text = focusedShelfTitle,
-            color = Color.White,
-            fontSize = SHELF_TITLE_SIZE,
-            fontFamily = AppTypography.passionRegular,
+            style = SHELF_TITLE_STYLE,
             modifier = Modifier
                 .offset(x = (-29).dp, y = (-69).dp)
                 .graphicsLayer { alpha = headerAlpha },
