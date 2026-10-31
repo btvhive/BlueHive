@@ -302,6 +302,7 @@ internal fun HomeScreen(
             context          = context,
             profileId        = profileId,
             profileAvatarRes = profileAvatarRes,
+            profileName      = profileName,
         )
 
         // ── Offline / retry banner (effects 12 and 13) (OfflineRetry.kt) ──

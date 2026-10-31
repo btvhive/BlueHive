@@ -37,12 +37,14 @@ internal fun BoxScope.HomeSidebar(
     context: Context,
     profileId: Int,
     profileAvatarRes: Int,
+    profileName: String,
 ) {
     // ====================================================================================> SIDEBAR HERE
     HomeScreenSidebarCompose(
         focusRequester   = focusMap.sidebarFocusRequester,
         canFocus         = sidebar.sidebarCanFocus,
         profileAvatarRes = profileAvatarRes,
+        profileName      = profileName,
         onFocusChanged = { focused ->
             sidebar.isSidebarFocused = focused
         },

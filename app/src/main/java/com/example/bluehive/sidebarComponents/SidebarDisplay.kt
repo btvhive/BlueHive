@@ -8,6 +8,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
@@ -55,8 +60,6 @@ data class SidebarMenuItem(
     val iconRes: Int,
     val label: String,
     val onClick: () -> Unit,
-    val unfocusedCustomYOffset: Dp = 0.dp,
-    val focusedCustomYOffset: Dp = 0.dp,
     val customXOffset: Dp = 0.dp,
     val customIconYOffset: Dp = 0.dp,
 )
@@ -72,6 +75,7 @@ fun HomeScreenSidebarCompose(
     focusRequester:   FocusRequester,
     canFocus:         Boolean,
     profileAvatarRes: Int = R.drawable.avatar1,
+    profileName:      String = "",
     onFocusChanged:   (Boolean) -> Unit,
     onExitToRight:    () -> Unit,
     onProfileClick:      () -> Unit = {},
@@ -121,8 +125,6 @@ fun HomeScreenSidebarCompose(
                 iconRes = profileAvatarRes,
                 label = "Profiles",
                 onClick = onProfileClick,
-                unfocusedCustomYOffset = 0.dp,
-                focusedCustomYOffset = 0.dp,
                 customXOffset = (-2).dp,
             ),
             SidebarMenuItem(
@@ -130,8 +132,6 @@ fun HomeScreenSidebarCompose(
                 iconRes = R.drawable.magnifying_glass_raw_image,
                 label = "Search Bar",
                 onClick = {},  // activation handled in onKeyEvent — opens inline overlay
-                unfocusedCustomYOffset = 35.dp,
-                focusedCustomYOffset = 33.5.dp,
                 customIconYOffset = 0.7.dp,
             ),
             SidebarMenuItem(
@@ -139,8 +139,6 @@ fun HomeScreenSidebarCompose(
                 iconRes = R.drawable.media_catalog,
                 label = "Media Catalog",
                 onClick = onMediaCatalogClick,
-                unfocusedCustomYOffset = 70.dp,
-                focusedCustomYOffset = 68.5.dp,
                 customIconYOffset = 0.7.dp,
             ),
             SidebarMenuItem(
@@ -148,16 +146,12 @@ fun HomeScreenSidebarCompose(
                 iconRes = R.drawable.livetv,
                 label = "Live TV",
                 onClick = onLiveTvClick,
-                unfocusedCustomYOffset = 105.dp,
-                focusedCustomYOffset = 103.5.dp,
             ),
             SidebarMenuItem(
                 id = "favorites",
                 iconRes = R.drawable.favourite,
                 label = "Favorites",
                 onClick = onFavoritesClick,
-                unfocusedCustomYOffset = 140.dp,
-                focusedCustomYOffset = 138.5.dp,
                 customIconYOffset = 0.7.dp,
             ),
             SidebarMenuItem(
@@ -165,8 +159,6 @@ fun HomeScreenSidebarCompose(
                 iconRes = R.drawable.history,
                 label = "Watch History",
                 onClick = onHistoryClick,
-                unfocusedCustomYOffset = 175.dp,
-                focusedCustomYOffset = 173.5.dp,
                 customIconYOffset = 0.7.dp,
             ),
             SidebarMenuItem(
@@ -174,8 +166,6 @@ fun HomeScreenSidebarCompose(
                 iconRes = R.drawable.settings,
                 label = "Settings",
                 onClick = onSettingsClick,
-                unfocusedCustomYOffset = 210.dp,
-                focusedCustomYOffset = 208.5.dp,
                 customIconYOffset = 0.7.dp,
             ),
             SidebarMenuItem(
@@ -188,8 +178,6 @@ fun HomeScreenSidebarCompose(
                         SidebarReboot.performReboot(it, showConfirmation = true)
                     } ?: Log.e("SIDEBAR", "❌ Activity null on click")
                 },
-                unfocusedCustomYOffset = 245.dp,
-                focusedCustomYOffset = 243.5.dp,
                 customIconYOffset = 0.8.dp,
             )
         )
@@ -277,130 +265,22 @@ fun HomeScreenSidebarCompose(
         // ========================================
         // EXPANDED PANEL (visible when focused OR searching)
         // ========================================
+        // A profile header and a search field on top, then the menu rows
+        // (the owner's design, 2026-10-31). While the search keyboard is up
+        // the panel stays open behind it but shows no selection: the keyboard
+        // has the focus (the user's call, 2026-10-16).
         if ((isSidebarFocused || isSearchActive) && hasEverBeenFocused) {
-            Log.d("SIDEBAR", "✅ Sidebar focused - showing expanded panel")
-
-            Box(
-                modifier = Modifier
-                    .offset(x = 0.dp, y = 0.dp)
-                    .width(expandedW)
-                    .fillMaxHeight()
-                    .clip(RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp))
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = listOf(Color(0xFF1A1A1A), Color(0xFF0D0D0D))
-                        )
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = Color(0xFF333333),
-                        shape = RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp)
-                    )
+            SidebarExpandedPanel(
+                menuItems     = menuItems,
+                selectedIndex = if (isSearchActive) -1 else selectedIndex,
+                profileName   = profileName,
+                width         = expandedW,
             )
-
-
+        } else {
             // ========================================
-            // BLUE HIGHLIGHT BACKGROUNDS
+            // RAIL ICONS (the collapsed sidebar)
             // ========================================
-            menuItems.forEachIndexed { index, item ->
-                // HIDDEN WHILE THE SEARCH KEYBOARD IS UP (isSearchActive).
-                    //
-                    // The sidebar stays expanded behind the keyboard, but the
-                    // keyboard has the focus, so the sidebar shows no selection
-                    // at all -- the user's call, 2026-10-16. The label below
-                    // follows the same rule; dropping only this pill once left
-                    // the row white, bold and scaled up, half-announcing a
-                    // selection. Both come back when the keyboard closes and
-                    // focus returns here.
-                    if (index == selectedIndex && !isSearchActive) {
-                    val yOffset = (index * 35).dp
-
-                    Box(
-                        modifier = Modifier
-                            .offset(x = 0.dp, y = 34.3.dp + yOffset)
-                            .width(expandedW)
-                            .size(width = expandedW, height = 28.dp)
-                            .background(
-                                brush = Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color(0xFF1E3A8A),
-                                        Color(0xFF2563EB)
-                                    )
-                                )
-                            )
-                    )
-                }
-            }
-
-
-            // ========================================
-            // MENU LABELS (visible when expanded)
-            // ========================================
-            Box(
-                modifier = Modifier
-                    .offset(x = baseW + 5.dp, y = 39.dp)
-                    .width(expandedW - baseW - 10.dp)
-                    .fillMaxHeight()
-            ) {
-                menuItems.forEachIndexed { index, item ->
-                    val isSelected = index == selectedIndex && !isSearchActive
-
-                    val yOffset = if (isSelected) {
-                        item.focusedCustomYOffset
-                    } else {
-                        item.unfocusedCustomYOffset
-                    }
-
-                    Row(
-                        modifier = Modifier
-                            .offset(y = yOffset)
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = item.label,
-                            color = if (isSelected) Color.White else Color(0xFF888888),
-                            fontSize = if (isSelected) 13.sp else 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.graphicsLayer {
-                                scaleX = if (isSelected) 1.05f else 1f
-                                scaleY = if (isSelected) 1.05f else 1f
-                            }
-                        )
-                    }
-                }
-            }
-
-        }
-
-
-        // ========================================
-        // MENU ICONS (always visible, on top of base layer)
-        // ========================================
-        Box(
-            modifier = Modifier
-                .offset(x = 0.dp, y = 40.dp)
-                .width(baseW)
-                .fillMaxHeight()
-        ) {
-            menuItems.forEachIndexed { index, item ->
-                val yOffset = (index * 35).dp
-
-                Image(
-                    painter = painterResource(id = item.iconRes),
-                    contentDescription = item.label,
-                    modifier = Modifier
-                        .offset(x = 5.dp + item.customXOffset, y = yOffset + item.customIconYOffset)
-                        .size(
-                            width  = if (item.id == "profiles") SIDEBAR_AVATAR_WIDTH else 15.dp,
-                            height = if (item.id == "profiles") SIDEBAR_AVATAR_HEIGHT else 15.dp,
-                        )
-                        .graphicsLayer {
-                            alpha = if (isSidebarFocused && index != selectedIndex) 0.4f else 1f
-                        },
-                    contentScale = ContentScale.Fit,
-                )
-            }
+            SidebarRailIcons(menuItems = menuItems, width = baseW)
         }
 
 
@@ -432,6 +312,195 @@ fun HomeScreenSidebarCompose(
                     if (q.isNotEmpty()) onSearchSubmit(q)
                 },
                 onDismiss = { isSearchActive = false },
+            )
+        }
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  The expanded panel: profile header, search field, menu rows
+// ─────────────────────────────────────────────────────────────────────────────
+
+private val PANEL_SHAPE          = RoundedCornerShape(topEnd = 10.dp, bottomEnd = 10.dp)
+private val PANEL_FILL           = Brush.verticalGradient(listOf(Color(0xFF1A1A1A), Color(0xFF0D0D0D)))
+private val PANEL_EDGE           = Color(0xFF333333)
+/** The selected row: the blue the home panels' select glow is tinted from (PANEL_SELECTED_TINT). */
+private val ROW_HIGHLIGHT        = Brush.horizontalGradient(listOf(Color(0xFF1E3A8A), Color(0xFF2563EB)))
+
+// The profile header: the avatar at twice the rail's 20 dp, rounded, with the
+// profile's name and "Switch profile" beside it.
+private val HEADER_TOP           = 8.dp
+private val HEADER_HEIGHT        = 52.dp
+private val HEADER_AVATAR        = 40.dp
+private val HEADER_AVATAR_SHAPE  = RoundedCornerShape(9.dp)
+private val SWITCH_PROFILE_BLUE  = Color(0xFF3B82F6)
+private val SWITCH_PROFILE_ON_HL = Color(0xFFDBEAFE)    // on the blue highlight, where blue would vanish
+
+// The search field: a rounded bar standing in for the "Search Bar" row.
+private val SEARCH_TOP           = 66.dp
+private val SEARCH_HEIGHT        = 26.dp
+private val SEARCH_SIDE          = 6.dp
+private val SEARCH_SHAPE         = RoundedCornerShape(13.dp)
+private val SEARCH_FILL          = Color(0xFF26262E)
+private val SEARCH_EDGE          = Color(0xFF44444F)
+private val SEARCH_EDGE_ON       = Color(0xFF60A5FA)
+private val SEARCH_HINT          = Color(0xFF9A9AA4)
+
+// The rest of the menu, from Media Catalog down: the old 35 dp step and 28 dp
+// highlight, starting under the search field.
+private val ROWS_TOP             = 100.dp
+private val ROW_STEP             = 35.dp
+private val ROW_HEIGHT           = 28.dp
+private val ROW_LABEL_X          = 30.5.dp
+private val ROW_LABEL_OFF        = Color(0xFF888888)
+
+@Composable
+private fun SidebarExpandedPanel(
+    menuItems: List<SidebarMenuItem>,
+    selectedIndex: Int,
+    profileName: String,
+    width: Dp,
+) {
+    Box(
+        modifier = Modifier
+            .width(width)
+            .fillMaxHeight()
+            .clip(PANEL_SHAPE)
+            .background(PANEL_FILL)
+            .border(1.dp, PANEL_EDGE, PANEL_SHAPE)
+    ) {
+        SidebarProfileHeader(item = menuItems[0], selected = selectedIndex == 0, profileName = profileName)
+        SidebarSearchField(item = menuItems[1], selected = selectedIndex == 1)
+        for (index in 2..menuItems.lastIndex) {
+            SidebarMenuRow(item = menuItems[index], top = ROWS_TOP + ROW_STEP * (index - 2), selected = index == selectedIndex)
+        }
+    }
+}
+
+@Composable
+private fun SidebarProfileHeader(item: SidebarMenuItem, selected: Boolean, profileName: String) {
+    Row(
+        modifier = Modifier
+            .offset(y = HEADER_TOP)
+            .fillMaxWidth()
+            .height(HEADER_HEIGHT)
+            .then(if (selected) Modifier.background(ROW_HIGHLIGHT) else Modifier)
+            .padding(horizontal = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter            = painterResource(id = item.iconRes),
+            contentDescription = item.label,
+            modifier           = Modifier.size(HEADER_AVATAR).clip(HEADER_AVATAR_SHAPE),
+            contentScale       = ContentScale.Crop,
+        )
+        Spacer(Modifier.width(8.dp))
+        Column {
+            Text(
+                text       = profileName.ifBlank { item.label },
+                color      = Color.White,
+                fontSize   = 13.sp,
+                fontWeight = FontWeight.Bold,
+                maxLines   = 1,
+                overflow   = TextOverflow.Ellipsis,
+            )
+            Text(
+                text     = "Switch profile \u203A",
+                color    = if (selected) SWITCH_PROFILE_ON_HL else SWITCH_PROFILE_BLUE,
+                fontSize = 9.sp,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SidebarSearchField(item: SidebarMenuItem, selected: Boolean) {
+    Row(
+        modifier = Modifier
+            .offset(y = SEARCH_TOP)
+            .padding(horizontal = SEARCH_SIDE)
+            .fillMaxWidth()
+            .height(SEARCH_HEIGHT)
+            .clip(SEARCH_SHAPE)
+            .then(if (selected) Modifier.background(ROW_HIGHLIGHT) else Modifier.background(SEARCH_FILL))
+            .border(if (selected) 1.5.dp else 1.dp, if (selected) SEARCH_EDGE_ON else SEARCH_EDGE, SEARCH_SHAPE)
+            .padding(horizontal = 9.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Image(
+            painter            = painterResource(id = item.iconRes),
+            contentDescription = item.label,
+            modifier           = Modifier.size(12.dp).graphicsLayer { alpha = if (selected) 1f else 0.7f },
+            contentScale       = ContentScale.Fit,
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text     = "Search titles\u2026",
+            color    = if (selected) Color.White else SEARCH_HINT,
+            fontSize = 10.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun SidebarMenuRow(item: SidebarMenuItem, top: Dp, selected: Boolean) {
+    Box(
+        modifier = Modifier
+            .offset(y = top)
+            .fillMaxWidth()
+            .height(ROW_HEIGHT)
+            .then(if (selected) Modifier.background(ROW_HIGHLIGHT) else Modifier)
+    ) {
+        Image(
+            painter            = painterResource(id = item.iconRes),
+            contentDescription = item.label,
+            modifier           = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = 5.dp + item.customXOffset, y = item.customIconYOffset)
+                .size(15.dp)
+                .graphicsLayer { alpha = if (selected) 1f else 0.4f },
+            contentScale       = ContentScale.Fit,
+        )
+        Text(
+            text       = item.label,
+            color      = if (selected) Color.White else ROW_LABEL_OFF,
+            fontSize   = if (selected) 13.sp else 11.sp,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            modifier   = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = ROW_LABEL_X)
+                .graphicsLayer {
+                    scaleX = if (selected) 1.05f else 1f
+                    scaleY = if (selected) 1.05f else 1f
+                }
+        )
+    }
+}
+
+/** The collapsed rail's icons: the avatar and one icon per row, 35 dp apart. */
+@Composable
+private fun SidebarRailIcons(menuItems: List<SidebarMenuItem>, width: Dp) {
+    Box(
+        modifier = Modifier
+            .offset(x = 0.dp, y = 40.dp)
+            .width(width)
+            .fillMaxHeight()
+    ) {
+        menuItems.forEachIndexed { index, item ->
+            val yOffset = (index * 35).dp
+            Image(
+                painter            = painterResource(id = item.iconRes),
+                contentDescription = item.label,
+                modifier           = Modifier
+                    .offset(x = 5.dp + item.customXOffset, y = yOffset + item.customIconYOffset)
+                    .size(
+                        width  = if (item.id == "profiles") SIDEBAR_AVATAR_WIDTH else 15.dp,
+                        height = if (item.id == "profiles") SIDEBAR_AVATAR_HEIGHT else 15.dp,
+                    ),
+                contentScale       = ContentScale.Fit,
             )
         }
     }
