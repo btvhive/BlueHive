@@ -517,9 +517,17 @@ private fun DrawScope.chevron(cx: Float, cy: Float, half: Float, left: Boolean, 
  *                      raised caption must stay clear of
  */
 /** The caption's shadow: near-black, a touch below the letters, softly blurred. */
-internal val CAPTION_SHADOW_COLOR = Color(0xE6000000)
+internal val CAPTION_SHADOW_COLOR = Color(0xFF000000)
 internal val CAPTION_SHADOW_DY = 1.dp
-internal val CAPTION_SHADOW_BLUR = 4.dp
+internal val CAPTION_SHADOW_BLUR = 2.5.dp
+
+/**
+ * How many times each caption line is drawn, each with the shadow. A text
+ * shadow is cast by the letters alone, and Pattaya's strokes are thin, so one
+ * pass left only a faint haze (v570); stacking two builds the dark up around
+ * the strokes, as in the approved mock-up (v571).
+ */
+internal const val CAPTION_SHADOW_PASSES = 2
 
 @Composable
 fun PanelCaption(
@@ -558,24 +566,41 @@ fun PanelCaption(
         // the first frame instead.
         val lineAlign = BiasAlignment.Horizontal(h)
         Column(modifier = Modifier.align(BiasAlignment(h, v)).widthIn(max = room)) {
-            BasicText(
+            ShadowedLine(
                 text     = title,
                 modifier = Modifier.align(lineAlign),
                 style    = TextStyle(color = Color.White, fontFamily = titleFont, fontSize = 13.sp, lineHeight = 1.05.em, shadow = shadow),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
                 autoSize = TextAutoSize.StepBased(minFontSize = 9.75.sp, maxFontSize = 13.sp, stepSize = 0.25.sp)
             )
             if (!subtitle.isNullOrBlank()) {
-                BasicText(
+                ShadowedLine(
                     text     = subtitle,
                     modifier = Modifier.align(lineAlign),
                     style    = TextStyle(color = Color(0xFFD0D0D0), fontFamily = metaFont, fontSize = 8.sp, lineHeight = 1.15.em, shadow = shadow),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
                     autoSize = TextAutoSize.StepBased(minFontSize = 6.sp, maxFontSize = 8.sp, stepSize = 0.25.sp)
                 )
             }
+        }
+    }
+}
+
+/**
+ * One caption line, drawn [CAPTION_SHADOW_PASSES] times on top of itself so
+ * the shadows stack. The copies lay out identically (same text, style and
+ * constraints, so auto-size picks the same size), and the white text over
+ * itself looks the same.
+ */
+@Composable
+private fun ShadowedLine(text: String, modifier: Modifier, style: TextStyle, autoSize: TextAutoSize) {
+    Box(modifier) {
+        repeat(CAPTION_SHADOW_PASSES) {
+            BasicText(
+                text     = text,
+                style    = style,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = autoSize
+            )
         }
     }
 }
