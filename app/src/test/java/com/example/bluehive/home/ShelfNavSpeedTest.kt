@@ -7,6 +7,7 @@ import com.example.bluehive.singleShelfComponents.SHELF_TITLE_BRUSH
 import com.example.bluehive.singleShelfComponents.SHELF_TITLE_SIZE
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.testutil.MainSource
 import org.junit.Assert.assertEquals
@@ -38,14 +39,15 @@ class ShelfNavSpeedTest {
     }
 
     @Test
-    fun `the row title is white through its top fifth, then down to steel grey`() {
-        // The owner's pick "A1" (v552).
+    fun `the row title is pure white through its top quarter, then down to steel grey`() {
+        // The owner's pick "A1" (v552), white held to 25% since v555 (20% before).
         val expected = Brush.verticalGradient(
             0f to Color.White,
-            0.2f to Color.White,
+            0.25f to Color.White,
             1f to Color(0xFF7C8190),
         )
         assertEquals(expected, SHELF_TITLE_BRUSH)
+        assertEquals(0xFFFFFFFF.toInt(), Color.White.toArgb())
         assertTrue(code.contains("brush      = SHELF_TITLE_BRUSH,"))
         assertTrue(code.contains("style = SHELF_TITLE_STYLE,"))
     }

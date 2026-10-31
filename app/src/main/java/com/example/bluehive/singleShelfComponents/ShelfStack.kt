@@ -226,12 +226,13 @@ private const val HEADER_FADE_IN_DURATION_MS = 250
 internal val SHELF_TITLE_SIZE = 21.sp
 
 // ITS FILL IS A GRADIENT (v552, the owner's pick "A1" from mock-ups on the real
-// screen): pure white through the top fifth of the line, then down to a deep
+// screen): pure white -- #FFFFFF at full opacity, as bright as a pixel goes --
+// through the top quarter of the line (a fifth until v555), then down to a deep
 // steel grey at the bottom, so the title reads bright on top and heavy below.
 // Spans the Text's own height (no startY/endY), whatever the title says.
 internal val SHELF_TITLE_BRUSH = Brush.verticalGradient(
-    0f   to Color.White,
-    0.2f to Color.White,
+    0f    to Color.White,
+    0.25f to Color.White,
     1f   to Color(0xFF7C8190),
 )
 
