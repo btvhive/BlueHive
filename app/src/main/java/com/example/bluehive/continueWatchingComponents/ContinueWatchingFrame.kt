@@ -45,6 +45,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.animateColorAsState
@@ -104,17 +105,22 @@ private val CW_THUMB_WIDTH      = 58.dp
 private val CW_ROW_SHAPE        = RoundedCornerShape(0.dp)
 private val CW_THUMB_SHAPE      = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp)
 private val CW_BG_COLOR         = Color(0xFF131313) // 0xFF121314
-// The focused row is light: a soft white base a shade under the bright white
-// border, so the border still reads, with black text (owner, 2026-10-31; it
-// was a blue fill with white text).
-private val CW_BG_FOCUSED       = Color(0xFFD9D9DE)
+// The focused row is the selected season tile's white (SeasonAccordion's
+// DULL_TILE face and ink) inside a bright white border, the owner's pick from
+// mock-ups on 2026-10-31. It was a blue fill with white text, then (v538) a
+// flat #D9D9DE that read as disabled and swallowed the border.
+private val CW_BG_FOCUSED       = Brush.verticalGradient(
+    0f    to Color(0xFFC9CACF),
+    0.55f to Color(0xFFB1B2B9),
+    1f    to Color(0xFF9D9EA6),
+)
 private val CW_BORDER_UNFOCUSED = Color(0xFF262525)
 private val CW_BORDER_FOCUSED   = Color.White
 private val CW_BORDER_FOCUSED_W = 1.5.dp
-private val CW_TITLE_FOCUSED    = Color.Black
+private val CW_TITLE_FOCUSED    = Color(0xFF0C0C10)
 private val CW_TITLE_DEFAULT    = Color.White          // media title — bright white
 private val CW_SUBTITLE_COLOR   = Color(0xFFDFDFDF)    // subtitle — off-white (the title's former tone)
-private val CW_SUBTITLE_FOCUSED = Color(0xFF2A2A30)    // subtitle on the light focused row
+private val CW_SUBTITLE_FOCUSED = Color(0xFF24242C)    // subtitle on the focused row
 private const val CW_MAX_ITEMS  = 15
 
 // ⬆️⬇️ Hold-to-repeat navigation speed for the Continue Watching list: the minimum
@@ -149,7 +155,7 @@ private fun ContinueWatchingItem(
             .fillMaxWidth()
             .height(CW_ITEM_HEIGHT)
             .clip(CW_ROW_SHAPE)
-            .background(if (isFocused) CW_BG_FOCUSED else CW_BG_COLOR)
+            .then(if (isFocused) Modifier.background(CW_BG_FOCUSED) else Modifier.background(CW_BG_COLOR))
             .border(
                 width = if (isFocused) CW_BORDER_FOCUSED_W else 1.dp,
                 color = if (isFocused) CW_BORDER_FOCUSED else CW_BORDER_UNFOCUSED,
