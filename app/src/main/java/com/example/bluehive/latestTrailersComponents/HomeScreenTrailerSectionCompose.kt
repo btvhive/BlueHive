@@ -44,6 +44,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import com.example.bluehive.homeScreenSectionRules.ArrowPresses
 import com.example.bluehive.homeScreenSectionRules.PANEL_SELECTED_TINT
 import com.example.bluehive.homeScreenSectionRules.PANEL_PLAY_HINT_MS
 import com.example.bluehive.homeScreenSectionRules.PanelHintLayer
@@ -258,6 +259,9 @@ fun HomeScreenTrailerSectionCompose(
         label         = "trailerFrameTint"
     )
 
+    // Each LEFT/RIGHT turn of the carousel bounces that arrow (PanelHints.kt).
+    val arrowPresses = remember { ArrowPresses() }
+
     // ===== specs =====
     val focusedW = 390.5.dp
     val focusedH = 255.7.dp
@@ -320,6 +324,7 @@ fun HomeScreenTrailerSectionCompose(
             isTrailerPlaying = isVideoVisible,
             isPaused = shouldPauseAutoCycle,
             raisedCaption = trailerState is TrailerFrameState.Selected,
+            onTurn = arrowPresses::press,
             onTrailerClick = { trailer ->
                 // NO LINK, NO PLAYER. The overlay below is skipped for a blank
                 // URL, so opening it anyway left nothing to take focus, nothing
@@ -480,6 +485,7 @@ fun HomeScreenTrailerSectionCompose(
             legendExit   = if (isVideoVisible) "Close" else "Exit",
             arrows       = selected && !isVideoVisible,
             arrowScale   = 0.8f,   // 20% smaller than the trending panel's
+            arrowPresses = arrowPresses,
             timer        = if (isVideoVisible && !videoFailed) ({ playHintTimer.value }) else null,
             modifier     = Modifier
                 .offset(x = viewportX, y = viewportY)

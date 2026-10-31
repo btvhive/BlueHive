@@ -84,6 +84,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.onSizeChanged
+import com.example.bluehive.homeScreenSectionRules.ArrowPresses
 import com.example.bluehive.homeScreenSectionRules.PANEL_SELECTED_TINT
 import com.example.bluehive.homeScreenSectionRules.PanelCaption
 import com.example.bluehive.homeScreenSectionRules.PanelHintLayer
@@ -314,6 +315,9 @@ private fun TrendingNavigationCompose(
     items: List<TrendingItem>,
     isInteractive: Boolean,
     isPaused: Boolean = false,
+    // Told of each LEFT/RIGHT turn (-1 / +1) the moment it is taken, so the
+    // panel can bounce that arrow (PanelHints.ArrowPresses).
+    onTurn: (Int) -> Unit = {},
     onItemClick: (TrendingItem) -> Unit = {},
 ) {
     val context          = LocalContext.current
@@ -426,6 +430,7 @@ private fun TrendingNavigationCompose(
                             isManualNav  = true
                             currentIndex = (currentIndex - 1 + items.size) % items.size
                             BlueHiveApplication.playHoverSound()
+                            onTurn(-1)
                         }
                         true
                     }
@@ -446,6 +451,7 @@ private fun TrendingNavigationCompose(
                             isManualNav  = true
                             currentIndex = (currentIndex + 1) % items.size
                             BlueHiveApplication.playHoverSound()
+                            onTurn(1)
                         }
                         true
                     }
@@ -592,6 +598,9 @@ fun HomeScreenTrendingCompose(
         label         = "trendingFrameTint"
     )
 
+    // Each LEFT/RIGHT turn of the carousel bounces that arrow (PanelHints.kt).
+    val arrowPresses = remember { ArrowPresses() }
+
     // ── Layout dimensions — mirror HRC frame pattern, adjust to taste ────────
     //
     // Every width is 35 dp narrower than it was before 2026-10-19, to make the
@@ -645,6 +654,7 @@ fun HomeScreenTrendingCompose(
             items         = items,
             isInteractive = trendingState is TrendingFrameState.Selected,
             isPaused      = isPaused,
+            onTurn        = arrowPresses::press,
             // trendingItem is TrendingItem here — fetch full details before navigating
             onItemClick   = { trendingItem ->
                 if (detailsJob.value?.isActive == true) return@TrendingNavigationCompose
@@ -812,6 +822,7 @@ fun HomeScreenTrendingCompose(
             legendClick  = "to open",
             legendExit   = "Exit",
             arrows       = selected,
+            arrowPresses = arrowPresses,
             modifier     = Modifier
                 .offset(x = viewportX, y = viewportY)
                 .width(viewportW)

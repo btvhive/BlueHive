@@ -29,8 +29,11 @@ package com.example.bluehive.homeScreenSectionRules
 // ─────────────────────────────────────────────────────────────────────────────
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -63,8 +66,13 @@ import androidx.compose.foundation.text.BasicText
 import androidx.compose.foundation.text.TextAutoSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.Modifier
@@ -80,6 +88,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
@@ -89,6 +98,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.utilities.AppTypography
 import kotlin.math.ceil
+import kotlinx.coroutines.flow.collectLatest
 
 /** The gold that marks "the button to press" in the hints. */
 val PANEL_HINT_GOLD = Color(0xFFD19814)
@@ -145,6 +155,8 @@ private val KEY_SHAPE  = RoundedCornerShape(9.dp)
  * @param arrowScale   their size relative to the full 52 dp. The trailer panel
  *                     draws them at 0.8: its picture is smaller, and at full size
  *                     they crowded it (owner's call, 2026-10-22)
+ * @param arrowPresses the carousel's LEFT/RIGHT turns; each one bounces the
+ *                     arrow on that side (ArrowPresses)
  * @param timer        1 → 0 progress of the gold line along the bar's bottom
  *                     edge, read at draw time so a running countdown never
  *                     recomposes the panel
@@ -164,6 +176,7 @@ fun PanelHintLayer(
     arrows: Boolean,
     modifier: Modifier = Modifier,
     arrowScale: Float = 1f,
+    arrowPresses: ArrowPresses? = null,
     timer: (() -> Float)? = null,
 ) {
     // The last content shown, kept so an exit animation still has words to fade.
@@ -190,17 +203,17 @@ fun PanelHintLayer(
 
         AnimatedVisibility(
             visible  = arrows,
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp),
+            modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp - ARROW_BOUNCE_ROOM),
             enter    = fadeIn(tween(250)),
             exit     = fadeOut(tween(200))
-        ) { BrowseDisc(left = true, scale = arrowScale) }
+        ) { BrowseDisc(left = true, scale = arrowScale, presses = { arrowPresses?.left ?: 0 }) }
 
         AnimatedVisibility(
             visible  = arrows,
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 8.dp - ARROW_BOUNCE_ROOM),
             enter    = fadeIn(tween(250)),
             exit     = fadeOut(tween(200))
-        ) { BrowseDisc(left = false, scale = arrowScale) }
+        ) { BrowseDisc(left = false, scale = arrowScale, presses = { arrowPresses?.right ?: 0 }) }
 
         AnimatedVisibility(
             visible  = legend,
@@ -394,10 +407,61 @@ private fun OutlineKey(width: Dp, glyph: DrawScope.() -> Unit) {
 /** Full size of the edge arrows; a panel may draw them smaller (arrowScale). */
 private val BROWSE_DISC = 52.dp
 
+/**
+ * The LEFT/RIGHT turns of a panel's carousel, one count per side that only
+ * goes up. The carousel calls [press] on every turn it takes (the presses its
+ * rate limit swallows do not count), and each arrow bounces when its count
+ * moves.
+ */
+@Stable
+class ArrowPresses {
+    var left by mutableIntStateOf(0)
+        private set
+    var right by mutableIntStateOf(0)
+        private set
+
+    /** A turn of the carousel: -1 for LEFT, +1 for RIGHT. */
+    fun press(direction: Int) {
+        if (direction < 0) left++ else right++
+    }
+}
+
+/** How far an arrow dips at the start of its bounce, and how far it overshoots. */
+internal const val ARROW_BOUNCE_DOWN = 0.86f
+internal const val ARROW_BOUNCE_OVER = 1.06f
+
+/** Room around a disc for its overshoot, so a fade never clips it (see PulsingBrowseChip). */
+private val ARROW_BOUNCE_ROOM = 2.dp
+
+/**
+ * One of the big LEFT/RIGHT arrows at the picture's edges.
+ *
+ * EACH TURN BOUNCES IT, so a press visibly lands on the arrow it names (owner,
+ * 2026-10-31): down to [ARROW_BOUNCE_DOWN], up past its size to
+ * [ARROW_BOUNCE_OVER], and back to exactly its size, about a third of a
+ * second in all. A press mid-bounce starts a fresh one from wherever the disc
+ * is. Its count ([presses]) is read in a flow, not in composition, and the
+ * scale in the layer, so a bounce never recomposes the panel; the first value
+ * is skipped, so a disc that fades in does not bounce for presses made before.
+ */
 @Composable
-private fun BrowseDisc(left: Boolean, scale: Float) {
+private fun BrowseDisc(left: Boolean, scale: Float, presses: () -> Int) {
+    val bounce = remember { Animatable(1f) }
+    LaunchedEffect(Unit) {
+        var seen = presses()
+        snapshotFlow { presses() }.collectLatest { count ->
+            if (count == seen) return@collectLatest
+            seen = count
+            bounce.animateTo(ARROW_BOUNCE_DOWN, tween(70, easing = FastOutLinearInEasing))
+            bounce.animateTo(ARROW_BOUNCE_OVER, tween(120, easing = LinearOutSlowInEasing))
+            bounce.animateTo(1f, tween(150, easing = FastOutSlowInEasing))
+        }
+    }
     Box(
-        modifier         = Modifier.size(BROWSE_DISC * scale).clip(CircleShape).background(ARROW_DISC).border(1.5.dp, ARROW_DISC_EDGE, CircleShape),
+        modifier         = Modifier
+            .padding(ARROW_BOUNCE_ROOM)
+            .graphicsLayer { scaleX = bounce.value; scaleY = bounce.value }
+            .size(BROWSE_DISC * scale).clip(CircleShape).background(ARROW_DISC).border(1.5.dp, ARROW_DISC_EDGE, CircleShape),
         contentAlignment = Alignment.Center
     ) {
         Canvas(Modifier.size(24.dp * scale)) {

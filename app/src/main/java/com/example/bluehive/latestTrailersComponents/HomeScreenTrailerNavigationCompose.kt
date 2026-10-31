@@ -57,6 +57,9 @@ fun HomeScreenTrailerNavigationCompose(
     isPaused: Boolean = false,
     // The panel is entered (even while its trailer plays): titles sit top-right.
     raisedCaption: Boolean = false,
+    // Told of each LEFT/RIGHT turn (-1 / +1) the moment it is taken, so the
+    // panel can bounce that arrow (PanelHints.ArrowPresses).
+    onTurn: (Int) -> Unit = {},
     onTrailerClick: (LatestTrailer) -> Unit = {}
 ) {
     val context = LocalContext.current
@@ -215,6 +218,7 @@ fun HomeScreenTrailerNavigationCompose(
                             isManualNavigation = true
                             currentIndex = (currentIndex - 1 + trailers.size) % trailers.size
                             BlueHiveApplication.playHoverSound()
+                            onTurn(-1)
                         }
                         true
                     }
@@ -236,6 +240,7 @@ fun HomeScreenTrailerNavigationCompose(
                             isManualNavigation = true
                             currentIndex = (currentIndex + 1) % trailers.size
                             BlueHiveApplication.playHoverSound()
+                            onTurn(1)
                         }
                         true
                     }
