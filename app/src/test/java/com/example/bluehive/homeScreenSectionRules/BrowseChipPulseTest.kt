@@ -14,7 +14,7 @@ class BrowseChipPulseTest {
 
     @Test
     fun `the pulse is moderate and about a second and a half a beat`() {
-        assertTrue(BROWSE_PULSE_SCALE in 1.1f..1.2f)
+        assertTrue(BROWSE_PULSE_SCALE in 1.2f..1.3f)
         assertTrue(BROWSE_PULSE_MS * 2 in 1000..1800)
     }
 
@@ -30,7 +30,21 @@ class BrowseChipPulseTest {
         val pulse = code.substringAfter("private fun PulsingBrowseChip(").substringBefore("private fun HintChip(")
         assertTrue(pulse.contains("rememberInfiniteTransition"))
         assertTrue(pulse.contains("RepeatMode.Reverse"))
-        assertTrue(Regex("""graphicsLayer\s*\{\s*scaleX = scale\.value; scaleY = scale\.value\s*\}""").containsMatchIn(pulse))
+        assertTrue(pulse.contains("scaleX = scale.value; scaleY = scale.value"))
+        assertTrue(pulse.contains("Box(Modifier.graphicsLayer {"))
         assertTrue(!pulse.contains("by rememberInfiniteTransition"))
+    }
+
+    @Test
+    fun `at its biggest the chip stays inside where it used to rest, clear of the frame`() {
+        // Grown from its centre, the chip passes its own right and top edges by
+        // half of what it grows; the fixed shift is that, plus the clearance.
+        val pulse = code.substringAfter("private fun PulsingBrowseChip(").substringBefore("private fun HintChip(")
+        assertTrue(pulse.contains("val grow = (BROWSE_PULSE_SCALE - 1f) / 2f"))
+        assertTrue(pulse.contains("translationX = -(size.width * grow + clear)"))
+        assertTrue(pulse.contains("translationY = size.height * grow + clear"))
+        val width = 110f
+        val grownRight = width / 2 + width * BROWSE_PULSE_SCALE / 2 - (width * (BROWSE_PULSE_SCALE - 1f) / 2f + 4f)
+        assertTrue(grownRight <= width - 4f + 0.001f)
     }
 }

@@ -216,17 +216,25 @@ fun PanelHintLayer(
 }
 
 /** How far the "Click to browse" chip grows at the top of each pulse. */
-internal const val BROWSE_PULSE_SCALE = 1.15f
+internal const val BROWSE_PULSE_SCALE = 1.25f
 
 /** One way of the pulse (small to big, or back); a whole beat is twice this. */
 internal const val BROWSE_PULSE_MS = 650
+
+/** Extra room kept between the chip at its biggest and the picture's frame. */
+private val BROWSE_PULSE_CLEARANCE = 4.dp
 
 /**
  * The "Click to browse" chip, pulsing big and back for as long as it shows,
  * so the cue is hard to miss (owner's call, 2026-10-30). It only exists while
  * a panel has focus, so the pulse starts and stops with that focus. The scale
- * is read in the layer, so a pulse never recomposes the panel; it grows from
- * its centre, which the 8 dp corner padding has room for.
+ * is read in the layer, so a pulse never recomposes the panel.
+ *
+ * IT SITS IN FROM THE CORNER by exactly what it grows past its own edges at
+ * the top of a pulse, plus [BROWSE_PULSE_CLEARANCE]: grown from its centre in
+ * the corner itself, it ran into the frame drawn around the picture (owner,
+ * 2026-10-30). The shift is fixed, measured from the chip's own size, so it
+ * fits whatever the label is.
  */
 @Composable
 private fun PulsingBrowseChip(label: String) {
@@ -236,7 +244,13 @@ private fun PulsingBrowseChip(label: String) {
         animationSpec = infiniteRepeatable(tween(BROWSE_PULSE_MS, easing = FastOutSlowInEasing), RepeatMode.Reverse),
         label         = "browsePulseScale"
     )
-    Box(Modifier.graphicsLayer { scaleX = scale.value; scaleY = scale.value }) {
+    Box(Modifier.graphicsLayer {
+        val grow = (BROWSE_PULSE_SCALE - 1f) / 2f
+        val clear = BROWSE_PULSE_CLEARANCE.toPx()
+        translationX = -(size.width * grow + clear)
+        translationY = size.height * grow + clear
+        scaleX = scale.value; scaleY = scale.value
+    }) {
         HintChip(edge = HINT_EDGE_FOCUS) {
             HintItem(label, main = true) { ClickKey() }
         }
