@@ -36,22 +36,22 @@ fun PlaybackLoadingOverlay(
 ) {
     if (session.isExtracting) {
         ExtractionFocusTrap {
-            val stageWords = when (session.extractStage) {
-                0, 1 -> "Locating stream source…"
-                2    -> "Loading stream source…"
-                3    -> "Preparing video player…"
-                else -> "Almost there…"
-            }
+            // The browser's real step when the server reports one, else the
+            // stage timer's words (LoadingWords.kt); either way it alternates
+            // with reassurance once one line runs long.
+            val base = session.extractStep?.let(::stepWords) ?: stageWords(session.extractStage)
+            val stageLine = withSlowLines(base)
             ExtractionLoadingOverlay(
                 status = if (useBackendStatus && !session.isBackendExtract) {
-                    session.backendStatus.ifBlank { stageWords }
+                    session.backendStatus.ifBlank { stageLine }
                 } else {
-                    stageWords
+                    stageLine
                 },
                 stage = session.extractStage,
                 // Source chain only: anime extraction is not a chain.
                 note  = if (session.isBackendExtract) session.extractNote else null,
                 chain = if (session.isBackendExtract) session.extractAttempt to session.chainTotal else null,
+                source = if (session.isBackendExtract) session.extractSourceLabel else null,
             )
         }
     }
@@ -110,7 +110,7 @@ fun BoxScope.AnimeServerOverlays(anime: AnimePlaybackController, dongleRegular: 
         // check (AnimePlaybackController.cancelServerCheck).
         ExtractionFocusTrap {
             ExtractionLoadingOverlay(
-                status = "Checking the site for available servers…",
+                status = "Visiting the site to list its servers…",
                 stage  = 2
             )
         }

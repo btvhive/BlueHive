@@ -354,7 +354,7 @@ object SourceCatalog {
 
     /**
      * How many sources a chain that starts at [firstName] can try in all -- the
-     * "of 4" in the loading screen's "Finding a stream: trying 2 of 4".
+     * "of 4" in the loading screen's "Browsing source 2 of 4".
      *
      * EXACTLY THE ATTEMPTS THE CHAIN CAN MAKE, not the length of the list: the
      * pressed source, plus every entry below it that [nextInChainFrom] would

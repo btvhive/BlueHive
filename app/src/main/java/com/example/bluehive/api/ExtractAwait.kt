@@ -75,6 +75,8 @@ suspend fun BluehiveApiService.extractStreamAwait(
     device:  String? = null,
     audio:   String? = null,
     server:  String? = null,
+    /** Told each step the server's browser reports while the job runs. */
+    onStep:  ((String) -> Unit)? = null,
 ): Response<ExtractResponse> {
 
     val started = System.currentTimeMillis()
@@ -128,6 +130,7 @@ suspend fun BluehiveApiService.extractStreamAwait(
         // server-side, so keep asking until the deadline.
         if (pollResp == null || !pollResp.isSuccessful) continue
         val poll = pollResp.body() ?: continue
+        poll.step?.let { onStep?.invoke(it) }
 
         when (poll.state) {
             "done" -> {

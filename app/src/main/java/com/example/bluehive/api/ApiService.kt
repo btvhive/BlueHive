@@ -482,6 +482,12 @@ data class ExtractJobResponse(
     val result: ExtractResponse? = null,
     val error:  ExtractJobError? = null,
     val ms:     Long? = null,
+    /**
+     * The server browser's step while state is "running" ("queued",
+     * "opening", "page_loaded", "player_started", "stream_caught",
+     * "checking"). Absent on older servers.
+     */
+    val step:   String? = null,
 )
 
 data class ExtractJobError(

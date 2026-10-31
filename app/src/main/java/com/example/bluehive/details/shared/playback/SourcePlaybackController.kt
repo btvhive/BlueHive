@@ -118,6 +118,8 @@ class SourcePlaybackController internal constructor(
         // this field exists to prevent.
         session.extractAttempt   = attempt
         session.backendStatus    = "Finding your stream…"
+        session.extractSourceLabel = src.coverName
+        session.extractStep      = null
         // A fresh press starts a fresh chain: count what it can try, and drop
         // any note left from the last one.
         if (attempt == 1) {
@@ -149,6 +151,7 @@ class SourcePlaybackController internal constructor(
                 title   = mediaTitle,
                 profile = profileId,
                 device  = SessionManager.get().deviceFingerprint,
+                onStep  = { session.extractStep = it },
             )
         }
         val tookMs = System.currentTimeMillis() - startedAt
@@ -157,6 +160,7 @@ class SourcePlaybackController internal constructor(
         session.isBackendExtract = false
         session.extractPending   = false
         session.backendStatus    = ""
+        session.extractStep      = null
 
         // The user left. Do not raise an error and do not start a player over
         // whatever they are looking at now.
@@ -199,8 +203,8 @@ class SourcePlaybackController internal constructor(
                 session.isBackendExtract = true
                 session.extractPending   = true
                 session.extractStage     = 1
-                session.backendStatus    = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}\u2026"
-                session.extractNote      = "${src.coverName} didn\u2019t work \u2014 trying ${next.label}"
+                session.backendStatus    = "${src.coverName}\u2019s page had no working video, opening ${next.label}\u2026"
+                session.extractNote      = "${src.coverName}\u2019s page had no working video, opening ${next.label}\u2026"
                 extractAndPlay(
                     StreamSource(next.label, next.name, next.url),
                     attempt + 1,
@@ -279,7 +283,7 @@ class SourcePlaybackController internal constructor(
         // by its button label.
         val failedLabel = SourceCatalog.sources(BlueHiveApplication.appContext, req.apiType, req.tmdbId, req.catalogSeason, req.catalogEpisode)
             .firstOrNull { it.name.equals(failed, ignoreCase = true) }?.label ?: failed
-        session.extractNote = "$failedLabel stopped playing — trying ${next.label}"
+        session.extractNote = "$failedLabel\u2019s stream dropped, reopening on ${next.label}\u2026"
         session.extractJob = scope.launch {
             extractAndPlay(
                 StreamSource(next.label, next.name, next.url),

@@ -71,10 +71,23 @@ class PlaybackSession internal constructor() {
     var chainTotal by mutableIntStateOf(1)
 
     /**
-     * Amber line under it once a source has failed -- "VidNest didn't work,
-     * trying VidFast" -- kept up for the rest of the chain.
+     * Amber line under it once a source has failed -- "Royal Jelly's page had no working video,
+     * opening Honeycomb" -- kept up for the rest of the chain.
      */
     var extractNote by mutableStateOf<String?>(null)
+
+    /**
+     * The source being tried, by its button label ("Royal Jelly") -- the
+     * loading screen's headline, "Browsing source 1 of 3: Royal Jelly".
+     */
+    var extractSourceLabel by mutableStateOf<String?>(null)
+
+    /**
+     * The server browser's real step for the attempt on screen ("opening",
+     * "page_loaded", ...), from the job poll; null until it sends one, and on
+     * a server that does not (the stage timer's words are shown instead).
+     */
+    var extractStep by mutableStateOf<String?>(null)
 
     /** Non-null shows ExtractionErrorOverlay — a failure the user can act on. */
     var extractionError by mutableStateOf<String?>(null)
@@ -101,6 +114,8 @@ class PlaybackSession internal constructor() {
         // And its status line, for the same reason: the TV screen's headline
         // shows it for an extraction that is not the chain's.
         backendStatus         = ""
+        extractStep           = null
+        extractSourceLabel    = null
         extractStage          = 0
     }
 }

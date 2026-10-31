@@ -44,7 +44,7 @@ fun DetailsBackHandlers(
     }
 
     // ── BACK stops the server-list check ─────────────────────────────
-    // "Checking the site for available servers…", after "Choose a server" on
+    // "Visiting the site to list its servers…", after "Choose a server" on
     // a list that is not cached yet. No handler above is enabled while it
     // runs, so BACK used to fall through and leave the details page. Its
     // first 200 ms are the extraction handler's (extractPending), which

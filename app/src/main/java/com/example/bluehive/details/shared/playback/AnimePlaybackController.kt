@@ -511,7 +511,7 @@ class AnimePlaybackController internal constructor(
     }
 
     /**
-     * BACK while "Checking the site for available servers…" is up. The check
+     * BACK while "Visiting the site to list its servers…" is up. The check
      * looks like the loading screen and now acts like it: it stops, and the
      * cursor returns to the button that opened the flow. No Back handler was
      * enabled while it ran, so BACK fell through and left the details page.

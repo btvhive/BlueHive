@@ -122,10 +122,17 @@ fun ExtractionFocusTrap(content: @Composable () -> Unit) {
 }
 
 /**
- * @param chain (attempt, planned) while the backend works down the source chain
- *              -- shown as the headline "Finding a stream: trying 2 of 4", with
- *              [status] beneath it as the detail. null for waits that are not a
- *              chain (anime, server check).
+ * @param chain  (attempt, planned) while the backend works down the source
+ *               chain -- shown as the headline "Browsing source 2 of 4: Royal
+ *               Jelly", with [status] beneath it as the detail. null for waits
+ *               that are not a chain (anime, server check).
+ * @param source the source being tried, by its button label, for the headline.
+ *
+ * THE SAME LAYOUT ON EVERY TV (v576). Every text line has a fixed slot -- the
+ * headline, a two-line detail and a two-line warning -- whether or not it is
+ * showing, so the block is always the same height and sits exactly centred:
+ * nothing jumps when a warning appears or a line wraps. Sizes are in dp and
+ * sp, which scale with the screen, so the proportions match on any set.
  */
 @Composable
 fun ExtractionLoadingOverlay(
@@ -133,6 +140,7 @@ fun ExtractionLoadingOverlay(
     stage: Int,
     note: String? = null,
     chain: Pair<Int, Int>? = null,
+    source: String? = null,
 ) {
     val inf = rememberInfiniteTransition(label = "loader")
 
@@ -168,6 +176,9 @@ fun ExtractionLoadingOverlay(
                 fontSize = 16.sp,
                 fontWeight = FontWeight.ExtraBold,
                 letterSpacing = 4.sp,
+                // 8 px higher on the TV (4 dp), the owner's call; an offset, so
+                // nothing else moves.
+                modifier = Modifier.offset(y = TITLE_RAISE),
             )
 
             Spacer(Modifier.height(30.dp))
@@ -191,73 +202,81 @@ fun ExtractionLoadingOverlay(
 
             Spacer(Modifier.height(38.dp))
 
-            // WHICH SOURCE, OF HOW MANY. A failover used to restart the same
-            // stage words with nothing to say a source had died and another had
-            // taken over, so a long chain read as one stuck load. "of N" is the
-            // attempts this chain can actually make (SourceCatalog.plannedAttempts),
-            // and a chain of one says only "Finding a stream".
-            if (chain != null) {
-                val (attempt, planned) = chain
-                val of = maxOf(planned, attempt)
-                val headline = if (of > 1) "Finding a stream: trying $attempt of $of" else "Finding a stream"
-                AnimatedContent(
-                    targetState = headline,
-                    transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
-                    label = "chain"
-                ) { h ->
-                    Text(
-                        h,
-                        color         = Color.White.copy(0.95f),
-                        fontSize      = 19.sp,
-                        fontWeight    = FontWeight.Normal,
-                        textAlign     = TextAlign.Center,
-                        letterSpacing = 0.3.sp,
-                        modifier      = Modifier.widthIn(max = 420.dp)
-                    )
+            // WHICH SOURCE, OF HOW MANY, AND WHICH. A failover used to restart
+            // the same stage words with nothing to say a source had died and
+            // another had taken over, so a long chain read as one stuck load.
+            // "of N" is the attempts this chain can actually make
+            // (SourceCatalog.plannedAttempts); a chain of one names the source.
+            Box(Modifier.height(HEADLINE_SLOT), contentAlignment = Alignment.Center) {
+                if (chain != null) {
+                    val (attempt, planned) = chain
+                    AnimatedContent(
+                        targetState = chainHeadline(attempt, planned, source),
+                        transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
+                        label = "chain"
+                    ) { h ->
+                        Text(
+                            h,
+                            color         = Color.White.copy(0.95f),
+                            fontSize      = 19.sp,
+                            fontWeight    = FontWeight.Normal,
+                            textAlign     = TextAlign.Center,
+                            letterSpacing = 0.3.sp,
+                            maxLines      = 1,
+                            modifier      = Modifier.widthIn(max = 520.dp)
+                        )
+                    }
                 }
-                Spacer(Modifier.height(8.dp))
             }
 
-            AnimatedContent(
-                targetState = status,
-                transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
-                label = "status"
-            ) { s ->
-                Text(
-                    s,
-                    // Under a headline the stage words are the detail, so they
-                    // step back; alone they are the message, as before.
-                    color         = Color.White.copy(if (chain != null) 0.6f else 0.88f),
-                    fontSize      = if (chain != null) 14.sp else 17.sp,
-                    fontWeight    = FontWeight.Light,
-                    textAlign     = TextAlign.Center,
-                    letterSpacing = 0.3.sp,
-                    modifier      = Modifier.widthIn(max = 300.dp)
-                )
-            }
+            Spacer(Modifier.height(6.dp))
 
-            // Persistent warning line (retry banner). Fades in and then STAYS,
-            // independent of the status line churning above it.
-            if (note != null) {
-                Spacer(Modifier.height(10.dp))
+            Box(Modifier.height(STATUS_SLOT), contentAlignment = Alignment.TopCenter) {
                 AnimatedContent(
-                    targetState = note,
+                    targetState = status,
                     transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
-                    label = "note"
-                ) { n ->
+                    label = "status"
+                ) { s ->
                     Text(
-                        n,
-                        color         = Color(0xFFFFB74D).copy(0.95f),
-                        fontSize      = 13.sp,
-                        fontWeight    = FontWeight.Normal,
+                        s,
+                        // Under a headline the stage words are the detail, so they
+                        // step back; alone they are the message, as before.
+                        color         = Color.White.copy(if (chain != null) 0.6f else 0.88f),
+                        fontSize      = if (chain != null) 14.sp else 17.sp,
+                        fontWeight    = FontWeight.Light,
                         textAlign     = TextAlign.Center,
                         letterSpacing = 0.3.sp,
-                        modifier      = Modifier.widthIn(max = 300.dp)
+                        maxLines      = 2,
+                        modifier      = Modifier.widthIn(max = 340.dp)
                     )
                 }
             }
 
-            Spacer(Modifier.height(26.dp))
+            // Persistent warning line (a source failed). Fades in and then
+            // STAYS, independent of the status line churning above it; its
+            // slot is kept even when empty, so it never pushes anything.
+            Box(Modifier.height(NOTE_SLOT), contentAlignment = Alignment.TopCenter) {
+                if (note != null) {
+                    AnimatedContent(
+                        targetState = note,
+                        transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
+                        label = "note"
+                    ) { n ->
+                        Text(
+                            n,
+                            color         = Color(0xFFFFB74D).copy(0.95f),
+                            fontSize      = 13.sp,
+                            fontWeight    = FontWeight.Normal,
+                            textAlign     = TextAlign.Center,
+                            letterSpacing = 0.3.sp,
+                            maxLines      = 2,
+                            modifier      = Modifier.widthIn(max = 340.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
 
             Box(
                 Modifier
@@ -302,6 +321,26 @@ fun ExtractionLoadingOverlay(
         }
     }
 }
+
+/** "Browsing source 2 of 4: Royal Jelly"; a chain of one, "Browsing Royal Jelly". */
+internal fun chainHeadline(attempt: Int, planned: Int, source: String?): String {
+    val of = maxOf(planned, attempt)
+    val name = source?.takeIf { it.isNotBlank() }
+    return when {
+        of > 1 && name != null -> "Browsing source $attempt of $of: $name"
+        of > 1                 -> "Browsing source $attempt of $of"
+        name != null           -> "Browsing $name"
+        else                   -> "Browsing for your stream"
+    }
+}
+
+/** How far the title is lifted: 8 px on the 2 px-per-dp TV. */
+internal val TITLE_RAISE = (-4).dp
+
+/** The fixed text slots that keep the block one height (see the overlay's doc). */
+internal val HEADLINE_SLOT = 28.dp
+internal val STATUS_SLOT = 44.dp
+internal val NOTE_SLOT = 36.dp
 
 @Composable
 private fun HoneycombBackground() {
