@@ -1,7 +1,8 @@
 """Makes the Latest Trailers panel's art, the metal TV the trailers play in
 (v557, option C from the owner's mock-ups, 2026-10-31; v558 lifted to the
 mock-ups' "level 2" tones, as C read too dark on the TV; v559 to "level 1";
-v560 moved the rim highlight to the top-right and bottom-left):
+v560 moved the rim highlight to the top-right and bottom-left; v562 softened
+the glare and thinned the line, option E / 0.8 px from the mock-ups):
 
   app/src/main/res/drawable-xhdpi/trailer_frame.webp
       the set: a dark metal rim (RIM_TOP -> RIM_BOTTOM) around a darker panel
@@ -43,9 +44,10 @@ RIM_CORNER_DP = 10.0
 PANEL_CORNER_DP = 6.0
 RIM_TOP, RIM_BOTTOM = (0x2C, 0x2D, 0x32), (0x1A, 0x1B, 0x1E)
 PANEL_TOP, PANEL_BOTTOM = (0x1A, 0x1A, 0x1E), (0x0B, 0x0B, 0x0D)
-RIM_HIGHLIGHT = 0.55         # the rim's light line at its brightest (top-right, bottom-left)
-GLARE = 0.30                 # the soft white glare on the metal behind it, at its brightest
-GLARE_RADIUS_DP = 14.0       # how far the glare spreads from each corner
+RIM_HIGHLIGHT = 0.40         # the rim's light line at its brightest (top-right, bottom-left)
+RIM_LINE_PX = 0.8            # its width: a hairline (v562; 1.3 before)
+GLARE = 0.06                 # the soft white glare on the metal behind it, at its brightest
+GLARE_RADIUS_DP = 10.0       # how far the glare spreads from each corner
 LABEL = 'LATEST TRAILERS'
 LABEL_SP, LABEL_SPACING_DP, LABEL_RGB = 8.5, 3.0, (205, 210, 222)
 GLOW_PLATE_OUT_DP = 1.5      # how far the glow's solid plate shows beyond the rim
@@ -146,7 +148,7 @@ def make_frame():
     # all-round line kept at the bottom-right. Along the outline, the bright
     # line follows how far a point is toward the top-right/bottom-left
     # diagonal ends; the faint one fades in toward the bottom-right.
-    edge = rr_outline(size, (0.5, 0.5, w - 0.5, h - 0.5), px(RIM_CORNER_DP), 1.3)
+    edge = rr_outline(size, (0.5, 0.5, w - 0.5, h - 0.5), px(RIM_CORNER_DP), RIM_LINE_PX)
     white = Image.new('RGB', size, (255, 255, 255))
     weight = Image.new('L', size, 0)
     wp = weight.load()
