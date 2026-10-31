@@ -43,11 +43,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -239,12 +234,6 @@ internal val SHELF_TITLE_BRUSH = Brush.verticalGradient(
     0.2f to Color.White,
     1f   to Color(0xFF7C8190),
 )
-
-// The glow under it (ShelfTitle): white at this opacity, this soft, and the
-// room kept around the title so the glow is never cut off.
-internal const val SHELF_TITLE_GLOW_ALPHA = 0.35f
-internal val SHELF_TITLE_GLOW_BLUR = 5.dp
-internal val SHELF_TITLE_GLOW_ROOM = 10.dp
 
 private val SHELF_TITLE_STYLE = TextStyle(
     brush      = SHELF_TITLE_BRUSH,
@@ -801,75 +790,13 @@ fun ShelfStack(
         }
         // 21sp since v551 (23 before, the owner's call), and 1dp lower so the
         // smaller line keeps its centre beside the MOVIES / TV SHOWS / ANIME tabs.
-        // Filled with SHELF_TITLE_BRUSH since v552, with a glow since v553.
-        ShelfTitle(
-            text  = focusedShelfTitle,
-            alpha = { headerAlpha },
-            modifier = Modifier.offset(x = (-29).dp - SHELF_TITLE_GLOW_ROOM, y = (-69).dp - SHELF_TITLE_GLOW_ROOM),
-        )
-    }
-}
-
-/**
- * The row title: SHELF_TITLE_BRUSH's white-to-steel fill, over a faint white
- * glow from the top half of the letters only (v553, the owner's pick "G1"
- * from mock-ups on the real screen).
- *
- * THE GLOW IS A SECOND COPY OF THE TITLE, drawn first: white, with a soft
- * white text shadow (the glow), then masked to the top half of the line with
- * a gradient (DstIn on its own offscreen layer). Its white fill sits exactly
- * under the real title, which is opaque, so only the halo shows. Text shadows
- * are drawn by the GPU on every Android version this app runs on; a blur
- * modifier would only work from Android 12.
- *
- * Both sit inside [SHELF_TITLE_GLOW_ROOM] on every side, so the glow is inside
- * the title's bounds: the fade-in (alpha below 1) draws offscreen at the size
- * of those bounds and would otherwise cut the glow off.
- */
-@Composable
-private fun ShelfTitle(text: String, alpha: () -> Float, modifier: Modifier = Modifier) {
-    val density = LocalDensity.current
-    val glowStyle = remember(density) {
-        TextStyle(
-            color      = Color.White,
-            fontSize   = SHELF_TITLE_SIZE,
-            fontFamily = AppTypography.passionRegular,
-            shadow     = Shadow(
-                color      = Color.White.copy(alpha = SHELF_TITLE_GLOW_ALPHA),
-                offset     = Offset.Zero,
-                blurRadius = with(density) { SHELF_TITLE_GLOW_BLUR.toPx() },
-            ),
-        )
-    }
-    Box(modifier.graphicsLayer { this.alpha = alpha() }) {
+        // Filled with SHELF_TITLE_BRUSH since v552.
         Text(
-            text     = text,
-            style    = glowStyle,
+            text = focusedShelfTitle,
+            style = SHELF_TITLE_STYLE,
             modifier = Modifier
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                .drawWithCache {
-                    // Keep the glow over the top half of the LINE (inside the
-                    // room), fading out by three quarters of the way down.
-                    val room = SHELF_TITLE_GLOW_ROOM.toPx()
-                    val line = size.height - 2 * room
-                    val keep = (room + line * 0.5f) / size.height
-                    val gone = (room + line * 0.75f) / size.height
-                    val mask = Brush.verticalGradient(
-                        0f   to Color.Black,
-                        keep to Color.Black,
-                        gone to Color.Transparent,
-                    )
-                    onDrawWithContent {
-                        drawContent()
-                        drawRect(mask, blendMode = BlendMode.DstIn)
-                    }
-                }
-                .padding(SHELF_TITLE_GLOW_ROOM),
-        )
-        Text(
-            text     = text,
-            style    = SHELF_TITLE_STYLE,
-            modifier = Modifier.padding(SHELF_TITLE_GLOW_ROOM),
+                .offset(x = (-29).dp, y = (-69).dp)
+                .graphicsLayer { alpha = headerAlpha },
         )
     }
 }
