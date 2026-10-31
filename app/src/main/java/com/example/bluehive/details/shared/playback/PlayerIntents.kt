@@ -162,6 +162,9 @@ object PlayerIntents {
         dub: Boolean,
         /** The provider this playback started on -- see SERVER below. */
         server: String?,
+        /** Up Next, as for the HLS player -- see hlsPlayerExtras. */
+        next: UpNextEpisode? = null,
+        unattended: Int = 0,
     ): List<PlayerExtra> = listOf(
         PlayerExtra.Text("M3U8_URL", m3u8),                  // try the CDN directly
         PlayerExtra.Text("M3U8_FALLBACK_URL", relayUrl(request, m3u8, mediaTitle, profileId, sourceName)),  // relay if that's blocked
@@ -198,7 +201,7 @@ object PlayerIntents {
         // recovery could silently move the viewer to a different source
         // mid-episode.
         PlayerExtra.Text("SERVER", server),
-    )
+    ) + upNextExtras(next, unattended)
 
     fun miruroOnDevice(
         context: Context,
@@ -212,8 +215,10 @@ object PlayerIntents {
         mediaTitle: String,
         dub: Boolean,
         server: String?,
+        next: UpNextEpisode? = null,
+        unattended: Int = 0,
     ): Intent = Intent(context, MiruroPlayerActivity::class.java).putPlayerExtras(
-        miruroOnDeviceExtras(request, m3u8, referer, userAgent, sourceName, profileId, mediaType, mediaTitle, dub, server)
+        miruroOnDeviceExtras(request, m3u8, referer, userAgent, sourceName, profileId, mediaType, mediaTitle, dub, server, next, unattended)
     )
 
     /**
@@ -255,6 +260,9 @@ object PlayerIntents {
         playingDub: Boolean,
         /** server ?: the default server's name -- see SERVER below. */
         server: String?,
+        /** Up Next, as for the HLS player -- see hlsPlayerExtras. */
+        next: UpNextEpisode? = null,
+        unattended: Int = 0,
     ): List<PlayerExtra> = listOf(
         PlayerExtra.Text("M3U8_URL", body.m3u8),
         // Tagged server-side already, so no animeRelayUrl() here — that
@@ -286,7 +294,7 @@ object PlayerIntents {
         // then picks its own default, exactly as it did for the original
         // extraction.
         PlayerExtra.Text("SERVER", server),
-    )
+    ) + upNextExtras(next, unattended)
 
     fun miruroBackend(
         context: Context,
@@ -298,8 +306,10 @@ object PlayerIntents {
         mediaTitle: String,
         playingDub: Boolean,
         server: String?,
+        next: UpNextEpisode? = null,
+        unattended: Int = 0,
     ): Intent = Intent(context, MiruroPlayerActivity::class.java).putPlayerExtras(
-        miruroBackendExtras(request, body, sourceName, profileId, mediaType, mediaTitle, playingDub, server)
+        miruroBackendExtras(request, body, sourceName, profileId, mediaType, mediaTitle, playingDub, server, next, unattended)
     )
 
     // ── MiruroExtractorActivity: the on-device fallback. The same on both screens. ──

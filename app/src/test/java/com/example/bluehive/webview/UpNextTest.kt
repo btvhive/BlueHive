@@ -26,8 +26,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * v580: the last 10 s of an episode show the next one, and it opens when the
- * stream ends; every third untouched episode asks "Still watching?" 30 s out.
+ * v580/v581: the last minute of an episode shows the next one, counting down
+ * from 60, and it opens when the stream ends; every third untouched episode
+ * asks "Still watching?" 20 s before the card. TV shows and anime alike.
  */
 class UpNextTest {
 
@@ -37,10 +38,10 @@ class UpNextTest {
         upNextPhaseFor(remaining, dur, hasNext, cancelled, ask, dismissed)
 
     @Test
-    fun `the card shows for the last ten seconds of the stream`() {
-        assertEquals(10_000L, UP_NEXT_WINDOW_MS)
-        assertEquals(UpNextPhase.Hidden, phase(10_001))
-        assertEquals(UpNextPhase.Card, phase(10_000))
+    fun `the card shows for the last minute of the stream`() {
+        assertEquals(60_000L, UP_NEXT_WINDOW_MS)
+        assertEquals(UpNextPhase.Hidden, phase(60_001))
+        assertEquals(UpNextPhase.Card, phase(60_000))
         assertEquals(UpNextPhase.Card, phase(0))
         assertEquals(UpNextPhase.Hidden, phase(5_000, cancelled = true))
     }
@@ -52,13 +53,13 @@ class UpNextTest {
     }
 
     @Test
-    fun `the prompt shows 30 s out, then the card 20 s later`() {
-        assertEquals(30_000L, STILL_WATCHING_LEAD_MS)
-        assertEquals(UpNextPhase.Hidden, phase(30_001, ask = true))
-        assertEquals(UpNextPhase.StillWatching, phase(30_000, ask = true))
-        assertEquals(UpNextPhase.StillWatching, phase(10_001, ask = true))
-        assertEquals(UpNextPhase.Card, phase(10_000, ask = true))
-        assertEquals(UpNextPhase.Hidden, phase(20_000, ask = true, dismissed = true))
+    fun `the prompt shows 80 s out, then the card 20 s later`() {
+        assertEquals(80_000L, STILL_WATCHING_LEAD_MS)
+        assertEquals(UpNextPhase.Hidden, phase(80_001, ask = true))
+        assertEquals(UpNextPhase.StillWatching, phase(80_000, ask = true))
+        assertEquals(UpNextPhase.StillWatching, phase(60_001, ask = true))
+        assertEquals(UpNextPhase.Card, phase(60_000, ask = true))
+        assertEquals(UpNextPhase.Hidden, phase(70_000, ask = true, dismissed = true))
     }
 
     @Test
@@ -74,9 +75,9 @@ class UpNextTest {
     }
 
     @Test
-    fun `the countdown runs 10 to 1 on the stream's clock`() {
-        assertEquals(10, upNextSeconds(10_000))
-        assertEquals(10, upNextSeconds(9_001))
+    fun `the countdown runs 60 to 1 on the stream's clock`() {
+        assertEquals(60, upNextSeconds(60_000))
+        assertEquals(60, upNextSeconds(59_001))
         assertEquals(7, upNextSeconds(6_500))
         assertEquals(1, upNextSeconds(1))
         assertEquals(1, upNextSeconds(0))
@@ -118,6 +119,17 @@ class UpNextTest {
     )
 
     @Test
+    fun `the anime player is told the next episode too`() {
+        val extras = PlayerIntents.miruroBackendExtras(
+            request = PlaybackRequest.Episode(37854, 1, 1, "Romance Dawn"), body = body, sourceName = "Miruro (Sub)",
+            profileId = 7, mediaType = "tv", mediaTitle = "One Piece", playingDub = false, server = null,
+            next = UpNextEpisode(2, "Enter the Great Swordsman", null), unattended = 1,
+        )
+        assertTrue(PlayerExtra.Whole(HlsPlayerActivity.EXTRA_NEXT_EPISODE, 2) in extras)
+        assertTrue(PlayerExtra.Whole(HlsPlayerActivity.EXTRA_UNATTENDED, 1) in extras)
+    }
+
+    @Test
     fun `the player is told the next episode, and nothing without one`() {
         val extras = hls(UpNextEpisode(2, "Compulsion", "https://image.tmdb.org/t/p/w300/s2.jpg"), unattended = 2)
         assertTrue(PlayerExtra.Whole(HlsPlayerActivity.EXTRA_NEXT_EPISODE, 2) in extras)
@@ -130,23 +142,54 @@ class UpNextTest {
     }
 
     @Test
-    fun `the still stays TMDB's small one, and the overlay is drawn last`() {
+    fun `the still stays TMDB's small one, at half the v580 size`() {
         val upNext = MainSource.code("webview/hls/UpNext.kt")
         assertTrue(upNext.contains(".size(300, 169)"))
         assertFalse(upNext.contains("fullSizeStill"))
-        val player = MainSource.code("webview/hls/HlsPlayerActivity.kt")
-        val subs = player.indexOf("SubtitleLayer()\n")
-        val card = player.indexOf("UpNextCard(next, upNextRemainingMs")
-        assertTrue(subs in 0 until card)
+        assertTrue(upNext.contains("UP_NEXT_STILL_W = 110.dp"))
+        assertTrue(upNext.contains("UP_NEXT_STILL_H = 62.dp"))
+        assertTrue(upNext.contains(".height(22.dp)"))
     }
 
     @Test
-    fun `an ended episode opens the next through the details screen`() {
-        val player = MainSource.code("webview/hls/HlsPlayerActivity.kt")
-        assertTrue(player.contains("autoplayAtEnd()) {\n                            playNextEpisode(\"episode ended\")"))
-        val controller = MainSource.code("details/shared/playback/SourcePlaybackController.kt")
-        assertTrue(controller.contains("HlsPlayerActivity.RESULT_PLAY_NEXT"))
-        assertTrue(controller.contains("LaunchedEffect(controller.playNextHop)"))
-        assertTrue(controller.contains("sources.firstOrNull { it.name.equals(hop.source, ignoreCase = true) }"))
+    fun `both players draw it last and open the next episode when one ends`() {
+        for (path in listOf("webview/hls/HlsPlayerActivity.kt", "webview/miruro/MiruroPlayerActivity.kt")) {
+            val player = MainSource.code(path)
+            val subs = player.indexOf("SubtitleLayer()\n")
+            val card = player.indexOf("upNext?.Overlay(this)")
+            assertTrue(path, subs in 0 until card)
+            assertTrue(path, player.contains("upNext?.autoplayAtEnd(player) == true"))
+            assertTrue(path, player.contains("playNextEpisode(\"episode ended\")"))
+            assertTrue(path, player.contains("RESULT_PLAY_NEXT, data)"))
+            assertTrue(path, player.contains("upNext?.onKeyDown()"))
+        }
+    }
+
+    @Test
+    fun `the details screen opens the next episode for shows and anime`() {
+        val source = MainSource.code("details/shared/playback/SourcePlaybackController.kt")
+        assertTrue(source.contains("LaunchedEffect(controller.playNextHop)"))
+        assertTrue(source.contains("sources.firstOrNull { it.name.equals(hop.source, ignoreCase = true) }"))
+        val anime = MainSource.code("details/shared/playback/AnimePlaybackController.kt")
+        assertTrue(anime.contains("LaunchedEffect(controller.playNextHop)"))
+        assertTrue(anime.contains("controller.playerLauncher = rememberLauncherForActivityResult("))
+        assertFalse("anime players launch for their result now", anime.contains("context.startActivity("))
+        assertTrue(anime.contains("launchExtract(url, pendingDub, null)"))
+        val screen = MainSource.code("details/tvshowdetails/TvShowDetailsScreen.kt")
+        assertEquals(2, Regex("""onNextEpisode = \{ season, episode, title -> episodesState.recordUpNext""").findAll(screen).count())
+    }
+
+    @Test
+    fun `the source overlay is closed before the page shows again`() {
+        val episodes = MainSource.code("details/tvshowdetails/UpNextEpisodes.kt")
+        assertTrue(episodes.contains("selectedEpisodeOverlayIndex = -1"))
+        // Straight from the result, not a frame later from the effect.
+        for (path in listOf("details/shared/playback/SourcePlaybackController.kt", "details/shared/playback/AnimePlaybackController.kt")) {
+            val code = MainSource.code(path)
+            val result = code.indexOf("val hop = playNextHopFrom(result.data) ?: return")
+            val record = code.indexOf("onNextEpisode(hop.season, hop.episode, hop.title)")
+            assertTrue(path, result in 0 until record)
+            assertEquals(path, 1, Regex("""onNextEpisode\(hop\.season""").findAll(code).count())
+        }
     }
 }

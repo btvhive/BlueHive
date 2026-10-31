@@ -265,16 +265,11 @@ class SourcePlaybackController internal constructor(
     /** The player's result: a source that died in playback is handed to the hop. */
     internal fun onPlayerResult(result: ActivityResult) {
         if (result.resultCode == HlsPlayerActivity.RESULT_PLAY_NEXT) {
-            val data = result.data ?: return
-            val episode = data.getIntExtra(HlsPlayerActivity.EXTRA_PLAY_EPISODE, 0)
-            if (episode <= 0) return
-            playNextHop = PlayNextHop(
-                season     = data.getIntExtra(HlsPlayerActivity.EXTRA_PLAY_SEASON, 0),
-                episode    = episode,
-                title      = data.getStringExtra(HlsPlayerActivity.EXTRA_PLAY_TITLE),
-                source     = data.getStringExtra(HlsPlayerActivity.EXTRA_PLAY_SOURCE).orEmpty(),
-                unattended = data.getIntExtra(HlsPlayerActivity.EXTRA_UNATTENDED, 0),
-            )
+            val hop = playNextHopFrom(result.data) ?: return
+            // At once, not in the effect: the page's episode moves and its
+            // source overlay closes before the page draws again (v581).
+            onNextEpisode(hop.season, hop.episode, hop.title)
+            playNextHop = hop
             return
         }
         if (result.resultCode == HlsPlayerActivity.RESULT_SOURCE_FAILED) {
@@ -295,7 +290,6 @@ class SourcePlaybackController internal constructor(
         val hop = playNextHop ?: return
         playNextHop = null
         unattended = hop.unattended
-        onNextEpisode(hop.season, hop.episode, hop.title)
         val req = request()
         val sources = SourceCatalog.sources(
             BlueHiveApplication.appContext, req.apiType, req.tmdbId, req.catalogSeason, req.catalogEpisode,
@@ -350,15 +344,29 @@ class SourcePlaybackController internal constructor(
     }
 }
 
-/** The player's hand-over for Up Next. */
+/** The player's hand-over for Up Next, from either player. */
 internal data class PlayNextHop(
     val season: Int,
     val episode: Int,
     val title: String?,
-    /** The routing name the last episode played from, tried first. */
+    /** The routing name the last episode played from, tried first (the source chain only). */
     val source: String,
     val unattended: Int,
 )
+
+/** The hand-over in a RESULT_PLAY_NEXT's data; null without an episode. */
+internal fun playNextHopFrom(data: Intent?): PlayNextHop? {
+    data ?: return null
+    val episode = data.getIntExtra(HlsPlayerActivity.EXTRA_PLAY_EPISODE, 0)
+    if (episode <= 0) return null
+    return PlayNextHop(
+        season     = data.getIntExtra(HlsPlayerActivity.EXTRA_PLAY_SEASON, 0),
+        episode    = episode,
+        title      = data.getStringExtra(HlsPlayerActivity.EXTRA_PLAY_TITLE),
+        source     = data.getStringExtra(HlsPlayerActivity.EXTRA_PLAY_SOURCE).orEmpty(),
+        unattended = data.getIntExtra(HlsPlayerActivity.EXTRA_UNATTENDED, 0),
+    )
+}
 
 // Each screen's own log wording, kept (see logPrefix). Logs only -- nothing reads them.
 private val PlaybackRequest.cancelLogTag: String get() = if (this is PlaybackRequest.Movie) "scraper-vidapi" else "scraper-vidfast"

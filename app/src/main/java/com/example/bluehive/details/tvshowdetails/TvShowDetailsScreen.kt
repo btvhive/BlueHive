@@ -232,6 +232,9 @@ fun TvShowDetailsScreen(
         mediaTitle   = args.mediaTitle,
         request      = { PlaybackRequest.Episode(args.mediaId, episodesState.pendingSeason, episodesState.pendingEpisode, episodesState.pendingEpisodeName) },
         onLaunch     = {},
+        // Up Next, as for the source chain below.
+        nextEpisode   = { episodesState.nextAfterPending(todayYmd) },
+        onNextEpisode = { season, episode, title -> episodesState.recordUpNext(season, episode, title) },
         restoreFocus = {
             coroutineScope.launch {
                 awaitFrame()

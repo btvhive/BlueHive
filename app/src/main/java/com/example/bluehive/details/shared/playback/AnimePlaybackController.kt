@@ -25,6 +25,8 @@ import com.example.bluehive.api.extractStreamAwait
 import com.example.bluehive.auth.SessionManager
 import com.example.bluehive.utilities.ServerOption
 import com.example.bluehive.utilities.launchIfActive
+import com.example.bluehive.api.SourceCatalog
+import com.example.bluehive.webview.hls.HlsPlayerActivity
 import com.example.bluehive.utilities.runCatchingCancellable
 import com.example.bluehive.webview.miruro.MiruroExtractorActivity
 import kotlinx.coroutines.CoroutineScope
@@ -62,9 +64,30 @@ class AnimePlaybackController internal constructor(
     private val onLaunch: () -> Unit,
     /** Returns the cursor to whichever stream button opened the flow. */
     private val restoreFocus: () -> Unit,
+    /** The episode after the requested one, for the player's Up Next card; none on the movie screen. */
+    private val nextEpisode: () -> UpNextEpisode? = { null },
+    /** Up Next: make (season, episode, title) the requested episode, as a press on it would. */
+    private val onNextEpisode: (Int, Int, String?) -> Unit = { _, _, _ -> },
 ) {
     internal lateinit var extractorLauncher: ActivityResultLauncher<Intent>
     internal lateinit var enumerateLauncher: ActivityResultLauncher<Intent>
+    /**
+     * The player itself, launched for its result since v581: Up Next hands
+     * the next episode back through it. Was context.startActivity.
+     */
+    internal lateinit var playerLauncher: ActivityResultLauncher<Intent>
+
+    // Up Next's hop, as in SourcePlaybackController: set by the player's
+    // result, consumed by the effect in AnimePlaybackEffects.
+    internal var playNextHop by mutableStateOf<PlayNextHop?>(null)
+
+    // Episodes in a row played with no remote press, as the last player
+    // counted them. A server choice (a press) starts the count again.
+    private var unattended = 0
+
+    /** The next episode to hand the player, for an episode only. */
+    private fun upNextFor(req: PlaybackRequest): UpNextEpisode? =
+        if (req is PlaybackRequest.Episode) nextEpisode() else null
 
     // ── Anime server-selection flow ─────────────────────────────────────────
     var showDefaultPrompt by mutableStateOf(false) // instant "default server?" Yes/No
@@ -181,10 +204,11 @@ class AnimePlaybackController internal constructor(
             // actually rolling (onIsPlayingChanged), NOT here: firing on a
             // successful extract counted a watch even when the stream never
             // played.
-            context.startActivity(
+            val req = request()
+            playerLauncher.launch(
                 PlayerIntents.miruroOnDevice(
                     context    = context,
-                    request    = request(),
+                    request    = req,
                     m3u8       = m3u8,
                     referer    = referer,
                     userAgent  = ua,
@@ -194,6 +218,8 @@ class AnimePlaybackController internal constructor(
                     mediaTitle = mediaTitle,
                     dub        = pendingDub,
                     server     = triedName,
+                    next       = upNextFor(req),
+                    unattended = unattended,
                 )
             )
         } else {
@@ -324,8 +350,7 @@ class AnimePlaybackController internal constructor(
                 "${server?.let { " server=$it" } ?: ""}) → ${body.m3u8.take(60)} cached=${body.cached}")
         // Not a launcher, so a closed page cannot crash here -- but it would still
         // open the player after the viewer has left. Stop quietly instead.
-        currentCoroutineContext().ensureActive()
-        context.startActivity(
+        playerLauncher.launchIfActive(
             PlayerIntents.miruroBackend(
                 context    = context,
                 request    = req,
@@ -336,9 +361,46 @@ class AnimePlaybackController internal constructor(
                 mediaTitle = mediaTitle,
                 playingDub = playingDub,
                 server     = server ?: serverOptions.getOrNull(serverDefaultIdx)?.name,
+                next       = upNextFor(req),
+                unattended = unattended,
             )
         )
         return ExtractOutcome.PLAYED
+    }
+
+    /**
+     * The player's result: Up Next ended the episode on its card. The page's
+     * episode moves at once, so the source overlay is closed before the page
+     * draws again; the extraction starts from the effect.
+     */
+    internal fun onPlayerResult(result: ActivityResult) {
+        if (result.resultCode != HlsPlayerActivity.RESULT_PLAY_NEXT) return
+        val hop = playNextHopFrom(result.data) ?: return
+        onNextEpisode(hop.season, hop.episode, hop.title)
+        playNextHop = hop
+    }
+
+    /**
+     * Up Next: open the next episode the way English or Japanese would --
+     * the same track, Miruro's default server (the provider names differ per
+     * episode), backend first with the on-device fallback, the loading screen.
+     */
+    internal fun continueToNextEpisode() {
+        val hop = playNextHop ?: return
+        playNextHop = null
+        unattended = hop.unattended
+        val req = request()
+        val url = SourceCatalog.sources(
+            BlueHiveApplication.appContext, req.apiType, req.tmdbId, req.catalogSeason, req.catalogEpisode,
+        ).firstOrNull { it.name.equals("Miruro", ignoreCase = true) }?.url
+        if (url == null) {
+            Log.e("scraper", "up next: no Miruro url for s${hop.season}e${hop.episode}")
+            return
+        }
+        Log.i("scraper", "\u23ED up next: s${hop.season}e${hop.episode} ${if (pendingDub) "dub" else "sub"} " +
+                "(unattended ${hop.unattended})")
+        pendingUrl = url
+        launchExtract(url, pendingDub, null)
     }
 
     /**
@@ -548,6 +610,7 @@ class AnimePlaybackController internal constructor(
      * starts.
      */
     fun onDefaultServer() {
+        unattended = 0
         showDefaultPrompt = false
         restoreFocus()
         val dub = pendingDub
@@ -587,6 +650,7 @@ class AnimePlaybackController internal constructor(
      * takes over, and that server is extracted.
      */
     fun onServerPicked(serverName: String) {
+        unattended = 0
         showServerPicker = false
         restoreFocus()
         val dub = pendingDub
@@ -614,17 +678,23 @@ fun rememberAnimePlayback(
     request: () -> PlaybackRequest,
     onLaunch: () -> Unit,
     restoreFocus: () -> Unit,
+    nextEpisode: () -> UpNextEpisode? = { null },
+    onNextEpisode: (Int, Int, String?) -> Unit = { _, _, _ -> },
 ): AnimePlaybackController {
     val context = LocalContext.current
     val currentRequest by rememberUpdatedState(request)
     val currentOnLaunch by rememberUpdatedState(onLaunch)
     val currentRestoreFocus by rememberUpdatedState(restoreFocus)
+    val currentNext by rememberUpdatedState(nextEpisode)
+    val currentOnNext by rememberUpdatedState(onNextEpisode)
     val controller = remember(session, scope, context, profileId, mediaType, mediaTitle) {
         AnimePlaybackController(
             session = session, scope = scope, context = context,
             profileId = profileId, mediaType = mediaType, mediaTitle = mediaTitle,
             request = { currentRequest() }, onLaunch = { currentOnLaunch() },
             restoreFocus = { currentRestoreFocus() },
+            nextEpisode = { currentNext() },
+            onNextEpisode = { season, episode, title -> currentOnNext(season, episode, title) },
         )
     }
     controller.extractorLauncher = rememberLauncherForActivityResult(
@@ -636,6 +706,11 @@ fun rememberAnimePlayback(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         controller.onEnumerateResult(result)
+    }
+    controller.playerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        controller.onPlayerResult(result)
     }
     AnimePlaybackEffects(controller)
     return controller
@@ -651,6 +726,12 @@ private fun AnimePlaybackEffects(controller: AnimePlaybackController) {
     // Auto server-failover: the result handler stashes the next attempt here; run it.
     LaunchedEffect(controller.failoverRequest) {
         controller.runFailoverRequest()
+    }
+
+    // Up Next: the player ended on its card; the next episode starts here, in
+    // the screen's scope (see SourcePlaybackEffects).
+    LaunchedEffect(controller.playNextHop) {
+        controller.continueToNextEpisode()
     }
 
     LaunchedEffect(controller.showNoDub) {

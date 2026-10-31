@@ -64,11 +64,17 @@ import com.example.bluehive.IdleWatcher
 import okhttp3.OkHttpClient
 import java.util.concurrent.TimeUnit
 import com.example.bluehive.api.extractStreamAwait
+import com.example.bluehive.webview.hls.HlsPlayerActivity
 import com.example.bluehive.webview.hls.SubtitlePlayerActivity
+import com.example.bluehive.webview.hls.UpNextDirector
 import com.example.bluehive.webview.hls.originFromReferer
 
 @UnstableApi
 class MiruroPlayerActivity : SubtitlePlayerActivity() {
+
+    // Up Next (v581), the same as the HLS player's -- see UpNextDirector. Null
+    // only before onCreate reads the intent.
+    private var upNext: UpNextDirector? = null
 
     private val sCRAPE = "scraper"
 
@@ -299,6 +305,8 @@ class MiruroPlayerActivity : SubtitlePlayerActivity() {
             finish()
             return
         }
+        upNext = UpNextDirector.fromIntent(intent, sCRAPE, defaultSource = "Miruro")
+            .also { it.start(lifecycleScope) { player } }
         val referer = intent.getStringExtra("REFERER") ?: "https://www.miruro.tv/"
         val ua = intent.getStringExtra("UA")
             ?: ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
@@ -693,7 +701,10 @@ class MiruroPlayerActivity : SubtitlePlayerActivity() {
                 // reasoning; the short version is that an unattended anime player
                 // at STATE_ENDED held a household streaming slot indefinitely and
                 // kept the TV's screen awake doing it.
-                if (state == Player.STATE_ENDED && player?.isCurrentMediaItemLive != true) {
+                if (state == Player.STATE_ENDED && player?.isCurrentMediaItemLive != true &&
+                    upNext?.autoplayAtEnd(player) == true) {
+                    playNextEpisode("episode ended")
+                } else if (state == Player.STATE_ENDED && player?.isCurrentMediaItemLive != true) {
                     Log.i(sCRAPE, "🏁 episode ended — closing player")
                     IdleWatcher.setPlaying(IdleWatcher.SOURCE_MIRURO, false)
                     finish()
@@ -792,6 +803,10 @@ class MiruroPlayerActivity : SubtitlePlayerActivity() {
                     // press dismisses it through the window hook in
                     // BlueHiveApplication.
                 }
+
+                // UP NEXT, LAST: over the player, its control bar, the captions
+                // and the quality picker alike.
+                upNext?.Overlay(this)
             }
         }
     }
@@ -858,6 +873,8 @@ class MiruroPlayerActivity : SubtitlePlayerActivity() {
     // legitimate and works at runtime.
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Somebody is there: any press resets Up Next's unattended count.
+        if (event.action == KeyEvent.ACTION_DOWN) upNext?.onKeyDown()
         // Diagnostic: log EVERY key on the way down so we can see exactly what
         // the onn remote actually sends (this is the right way to confirm the
         // keycode — the HDMI/CEC logcat lines only cover volume).
@@ -874,6 +891,12 @@ class MiruroPlayerActivity : SubtitlePlayerActivity() {
         if (pickerOpen || subMenuOpen || fixSeqOpen || styleOpen) {
             return super.dispatchKeyEvent(event)
         }
+        // Up Next's card and prompt take the remote while they are up.
+        if (upNext?.handleKey(
+                event,
+                onWatchNext = { playNextEpisode("watch next pressed") },
+                onDone = { finish() },
+            ) == true) return true
         // Same reason as the HLS player: the centre key never reaches Compose.
         if (handleSyncHintKey(event)) return true
         // Quality overlay open: BACK closes it; every other key goes to the Compose
@@ -1029,6 +1052,21 @@ class MiruroPlayerActivity : SubtitlePlayerActivity() {
         if (wasPlayingBeforePause) player?.play()
     }
 
+    /**
+     * Close this player and have the details screen open the next episode
+     * through the usual Miruro extraction, the same track (dub or sub).
+     */
+    private fun playNextEpisode(why: String) {
+        val director = upNext ?: return
+        val data = director.playNextResult() ?: return
+        director.stop()
+        Log.i(sCRAPE, "⏭ up next: opening s${director.next?.season}e${director.next?.episode} ($why)")
+        setResult(HlsPlayerActivity.RESULT_PLAY_NEXT, data)
+        IdleWatcher.setPlaying(IdleWatcher.SOURCE_MIRURO, false)
+        player?.pause()
+        finish()
+    }
+
     override fun onDestroy() {
         // Applied HERE because the player is already released, so no request
         // is in flight and the engine can be shut down properly. Rebuilding
@@ -1039,6 +1077,7 @@ class MiruroPlayerActivity : SubtitlePlayerActivity() {
         // false on the way out, and a source stuck in the playing set suppresses
         // the idle timer for the rest of the process lifetime.
         IdleWatcher.setPlaying(IdleWatcher.SOURCE_MIRURO, false)
+        upNext?.stop()
         // Before releasePlayer: the caption ticker reads the player's clock.
         releaseSubtitleUi()
         releasePlayer()

@@ -27,10 +27,13 @@ internal fun EpisodesState.nextAfterPending(todayYmd: Int): UpNextEpisode? =
     nextEpisodeIn(episodes, selectedSeason, isLoadingEpisodes, pendingSeason, pendingEpisode, todayYmd)
 
 /**
- * Up Next opens (season, episode): record it as a press on it would, and put
- * the row's focus memory on its tile, so leaving the player lands there.
+ * Up Next opens (season, episode): record it as a press on it would, close
+ * the episode's source overlay -- the loading screen comes up over the page,
+ * not over the last episode's buttons (v581) -- and put the row's focus
+ * memory on its tile, so leaving the player lands there.
  */
 internal fun EpisodesState.recordUpNext(season: Int, episode: Int, title: String?) {
+    selectedEpisodeOverlayIndex = -1
     pendingSeason      = season
     pendingEpisode     = episode
     pendingEpisodeName = title
