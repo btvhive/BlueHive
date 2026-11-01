@@ -804,7 +804,9 @@ fun HomeScreenTrendingCompose(
         )
 
         // The film strips, top and bottom of the screen, over the carousel.
-        PanelFilmStrips(x = screenX, y = screenY, width = screenW, height = screenH, modifier = Modifier.zIndex(5.5f))
+        // Held while the sidebar's blur is over the page (isPaused) -- see PanelFilmStrips.
+        PanelFilmStrips(x = screenX, y = screenY, width = screenW, height = screenH, modifier = Modifier.zIndex(5.5f),
+                        paused = isPaused)
 
         // Remote hints over the picture, above the carousel (zIndex 5). Not
         // focusable and handles no keys, so the focus model above is untouched.

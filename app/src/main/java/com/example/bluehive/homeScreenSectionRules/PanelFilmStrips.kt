@@ -1,15 +1,14 @@
 package com.example.bluehive.homeScreenSectionRules
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -42,15 +41,32 @@ internal const val FILM_STRIP_LOOP_MS = 900
  * Drawn over the screen area ([x], [y], [width], [height]); only the two
  * strips are painted, so the picture between them shows through. The travel
  * is read in the draw phase, so the endless animation never recomposes.
+ *
+ * [paused] HOLDS THE STRIPS STILL (v590): while the sidebar is open the home
+ * page sits under a full-screen blur, and every frame the holes moved made
+ * the onn box blur the whole page again -- ~150 ms a frame, about 7 fps,
+ * and the sidebar's options crawled. Held, nothing under the blur moves and
+ * the blurred page is drawn once. Also held while home is in the background.
  */
 @Composable
-internal fun PanelFilmStrips(x: Dp, y: Dp, width: Dp, height: Dp, modifier: Modifier = Modifier) {
-    val travel = rememberInfiniteTransition(label = "filmStrips").animateFloat(
-        initialValue  = 0f,
-        targetValue   = 1f,
-        animationSpec = infiniteRepeatable(tween(FILM_STRIP_LOOP_MS, easing = LinearEasing), RepeatMode.Restart),
-        label         = "filmStripTravel"
-    )
+internal fun PanelFilmStrips(
+    x: Dp,
+    y: Dp,
+    width: Dp,
+    height: Dp,
+    modifier: Modifier = Modifier,
+    paused: Boolean = false,
+) {
+    val travel = remember { Animatable(0f) }
+    LaunchedEffect(paused) {
+        if (paused) return@LaunchedEffect   // held where it is
+        while (true) {
+            // The rest of this loop, then round again from the start.
+            val left = ((1f - travel.value) * FILM_STRIP_LOOP_MS).toInt().coerceAtLeast(1)
+            travel.animateTo(1f, tween(left, easing = LinearEasing))
+            travel.snapTo(0f)
+        }
+    }
     Canvas(modifier.offset(x, y).size(width, height)) {
         val stripH = FILM_STRIP_HEIGHT.toPx()
         val pitch = HOLE_PITCH.toPx()
