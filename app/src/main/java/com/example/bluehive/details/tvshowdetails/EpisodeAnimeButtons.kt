@@ -18,6 +18,7 @@ import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
@@ -231,8 +232,12 @@ internal fun AnimeServerStepLabel(dub: Boolean, text: String, modifier: Modifier
     }
 }
 
-/** The list's rows: this many show before it scrolls. */
-private const val INLINE_SERVER_ROWS_SHOWN = 4
+/**
+ * The list's rows: this many show before it scrolls. 7 since v588 (was 4):
+ * the card grows to about 400 of the screen's 540 dp, and most episodes'
+ * servers all show at once.
+ */
+private const val INLINE_SERVER_ROWS_SHOWN = 7
 private val INLINE_SERVER_ROW_HEIGHT = 26.dp
 private val INLINE_SERVER_ROW_GAP = 6.dp
 
@@ -335,14 +340,23 @@ private fun InlineServerRow(
             }
             .focusable(),
     ) {
-        Text(
-            text = name,
-            color = if (focused) Color.White else Color(0xFFD6D6D6),
-            fontFamily = AppTypography.interBold,
-            fontSize = 10.sp,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        // The server icon beside the name, as in the old picker (v588).
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f, fill = false)) {
+            Image(
+                painter = heldPainter(R.drawable.server),
+                contentDescription = null,      // the name beside it already says it
+                modifier = Modifier.size(14.dp),
+            )
+            Spacer(Modifier.width(7.dp))
+            Text(
+                text = name,
+                color = if (focused) Color.White else Color(0xFFD6D6D6),
+                fontFamily = AppTypography.interBold,
+                fontSize = 10.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         if (tag != null) {
             Text(
                 text = tag,

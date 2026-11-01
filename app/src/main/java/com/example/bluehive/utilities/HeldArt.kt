@@ -56,6 +56,8 @@ object HeldArt {
         R.drawable.episode_focus_glow,
         R.drawable.season_cap_focus_glow,
         R.drawable.star,
+        // The anime card's server list (v588).
+        R.drawable.server,
     )
 
     @Volatile

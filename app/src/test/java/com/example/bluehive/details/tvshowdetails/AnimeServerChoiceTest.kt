@@ -125,6 +125,14 @@ class AnimeServerChoiceTest {
     }
 
     @Test
+    fun `the list shows seven servers, each with the server icon (v588)`() {
+        val buttons = MainSource.code("details/tvshowdetails/EpisodeAnimeButtons.kt")
+        assertTrue(buttons.contains("INLINE_SERVER_ROWS_SHOWN = 7"))
+        val row = buttons.substringAfter("private fun InlineServerRow(").substringBefore("\n}\n")
+        assertTrue(row.contains("heldPainter(R.drawable.server)"))
+    }
+
+    @Test
     fun `the pair is the card's own buttons, glow and size unchanged`() {
         val buttons = MainSource.code("details/tvshowdetails/EpisodeAnimeButtons.kt")
         val pair = buttons.substringAfter("internal fun AnimeServerChoiceButtons(").substringBefore("\n}\n")
