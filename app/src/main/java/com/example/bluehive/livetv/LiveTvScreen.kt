@@ -36,6 +36,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -68,6 +69,7 @@ import com.example.bluehive.R
 import com.example.bluehive.utilities.AppTypography
 import com.example.bluehive.utilities.runCatchingCancellable
 import com.example.bluehive.webview.exoplayer_resources.ExoPlayerConfig
+import kotlinx.coroutines.delay
 
 /**
  * The Live TV page, design C: category chips along the top, a numbered channel
@@ -76,6 +78,8 @@ import com.example.bluehive.webview.exoplayer_resources.ExoPlayerConfig
  * (Up from the first channel reaches the bar), Left/Right change the category,
  * Click watches -- or, on the bar, opens the search page (LiveSearchPage.kt,
  * whose keyboard takes its own keys) -- and Back leaves (the Activity's handler).
+ * On now, today's games, comes first, with sport pills in the bar's place
+ * (LiveGames.kt).
  *
  * [resumeTick] goes up each time the page comes back from the player; the list
  * reloads in place (fresh off-air marks, the Recently watched row) and the
@@ -91,6 +95,13 @@ internal fun LiveTvScreen(profileId: Int, resumeTick: Int, onWatch: (LiveTvData.
     LaunchedEffect(resumeTick) { if (resumeTick > 0) page.load(context, profileId, keepPlace = true) }
     // The search page's keyboard takes the focus while it is open; the page gets it back after.
     LaunchedEffect(page.search.isOpen) { if (!page.search.isOpen) focus.requestFocus() }
+    // On now's LIVE marks follow the clock: a game turns LIVE at its start.
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000)
+            page.tick()
+        }
+    }
     Box(
         Modifier
             .fillMaxSize()
@@ -114,7 +125,7 @@ internal fun LiveTvScreen(profileId: Int, resumeTick: Int, onWatch: (LiveTvData.
             rows == null && page.failed -> PageMessage("Couldn't load the channel list", retry = true)
             rows == null -> PageMessage("Loading channels…", retry = false)
             rows.isEmpty() -> PageMessage("No channels right now", retry = true)
-            page.search.isOpen -> LiveSearchPage(page.search)
+            page.search.isOpen -> LiveSearchPage(page.search, page.nowS)
             else -> LiveGuide(page, rows)
         }
     }
@@ -148,6 +159,24 @@ internal class LiveTvPageState {
         private set
     var choices by mutableStateOf<List<LocalNews.StateChoice>>(emptyList())
         private set
+    /** On now's sport pills: the one picked (null = All), and their focus and cursor. */
+    var sport by mutableStateOf<String?>(null)
+        private set
+    var onPills by mutableStateOf(false)
+        private set
+    var pillCursor by mutableIntStateOf(0)
+        private set
+    /** The clock On now's LIVE marks follow (epoch seconds), ticked by the screen. */
+    var nowS by mutableLongStateOf(System.currentTimeMillis() / 1000)
+        private set
+
+    fun tick() {
+        nowS = System.currentTimeMillis() / 1000
+    }
+
+    /** A row as the page shows it: On now narrowed to the picked sport. */
+    fun shown(row: LiveTvData.Row): LiveTvData.Row =
+        if (row.name != LiveGames.ROW || sport == null) row else row.copy(channels = LiveGames.shown(row.channels, sport))
 
     suspend fun load(context: Context, profileId: Int, keepPlace: Boolean) {
         val keepRow = rows?.getOrNull(selectedRow)?.name
@@ -156,9 +185,12 @@ internal class LiveTvPageState {
                 rows = fresh
                 localState = LiveTvData.localState(context)
                 failed = false
+                // A fresh start is All; so is a sport whose games have all ended.
+                val games = fresh.firstOrNull { it.name == LiveGames.ROW }?.channels.orEmpty()
+                if (!keepPlace || LiveGames.shown(games, sport).isEmpty()) sport = null
                 if (fresh.isEmpty()) return@onSuccess
                 val row = if (keepPlace) fresh.indexOfFirst { it.name == keepRow }.takeIf { it >= 0 } ?: 0 else 0
-                val channels = fresh[row].channels
+                val channels = shown(fresh[row]).channels
                 val watched = channels.indexOfFirst { it.id == LiveTvData.lastWatchedId }
                 selectedRow = row
                 focused = when {
@@ -169,6 +201,7 @@ internal class LiveTvPageState {
                 if (!keepPlace) {
                     onBar = false
                     onPill = false
+                    onPills = false
                 }
                 search.reconcile()
             }
@@ -210,12 +243,14 @@ internal class LiveTvPageState {
         }
         if (search.isOpen) return search.onKey(code, native.repeatCount, onWatch)
         if (picking) return pickKey(code, native.repeatCount, onPickState)
-        val row = rows[selectedRow]
+        if (onPills) return pillsKey(code, native.repeatCount, rows)
+        val row = shown(rows[selectedRow])
         val top = onBar || onPill
         when (code) {
             AndroidKeyEvent.KEYCODE_DPAD_UP -> when {
                 top -> Unit
                 focused > 0 -> { focused--; BlueHiveApplication.playHoverSound() }
+                row.name == LiveGames.ROW -> { enterPills(rows); BlueHiveApplication.playHoverSound() }
                 else -> { onBar = true; BlueHiveApplication.playHoverSound() }
             }
             AndroidKeyEvent.KEYCODE_DPAD_DOWN -> when {
@@ -248,6 +283,51 @@ internal class LiveTvPageState {
             }
         }
         return true
+    }
+
+    /**
+     * On now's top line is its sport pills, in the search bar's place: Left and
+     * Right pick a sport at once (the list follows), past the last pill is the
+     * next category; Down or Click goes into the games.
+     */
+    private fun pillsKey(code: Int, repeat: Int, rows: List<LiveTvData.Row>): Boolean {
+        val pills = LiveGames.pills(rows[selectedRow].channels)
+        when (code) {
+            AndroidKeyEvent.KEYCODE_DPAD_UP -> Unit
+            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> when {
+                pillCursor > 0 -> pickSport(pills, pillCursor - 1)
+                selectedRow > 0 -> moveRow(selectedRow - 1)
+            }
+            AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> when {
+                pillCursor < pills.lastIndex -> pickSport(pills, pillCursor + 1)
+                selectedRow < rows.lastIndex -> moveRow(selectedRow + 1)
+            }
+            AndroidKeyEvent.KEYCODE_DPAD_DOWN -> leavePills()
+            else -> {
+                if (!ExoPlayerConfig.isCenterKey(code)) return false
+                if (repeat == 0) leavePills()
+            }
+        }
+        return true
+    }
+
+    private fun enterPills(rows: List<LiveTvData.Row>) {
+        val pills = LiveGames.pills(rows[selectedRow].channels)
+        pillCursor = pills.indexOfFirst { it.sport == sport }.coerceAtLeast(0)
+        onPills = true
+    }
+
+    private fun pickSport(pills: List<LiveGames.Pill>, at: Int) {
+        pillCursor = at
+        sport = pills[at].sport
+        focused = 0
+        BlueHiveApplication.playHoverSound()
+    }
+
+    private fun leavePills() {
+        onPills = false
+        focused = 0
+        BlueHiveApplication.playHoverSound()
     }
 
     private fun openPick() {
@@ -296,44 +376,62 @@ internal class LiveTvPageState {
     }
 
     /**
-     * The pill is Local News' own, so leaving the row from it lands on the bar,
-     * which every row has. Arriving at Local News with no state picked (no
-     * stations to land on) starts on the pill.
+     * The top line follows from row to row: the bar in most, On now's sport
+     * pills in its place there; Local News' pill is its own, so leaving the row
+     * from it lands on the bar. Arriving at Local News with no state picked (no
+     * stations to land on) starts on its pill.
      */
     private fun moveRow(to: Int) {
         selectedRow = to
         focused = 0
-        if (onPill) {
+        if (onPill || onPills) {
             onPill = false
+            onPills = false
             onBar = true
         }
-        val row = rows?.getOrNull(to)
-        if (!onBar && row?.name == LocalNews.ROW && row.channels.isEmpty()) onPill = true
+        val all = rows ?: return
+        val row = all.getOrNull(to)
+        if (onBar && row?.name == LiveGames.ROW) {
+            onBar = false
+            enterPills(all)
+        }
+        if (!onBar && !onPills && row?.name == LocalNews.ROW && row.channels.isEmpty()) onPill = true
         BlueHiveApplication.playTitleCardNavigation()
     }
 }
 
 @Composable
 private fun LiveGuide(page: LiveTvPageState, rows: List<LiveTvData.Row>) {
-    val row = rows[page.selectedRow]
+    val whole = rows[page.selectedRow]
+    val row = page.shown(whole)
     val local = row.name == LocalNews.ROW
+    val games = row.name == LiveGames.ROW
+    val nowS = page.nowS
     CategoryChips(rows, page.selectedRow)
-    SearchBar(LiveSearch.barHint(page.search.channels.size), page.onBar, if (local) BAR_LOCAL_WIDTH else LIST_WIDTH)
+    if (games) {
+        val pills = remember(whole) { LiveGames.pills(whole.channels) }
+        SportPills(pills, page.sport, page.pillCursor, page.onPills)
+    } else {
+        SearchBar(LiveSearch.barHint(page.search.channels.size), page.onBar, if (local) BAR_LOCAL_WIDTH else LIST_WIDTH)
+    }
     if (local) StatePill(page.localState, page.onPill)
     if (page.picking) {
         StateList(page.choices, page.pickCursor)
         page.choices.getOrNull(page.pickCursor)?.let { StateChoicePanel(it, row.color) }
     } else {
+        // Keyed by the sport too: a list kept across pills would hold its old scroll.
         if (local && row.channels.isEmpty()) PickStateMessage()
-        else key(page.selectedRow) { ChannelList(row.channels, page.focused, showFocus = !page.onBar && !page.onPill) }
+        else key(page.selectedRow, page.sport) {
+            ChannelList(row.channels, page.focused, showFocus = !page.onBar && !page.onPill && !page.onPills, nowS)
+        }
         val states = remember(rows) { LiveTvData.stateChoices().size }
         when {
             page.onBar -> SearchInvitePanel(rows, page.search.channels)
             page.onPill -> StatePillPanel(page.localState, row.channels.size, states, row.color)
-            else -> row.channels.getOrNull(page.focused)?.let { DetailPanel(it) }
+            else -> row.channels.getOrNull(page.focused)?.let { if (it.start > 0) GamePanel(it, nowS) else DetailPanel(it) }
         }
     }
-    GuideHintBar(page.picking)
+    GuideHintBar(page.picking, games)
 }
 
 /** Design B's bar: always over the list, one Up from the first channel; Click opens the search page. */
@@ -393,28 +491,36 @@ private fun CategoryChips(rows: List<LiveTvData.Row>, selected: Int) {
     }
 }
 
+/** A category's chip; On now's carries a live dot. */
 @Composable
 private fun CategoryChip(name: String, on: Boolean) {
-    Box(
-        contentAlignment = Alignment.Center,
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(CHIP_DOT_GAP),
         modifier = Modifier
             .height(CHIP_HEIGHT)
             .background(if (on) CHIP_ON else CHIP_OFF, RoundedCornerShape(CHIP_RADIUS))
             .padding(horizontal = CHIP_PAD_H),
     ) {
+        if (name == LiveGames.ROW) Dot(LIVE_DOT)
         LiveText(name, CHIP_TEXT, if (on) Color.White else CHIP_TEXT_OFF, AppTypography.interSemiBold)
     }
 }
 
+/** A row's channels -- or games, which show their start and league instead (LiveGamesViews.kt). */
 @Composable
-private fun ChannelList(channels: List<LiveTvData.Channel>, focused: Int, showFocus: Boolean) {
+private fun ChannelList(channels: List<LiveTvData.Channel>, focused: Int, showFocus: Boolean, nowS: Long) {
     val state = rememberLazyListState()
     LaunchedEffect(focused) {
         keepInView(focused, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset, LIST_VISIBLE_ROWS)
             ?.let { state.scrollToItem(it) }
     }
+    val leagueWidth = leagueColumn(channels)
     GuideList(state) {
-        itemsIndexed(channels, key = { _, c -> c.id }) { i, c -> ChannelRow(c, showFocus && i == focused) }
+        itemsIndexed(channels, key = { _, c -> c.id }) { i, c ->
+            if (c.start > 0) GameRow(c, showFocus && i == focused, nowS, leagueWidth)
+            else ChannelRow(c, showFocus && i == focused)
+        }
     }
 }
 
@@ -470,9 +576,9 @@ private fun ChannelRow(channel: LiveTvData.Channel, focused: Boolean) {
     }
 }
 
-/** The right-hand panel: [band] across its top, then [content]. */
+/** The right-hand panel: [band] across its top (none for a game, whose picture is there), then [content]. */
 @Composable
-internal fun PanelFrame(band: Color, content: @Composable ColumnScope.() -> Unit) {
+internal fun PanelFrame(band: Color?, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(PANEL_RADIUS)
     Column(
         Modifier
@@ -482,7 +588,7 @@ internal fun PanelFrame(band: Color, content: @Composable ColumnScope.() -> Unit
             .background(PANEL_BG)
             .border(PANEL_BORDER, PANEL_BORDER_COLOR, shape)
     ) {
-        Box(Modifier.fillMaxWidth().height(PANEL_BAND).background(band))
+        if (band != null) Box(Modifier.fillMaxWidth().height(PANEL_BAND).background(band))
         content()
     }
 }
@@ -512,9 +618,9 @@ private fun DetailPanel(channel: LiveTvData.Channel) {
 }
 
 @Composable
-private fun GuideHintBar(picking: Boolean) {
+private fun GuideHintBar(picking: Boolean, games: Boolean) {
     HintBox(Modifier.offset(HINT_LEFT, HINT_TOP).size(HINT_WIDTH, HINT_HEIGHT)) {
-        KeyHint("▲▼", if (picking) "states" else "channels")
+        KeyHint("▲▼", if (picking) "states" else if (games) "games" else "channels")
         HintSeparator()
         if (picking) KeyHint("Click", "choose") else KeyHint("‹ ›", "categories")
         HintSeparator()

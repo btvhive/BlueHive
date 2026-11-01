@@ -2,6 +2,7 @@ package com.example.bluehive.livetv
 
 import com.example.bluehive.searchBarComponent.HiveDir
 import java.text.Normalizer
+import java.time.ZoneId
 
 /**
  * Live TV search: which channels a few typed (or spoken) letters mean, in the
@@ -128,6 +129,21 @@ internal object LiveSearch {
         if (names.isEmpty()) return null
         val list = if (names.size == 1) names[0] else names.dropLast(1).joinToString(", ") + " or " + names.last()
         return "Try $list"
+    }
+
+    /**
+     * A result tile's second line: "101 · US Sports"; an On now game, which has
+     * no number, "On now · NFL" and its start until then; "off air" when the
+     * last try failed (a game only once it has started).
+     */
+    fun tileMeta(channel: LiveTvData.Channel, nowS: Long, zone: ZoneId = ZoneId.systemDefault()): String {
+        val place = if (channel.number > 0) listOf(channel.number.toString(), channel.row) else listOf(channel.row, channel.league)
+        val state = when {
+            LiveGames.upcoming(channel, nowS) -> "starts ${LiveGames.clock(channel.start, zone)}"
+            channel.off -> "off air"
+            else -> ""
+        }
+        return (place + state).filter { it.isNotEmpty() }.joinToString(" · ")
     }
 
     /** Under the search page's title. */

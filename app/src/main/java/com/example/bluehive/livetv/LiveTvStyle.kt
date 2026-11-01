@@ -47,6 +47,29 @@ internal val PILL_EDGE = Color(0x997CB342)   // at 60%
 internal val PILL_INK = Color(0xFFCDEBA6)
 internal val EMPTY_TOP = 14.1.dp             // 10 px into the list: "Pick your state..."
 
+// ── On now (design C of live_tv_on_now_designs_abc) ──────────────────────────
+// Sport pills in the search bar's place; games show their start and league in
+// the number and flag columns; the panel leads with the matchup picture.
+internal val CHIP_DOT_GAP = 7.1.dp           // 5 px: On now's chip, dot to name
+internal val SPORT_PILL_TOP = 73.4.dp        // 52 px
+internal val SPORT_PILL_HEIGHT = 33.9.dp     // 24 px
+internal val SPORT_PILL_PAD_H = 11.3.dp      // 8 px
+internal val SPORT_PILL_GAP = 7.1.dp         // 5 px
+internal val SPORT_PILL_COUNT_GAP = 5.6.dp   // 4 px
+internal val SPORT_COUNT_IDLE = Color(0xFF7D8496)
+internal val SPORT_COUNT_ON = Color(0xFFC9D5FF)
+internal val GAME_WHEN_WIDTH = 53.7.dp       // 38 px: LIVE or "4:25"
+internal val GAME_LEAGUE_WIDTH = 73.4.dp     // 52 px, wider for a long league (leagueColumn)
+internal val GAME_LEAGUE_GAP = 8.5.dp        // 6 px: a long league tag to the name
+internal val LIVE_TAG_BG = Color(0xFFC62828)
+internal val GAME_ART_HEIGHT = 180.7.dp      // 128 px, the panel's width at 16:9-ish
+internal val GAME_NAME_TOP = 14.1.dp         // 10 px
+internal val GAME_NAME_TEXT = 31.1.sp        // 22 px
+internal val GAME_META_TOP = 7.1.dp          // 5 px
+internal val GAME_META_GAP = 8.5.dp          // 6 px: LIVE to "NFL · kicked off..."
+internal val GAME_HINT_TOP = 16.9.dp         // 12 px
+internal val GAME_ART_BG = Color(0xFF0B1433)
+
 // ── Channel list (left) ───────────────────────────────────────────────────────
 internal val LIST_LEFT = 22.6.dp             // 16 px
 // 92 px: the bar's 28 px plus 14 px, the same gap as chips to bar (the user

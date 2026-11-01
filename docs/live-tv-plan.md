@@ -82,6 +82,36 @@ state".
     `URI="..."` attributes absolute (News 12's captions use a relative one).
   - Tests: 94/94 on the image.
 
+**On now (API build j + TV v587, 2026-11-01, design C of `live_tv_on_now_designs_abc`):** today's
+games, first in the guide.
+- **Server:** zlive's own game list (POST iptv.zlive.st/streams). Its body is obfuscated like
+  /resolve's, and a plain POST of `{}` gets `[]`. So the live browser loads zlive's home page and
+  catches the answer (`GET /live/events`): about 40 games in 1–2 s. The API asks for it every 5
+  minutes and keeps it 30 minutes (`live:events`). The games make the first row, "On now":
+  started games newest first, then the rest by start; games over 5 h old drop off. Each game
+  carries its start, league, sport (the TV's pill) and matchup picture.
+  - zlive writes Eastern wall time with a "Z" ("13:00:00Z" is 1:00 PM Eastern).
+  - The league comes from the picture's file name ("nfl-401873026.png").
+  - zlive's live flag goes up hours before kickoff, so the TV calls a game LIVE from its start.
+  - A game plays from zlive's `/stream/<id>` page; `/embed/<id>` answers "Channel not found".
+    Its link comes in about 1 s, from the same tims-001 host as the channels.
+  - Off switch: `LIVE_EVENTS=0`.
+  - Tests: 102/102 on the images (live browser 20261101b, API 20261101c). I30, a started game
+    tunes, failed until the `/stream/` fix. Two runs in between failed channel checks while
+    zlive's host answered HTTP 502 for many channels (production's rechecks saw the same).
+- **TV (v587):** On now is the first category, its chip with a red dot. Games are not numbered,
+  and the other rows keep their numbers.
+  - Sport pills (All, NFL, Soccer, Hockey, Basketball, Motor..., each with its count) take the
+    search bar's place. Up from the first game reaches them; Left and Right pick a sport at once;
+    past the last pill is the next category; Down or Click goes into the games.
+  - A row shows LIVE (red) or the start in the number column and the league in the flag column.
+    The league column widens to the longest league in the list ("Premier League"), so no tag is
+    cut. A game still to start is never dimmed.
+  - The panel leads with the matchup picture, then the name, "LIVE · NFL · kicked off 1:00 PM"
+    or "starts 4:25 PM", and Click to watch.
+  - Search finds games too ("On now · NFL · starts 4:25"). Code: `LiveGames.kt` (pure,
+    `LiveGamesTest`), `LiveGamesViews.kt`.
+
 ## 1. What the viewer gets
 
 - Sidebar → Live TV opens a channel page instead of "Feature still in development".

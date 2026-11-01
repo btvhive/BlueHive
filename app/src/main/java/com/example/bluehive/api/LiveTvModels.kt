@@ -36,6 +36,11 @@ data class LiveChannelDto(
      * build h (2026-11-01).
      */
     val states: List<String>? = null,
+    /** On now's games (server build j): kickoff in epoch seconds, league, sport (the pill) and matchup picture. */
+    val start: Long? = null,
+    val league: String? = null,
+    val sport: String? = null,
+    val thumb: String? = null,
 )
 
 /** POST /api/live/{channel}/session */

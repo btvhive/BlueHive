@@ -10,9 +10,11 @@ import kotlinx.coroutines.coroutineScope
 /**
  * Live TV's channel list as the page shows it: the server's rows, numbered like
  * a cable box (row 1 = 101, 102...; row 2 = 201...), Kids-only for a kids
- * profile, and the profile's own "Recently watched" row first. Local News shows
- * the stations of the state picked on this TV -- none until one is picked, and
- * the row stays even then, so its state pill can be reached.
+ * profile, and the profile's own "Recently watched" row first -- after On now,
+ * today's games, which are not numbered and do not shift the other rows'
+ * numbers. Local News shows the stations of the state picked on this TV -- none
+ * until one is picked, and the row stays even then, so its state pill can be
+ * reached.
  */
 internal object LiveTvData {
 
@@ -40,7 +42,13 @@ internal object LiveTvData {
         val hasBackup: Boolean,
         /** The server's last try failed: shown dimmed, still playable. */
         val off: Boolean,
+        /** 0 for an On now game, which shows its start instead. */
         val number: Int,
+        /** On now's games: kickoff (epoch seconds; 0 = a channel), league, sport (the pill), matchup picture. */
+        val start: Long = 0L,
+        val league: String = "",
+        val sport: String = "",
+        val thumb: String = "",
     )
 
     data class Row(val name: String, val color: Long, val channels: List<Channel>)
@@ -52,10 +60,12 @@ internal object LiveTvData {
         recentIds: List<String>,
         localState: String? = null,
     ): List<Row> {
-        val numbered = server.mapIndexed { r, row ->
+        var numberedRows = 0
+        val rows = server.map { row ->
             val color = parseColor(row.color)
-            val local = row.name == LocalNews.ROW
-            val listed = if (local) LocalNews.stationsFor(row, localState) else row.channels
+            val games = row.name == LiveGames.ROW
+            val base = if (games) 0 else ++numberedRows * 100
+            val listed = if (row.name == LocalNews.ROW) LocalNews.stationsFor(row, localState) else row.channels
             val channels = listed.mapIndexed { i, c ->
                 Channel(
                     id = c.id,
@@ -66,14 +76,19 @@ internal object LiveTvData {
                     quality = c.quality ?: "HD",
                     hasBackup = !c.backup.isNullOrBlank(),
                     off = c.status == "off",
-                    number = (r + 1) * 100 + i + 1,
+                    number = if (games) 0 else base + i + 1,
+                    start = c.start ?: 0L,
+                    league = c.league.orEmpty(),
+                    sport = c.sport.orEmpty(),
+                    thumb = c.thumb.orEmpty(),
                 )
             }
             Row(row.name, color, channels)
         }.filter { (it.channels.isNotEmpty() || it.name == LocalNews.ROW) && (!kids || it.name == KIDS_ROW) }
-        val byId = numbered.flatMap { it.channels }.associateBy { it.id }
+        val byId = rows.flatMap { it.channels }.associateBy { it.id }
         val recent = recentIds.mapNotNull { byId[it] }
-        return if (recent.isEmpty()) numbered else listOf(Row(RECENT_ROW, RECENT_COLOR, recent)) + numbered
+        val (onNow, rest) = rows.partition { it.name == LiveGames.ROW }
+        return onNow + (if (recent.isEmpty()) emptyList() else listOf(Row(RECENT_ROW, RECENT_COLOR, recent))) + rest
     }
 
     /** "#D64545" to ARGB; the recent-row blue when missing or malformed. */

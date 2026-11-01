@@ -168,7 +168,7 @@ internal class LiveSearchState(private val rows: () -> List<LiveTvData.Row>?) {
 }
 
 @Composable
-internal fun LiveSearchPage(search: LiveSearchState) {
+internal fun LiveSearchPage(search: LiveSearchState, nowS: Long) {
     // The remote's Back is caught as a key by the page (LiveTvPageState.onKey);
     // this covers one that arrives as a back action instead.
     BackHandler { search.back() }
@@ -187,7 +187,7 @@ internal fun LiveSearchPage(search: LiveSearchState) {
         PickGrid(search.picks, focused)
     } else {
         TilesHeader(LiveSearch.resultsTitle(search.found), LiveSearch.resultsNote(search.found))
-        ResultGrid(search.found, focused)
+        ResultGrid(search.found, focused, nowS)
     }
     SearchHintBar(search.showingPicks)
 }
@@ -240,7 +240,7 @@ private fun PickTile(pick: LiveSearch.Pick, focused: Boolean) {
 }
 
 @Composable
-private fun ResultGrid(found: List<LiveTvData.Channel>, focused: Int) {
+private fun ResultGrid(found: List<LiveTvData.Channel>, focused: Int, nowS: Long) {
     val state = rememberLazyListState()
     val line = if (focused >= 0) focused / LiveSearch.RESULT_COLUMNS else -1
     // New results while typing start at the top; a focused line stays in view.
@@ -263,27 +263,31 @@ private fun ResultGrid(found: List<LiveTvData.Channel>, focused: Int) {
     ) {
         itemsIndexed(found.chunked(LiveSearch.RESULT_COLUMNS)) { r, pair ->
             Row(horizontalArrangement = Arrangement.spacedBy(RESULT_COL_GAP)) {
-                pair.forEachIndexed { c, channel -> ResultTile(channel, focused == r * LiveSearch.RESULT_COLUMNS + c) }
+                pair.forEachIndexed { c, channel -> ResultTile(channel, focused == r * LiveSearch.RESULT_COLUMNS + c, nowS) }
             }
         }
     }
 }
 
 @Composable
-private fun ResultTile(channel: LiveTvData.Channel, focused: Boolean) {
+private fun ResultTile(channel: LiveTvData.Channel, focused: Boolean, nowS: Long) {
+    // A game still to start is not judged by its stream: no dimming, no dot.
+    val upcoming = LiveGames.upcoming(channel, nowS)
     Box {
         TileFrame(RESULT_WIDTH, RESULT_HEIGHT, RESULT_BAND, Color(channel.rowColor), focused, RESULT_PAD_END) {
             LiveText(
-                channel.name, RESULT_NAME_TEXT, if (channel.off && !focused) NAME_OFF else Color.White,
+                channel.name, RESULT_NAME_TEXT, if (channel.off && !upcoming && !focused) NAME_OFF else Color.White,
                 AppTypography.asapCondensedBold,
             )
             LiveText(
-                "${channel.number} · ${channel.row}" + if (channel.off) " · off air" else "", TILE_META_TEXT,
+                LiveSearch.tileMeta(channel, nowS), TILE_META_TEXT,
                 if (focused) META_FOCUSED else PANEL_NOTE_COLOR, AppTypography.interSemiBold,
             )
         }
-        Box(Modifier.align(Alignment.CenterEnd).padding(end = RESULT_DOT_END)) {
-            Dot(if (channel.off) OFF_DOT else LIVE_DOT)
+        if (!upcoming) {
+            Box(Modifier.align(Alignment.CenterEnd).padding(end = RESULT_DOT_END)) {
+                Dot(if (channel.off) OFF_DOT else LIVE_DOT)
+            }
         }
     }
 }
