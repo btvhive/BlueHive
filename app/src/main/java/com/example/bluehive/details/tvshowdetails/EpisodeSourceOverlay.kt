@@ -332,7 +332,10 @@ internal fun BoxScope.EpisodeSourceOverlay(
                 defaultIndex = anime.serverDefaultIdx,
                 dub          = anime.pendingDub,
                 onSelect     = { name -> anime.onServerPicked(name) },
-                onBack       = { anime.onPromptBack() },
+                // Held from BEFORE the list goes, so focus never drops onto
+                // the page behind the card (v587) -- see EpisodeSnapState.stepping.
+                onBack       = { snap.holdFocusForStep(); anime.onPromptBack() },
+                onFocusTaken = { snap.stepFocused() },
                 modifier     = Modifier
                     .padding(top = 14.dp, bottom = 24.dp)
                     .padding(horizontal = 31.dp)
@@ -361,8 +364,9 @@ internal fun BoxScope.EpisodeSourceOverlay(
                     focusRequesters = pairFocus,
                     startOn         = if (fromList[0]) 1 else 0,
                     onDefault       = { anime.onDefaultServer() },
-                    onChoose        = { anime.onChooseServer() },
-                    onBack          = { anime.onPromptBack() },
+                    onChoose        = { snap.holdFocusForStep(); anime.onChooseServer() },
+                    onBack          = { snap.holdFocusForStep(); anime.onPromptBack() },
+                    onFocusTaken    = { snap.stepFocused() },
                 )
                 Text(
                     text = "BACK: change language",
@@ -425,6 +429,7 @@ internal fun BoxScope.EpisodeSourceOverlay(
                     onUnavailable = onUnavailable,
                     onBack = closeToTile,
                     startOn = pairLanguage[0].coerceAtLeast(0),
+                    onFocusTaken = { snap.stepFocused() },
                 )
                 }
                 }

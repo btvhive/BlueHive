@@ -38,6 +38,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -64,6 +65,9 @@ internal const val SNAP_RENDER_DURATION_MS = 1500L
  * now, so its first frame (a new GL context, the shaders compiled) comes later.
  */
 private const val SNAP_HIDE_DELAY_MS = 200L
+
+/** The longest the page refuses focus while the anime card changes step -- see EpisodeSnapState.stepping. */
+internal const val STEP_FOCUS_HOLD_MS = 600L
 
 /** A capture that takes longer than this is abandoned: the press goes ahead without dust. */
 private const val SNAP_CAPTURE_TIMEOUT_MS = 600L
@@ -148,6 +152,35 @@ internal class EpisodeSnapState(
      * staying (v585). Shares this snap's renderer -- see RowSnapState.
      */
     val row = RowSnapState(scope, rendererOf = { renderer }, warn = warn)
+
+    /**
+     * The anime card is changing step (v587): the step on screen -- and the
+     * button focus was on -- leaves composition a frame or two before the
+     * next step's button takes focus, and in that gap Android handed focus to
+     * the first focusable thing on the page, Add to Favorites, which lit up
+     * behind the card (BACK from the server list). The page refuses focus
+     * from [holdFocusForStep] until [stepFocused], or STEP_FOCUS_HOLD_MS at most.
+     */
+    var stepping by mutableStateOf(false)
+        private set
+    private var steppingRelease: Job? = null
+
+    /** Call BEFORE the state change that swaps the card's step. */
+    fun holdFocusForStep() {
+        stepping = true
+        steppingRelease?.cancel()
+        steppingRelease = scope.launch {
+            delay(STEP_FOCUS_HOLD_MS)
+            stepping = false
+        }
+    }
+
+    /** The new step's button has focus: the page may take it again. */
+    fun stepFocused() {
+        steppingRelease?.cancel()
+        steppingRelease = null
+        stepping = false
+    }
 
     /**
      * A failure the playback flow reports outside the session -- the anime
@@ -444,7 +477,7 @@ internal fun Modifier.episodeSnapCard(snap: EpisodeSnapState): Modifier = this
 internal fun Modifier.blockFocusWhileSnapping(snap: EpisodeSnapState): Modifier = this
     .focusProperties {
         enter = {
-            if (snap.phase != EpisodeSnapState.Phase.Idle || snap.row.busy) FocusRequester.Cancel
+            if (snap.phase != EpisodeSnapState.Phase.Idle || snap.row.busy || snap.stepping) FocusRequester.Cancel
             else FocusRequester.Default
         }
     }

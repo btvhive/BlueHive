@@ -102,6 +102,29 @@ class AnimeServerChoiceTest {
     }
 
     @Test
+    fun `the page refuses focus while the card changes step, until the new step has it`() = runTest {
+        val snap = EpisodeSnapState(scope = this, startDust = { false }, warn = { _, _ -> })
+        snap.holdFocusForStep()
+        assertTrue(snap.stepping)
+        snap.stepFocused()
+        assertFalse(snap.stepping)
+        snap.holdFocusForStep()
+        advanceTimeBy(STEP_FOCUS_HOLD_MS + 1)
+        assertFalse("never held for good", snap.stepping)
+    }
+
+    @Test
+    fun `BACK from the list, and every step change, holds focus first (v587)`() {
+        val card = MainSource.code("details/tvshowdetails/EpisodeSourceOverlay.kt")
+        assertEquals(2, Regex("""snap\.holdFocusForStep\(\); anime\.onPromptBack\(\)""").findAll(card).count())
+        assertTrue(card.contains("snap.holdFocusForStep(); anime.onChooseServer()"))
+        assertEquals(3, Regex("""onFocusTaken\s*=\s*\{ snap\.stepFocused\(\) \}""").findAll(card).count())
+        val snapCode = MainSource.code("details/tvshowdetails/EpisodeSnap.kt")
+        val block = snapCode.substringAfter("internal fun Modifier.blockFocusWhileSnapping(")
+        assertTrue(block.substringBefore(".focusGroup()").contains("snap.stepping"))
+    }
+
+    @Test
     fun `the pair is the card's own buttons, glow and size unchanged`() {
         val buttons = MainSource.code("details/tvshowdetails/EpisodeAnimeButtons.kt")
         val pair = buttons.substringAfter("internal fun AnimeServerChoiceButtons(").substringBefore("\n}\n")

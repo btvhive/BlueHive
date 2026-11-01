@@ -57,6 +57,8 @@ internal fun AnimeEpisodeProviderButtons(
     onBack: () -> Unit,
     /** Which button takes focus when the row appears: 1 = Japanese, after BACK from its server choice. */
     startOn: Int = 0,
+    /** Focus is on the row: the card's step change is over (EpisodeSnapState.stepFocused). */
+    onFocusTaken: () -> Unit = {},
 ) {
     /** A press made too early. true = dub, false = sub, null = none waiting. */
     var queued by remember { mutableStateOf<Boolean?>(null) }
@@ -92,6 +94,7 @@ internal fun AnimeEpisodeProviderButtons(
     LaunchedEffect(Unit) {
         delay(50)
         focusRequesters.getOrNull(startOn)?.requestFocus()
+        onFocusTaken()
     }
 
     // Side by side in the episode overlay, like its Watch on ... buttons:
@@ -172,6 +175,7 @@ internal fun AnimeServerChoiceButtons(
     onDefault: () -> Unit,
     onChoose: () -> Unit,
     onBack: () -> Unit,
+    onFocusTaken: () -> Unit = {},
 ) {
     val fade = remember { Animatable(0f) }
     LaunchedEffect(Unit) {
@@ -180,6 +184,7 @@ internal fun AnimeServerChoiceButtons(
     LaunchedEffect(Unit) {
         delay(50)
         try { focusRequesters[startOn.coerceIn(0, 1)].requestFocus() } catch (_: Exception) {}
+        onFocusTaken()
     }
     Box(Modifier.fillMaxSize().graphicsLayer { alpha = fade.value }) {
         OverlayWatchButton(
@@ -245,6 +250,7 @@ internal fun AnimeInlineServerList(
     onSelect: (String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    onFocusTaken: () -> Unit = {},
 ) {
     val focusRequesters = remember(servers) { List(servers.size) { FocusRequester() } }
     LaunchedEffect(servers) {
@@ -252,6 +258,7 @@ internal fun AnimeInlineServerList(
             awaitFrame()
             awaitFrame()   // let the rows lay out before grabbing focus
             try { focusRequesters[0].requestFocus() } catch (_: Exception) {}
+            onFocusTaken()
         }
     }
     Column(modifier) {
