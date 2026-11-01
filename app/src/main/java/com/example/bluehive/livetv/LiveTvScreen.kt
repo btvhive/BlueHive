@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -94,7 +96,12 @@ internal fun LiveTvScreen(profileId: Int, resumeTick: Int, onWatch: (LiveTvData.
             .fillMaxSize()
             .focusRequester(focus)
             .focusable()
-            .onPreviewKeyEvent { page.onKey(it, onWatch, onRetry = { attempt++ }) }
+            .onPreviewKeyEvent {
+                page.onKey(it, onWatch, onRetry = { attempt++ }) { state ->
+                    LiveTvData.setLocalState(context, state)
+                    page.showLocal(LiveTvData.rebuild(context, profileId), state)
+                }
+            }
     ) {
         Image(
             painter = painterResource(R.drawable.home_screen),
@@ -127,13 +134,27 @@ internal class LiveTvPageState {
     /** The search bar over the list has the focus (Up from the first channel). */
     var onBar by mutableStateOf(false)
         private set
+    /** Local News' state pill, beside the bar, has the focus (Up to the bar, then Right). */
+    var onPill by mutableStateOf(false)
+        private set
+    /** The state picked on this TV for Local News; null until one is. */
+    var localState by mutableStateOf<String?>(null)
+        private set
     val search = LiveSearchState { rows }
+    /** Local News' state list is up (the pill was clicked), with its cursor. */
+    var picking by mutableStateOf(false)
+        private set
+    var pickCursor by mutableIntStateOf(0)
+        private set
+    var choices by mutableStateOf<List<LocalNews.StateChoice>>(emptyList())
+        private set
 
     suspend fun load(context: Context, profileId: Int, keepPlace: Boolean) {
         val keepRow = rows?.getOrNull(selectedRow)?.name
         runCatchingCancellable { LiveTvData.load(context, profileId) }
             .onSuccess { fresh ->
                 rows = fresh
+                localState = LiveTvData.localState(context)
                 failed = false
                 if (fresh.isEmpty()) return@onSuccess
                 val row = if (keepPlace) fresh.indexOfFirst { it.name == keepRow }.takeIf { it >= 0 } ?: 0 else 0
@@ -142,25 +163,39 @@ internal class LiveTvPageState {
                 selectedRow = row
                 focused = when {
                     keepPlace && watched >= 0 -> watched
-                    keepPlace -> focused.coerceIn(0, channels.lastIndex)
+                    keepPlace -> focused.coerceIn(0, channels.lastIndex.coerceAtLeast(0))
                     else -> 0
                 }
-                if (!keepPlace) onBar = false
+                if (!keepPlace) {
+                    onBar = false
+                    onPill = false
+                }
                 search.reconcile()
             }
             .onFailure { if (rows == null) failed = true }
     }
 
-    /** Remote keys. Back is the Activity's, except while the search page is open. */
-    fun onKey(event: KeyEvent, onWatch: (LiveTvData.Row, Int) -> Unit, onRetry: () -> Unit): Boolean {
+    /**
+     * Remote keys. Back is the Activity's, except while the search page or the
+     * state list is open. [onPickState] saves a state picked from the list.
+     */
+    fun onKey(
+        event: KeyEvent,
+        onWatch: (LiveTvData.Row, Int) -> Unit,
+        onRetry: () -> Unit,
+        onPickState: (String) -> Unit,
+    ): Boolean {
         val native = event.nativeKeyEvent
         val code = native.keyCode
         // The search page's Back is taken here, before anything under the page sees
         // it: one press, on release, closes the page. Left alone, Compose spends an
         // unclaimed Back on moving the focus out of the keyboard card (Back is its
-        // FocusDirection.Exit), so leaving took two presses (v504-v511).
-        if (search.isOpen && code == AndroidKeyEvent.KEYCODE_BACK) {
-            if (event.type == KeyEventType.KeyUp && !native.isCanceled) search.back()
+        // FocusDirection.Exit), so leaving took two presses (v504-v511). The state
+        // list's Back cancels it here too, rather than leaving Live TV.
+        if ((search.isOpen || picking) && code == AndroidKeyEvent.KEYCODE_BACK) {
+            if (event.type == KeyEventType.KeyUp && !native.isCanceled) {
+                if (search.isOpen) search.back() else cancelPick()
+            }
             return true
         }
         if (event.type != KeyEventType.KeyDown) return false
@@ -174,33 +209,106 @@ internal class LiveTvPageState {
             return ExoPlayerConfig.isCenterKey(code)
         }
         if (search.isOpen) return search.onKey(code, native.repeatCount, onWatch)
-        val last = rows[selectedRow].channels.lastIndex
+        if (picking) return pickKey(code, native.repeatCount, onPickState)
+        val row = rows[selectedRow]
+        val top = onBar || onPill
         when (code) {
             AndroidKeyEvent.KEYCODE_DPAD_UP -> when {
-                onBar -> Unit
+                top -> Unit
                 focused > 0 -> { focused--; BlueHiveApplication.playHoverSound() }
                 else -> { onBar = true; BlueHiveApplication.playHoverSound() }
             }
             AndroidKeyEvent.KEYCODE_DPAD_DOWN -> when {
-                onBar -> { onBar = false; BlueHiveApplication.playHoverSound() }
-                focused < last -> { focused++; BlueHiveApplication.playHoverSound() }
+                top -> if (row.channels.isNotEmpty()) {
+                    onBar = false
+                    onPill = false
+                    BlueHiveApplication.playHoverSound()
+                }
+                focused < row.channels.lastIndex -> { focused++; BlueHiveApplication.playHoverSound() }
             }
-            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> if (selectedRow > 0) moveRow(selectedRow - 1)
-            AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> if (selectedRow < rows.lastIndex) moveRow(selectedRow + 1)
+            // Local News' top line is [bar][pill]: the pill sits between the bar and the next category.
+            AndroidKeyEvent.KEYCODE_DPAD_LEFT -> when {
+                onPill -> { onPill = false; onBar = true; BlueHiveApplication.playHoverSound() }
+                selectedRow > 0 -> moveRow(selectedRow - 1)
+            }
+            AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> when {
+                onBar && row.name == LocalNews.ROW -> { onBar = false; onPill = true; BlueHiveApplication.playHoverSound() }
+                selectedRow < rows.lastIndex -> moveRow(selectedRow + 1)
+            }
             else -> {
                 if (!ExoPlayerConfig.isCenterKey(code)) return false
                 if (native.repeatCount == 0) {
                     BlueHiveApplication.playClickSound()
-                    if (onBar) search.open() else onWatch(rows[selectedRow], focused)
+                    when {
+                        onBar -> search.open()
+                        onPill -> openPick()
+                        focused <= row.channels.lastIndex -> onWatch(row, focused)
+                    }
                 }
             }
         }
         return true
     }
 
+    private fun openPick() {
+        val list = LiveTvData.stateChoices()
+        if (list.isEmpty()) {
+            BlueHiveApplication.playErrorSound()
+            return
+        }
+        choices = list
+        pickCursor = list.indexOfFirst { it.code == localState }.coerceAtLeast(0)
+        picking = true
+    }
+
+    private fun cancelPick() {
+        BlueHiveApplication.playBackOutSound()
+        picking = false
+    }
+
+    private fun pickKey(code: Int, repeat: Int, onPickState: (String) -> Unit): Boolean {
+        when (code) {
+            AndroidKeyEvent.KEYCODE_DPAD_UP -> if (pickCursor > 0) { pickCursor--; BlueHiveApplication.playHoverSound() }
+            AndroidKeyEvent.KEYCODE_DPAD_DOWN ->
+                if (pickCursor < choices.lastIndex) { pickCursor++; BlueHiveApplication.playHoverSound() }
+            AndroidKeyEvent.KEYCODE_DPAD_LEFT, AndroidKeyEvent.KEYCODE_DPAD_RIGHT -> Unit
+            else -> {
+                if (!ExoPlayerConfig.isCenterKey(code)) return false
+                if (repeat == 0) {
+                    BlueHiveApplication.playClickSound()
+                    picking = false
+                    onPickState(choices[pickCursor].code)
+                }
+            }
+        }
+        return true
+    }
+
+    /** A state was just picked: the rebuilt rows, Local News on its first station. */
+    fun showLocal(fresh: List<LiveTvData.Row>, state: String) {
+        rows = fresh
+        localState = state
+        val row = fresh.indexOfFirst { it.name == LocalNews.ROW }.coerceAtLeast(0)
+        selectedRow = row
+        focused = 0
+        onBar = false
+        onPill = fresh[row].channels.isEmpty()
+    }
+
+    /**
+     * The pill is Local News' own, so leaving the row from it lands on the bar,
+     * which every row has. Arriving at Local News with no state picked (no
+     * stations to land on) starts on the pill.
+     */
     private fun moveRow(to: Int) {
         selectedRow = to
         focused = 0
+        if (onPill) {
+            onPill = false
+            onBar = true
+        }
+        val row = rows?.getOrNull(to)
+        if (!onBar && row?.name == LocalNews.ROW && row.channels.isEmpty()) onPill = true
         BlueHiveApplication.playTitleCardNavigation()
     }
 }
@@ -208,24 +316,36 @@ internal class LiveTvPageState {
 @Composable
 private fun LiveGuide(page: LiveTvPageState, rows: List<LiveTvData.Row>) {
     val row = rows[page.selectedRow]
+    val local = row.name == LocalNews.ROW
     CategoryChips(rows, page.selectedRow)
-    SearchBar(LiveSearch.barHint(page.search.channels.size), page.onBar)
-    key(page.selectedRow) { ChannelList(row.channels, page.focused, showFocus = !page.onBar) }
-    if (page.onBar) SearchInvitePanel(rows, page.search.channels)
-    else row.channels.getOrNull(page.focused)?.let { DetailPanel(it) }
-    GuideHintBar()
+    SearchBar(LiveSearch.barHint(page.search.channels.size), page.onBar, if (local) BAR_LOCAL_WIDTH else LIST_WIDTH)
+    if (local) StatePill(page.localState, page.onPill)
+    if (page.picking) {
+        StateList(page.choices, page.pickCursor)
+        page.choices.getOrNull(page.pickCursor)?.let { StateChoicePanel(it, row.color) }
+    } else {
+        if (local && row.channels.isEmpty()) PickStateMessage()
+        else key(page.selectedRow) { ChannelList(row.channels, page.focused, showFocus = !page.onBar && !page.onPill) }
+        val states = remember(rows) { LiveTvData.stateChoices().size }
+        when {
+            page.onBar -> SearchInvitePanel(rows, page.search.channels)
+            page.onPill -> StatePillPanel(page.localState, row.channels.size, states, row.color)
+            else -> row.channels.getOrNull(page.focused)?.let { DetailPanel(it) }
+        }
+    }
+    GuideHintBar(page.picking)
 }
 
 /** Design B's bar: always over the list, one Up from the first channel; Click opens the search page. */
 @Composable
-private fun SearchBar(hint: String, focused: Boolean) {
+private fun SearchBar(hint: String, focused: Boolean, width: Dp) {
     val shape = RoundedCornerShape(BAR_RADIUS)
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(BAR_GAP),
         modifier = Modifier
             .offset(LIST_LEFT, BAR_TOP)
-            .size(LIST_WIDTH, BAR_HEIGHT)
+            .size(width, BAR_HEIGHT)
             .focusRing(focused, BAR_RADIUS)
             .background(if (focused) ROW_FOCUSED else BAR_BG, shape)
             .then(if (focused) Modifier else Modifier.border(BAR_BORDER, BAR_EDGE, shape))
@@ -293,8 +413,18 @@ private fun ChannelList(channels: List<LiveTvData.Channel>, focused: Int, showFo
         keepInView(focused, state.firstVisibleItemIndex, state.firstVisibleItemScrollOffset, LIST_VISIBLE_ROWS)
             ?.let { state.scrollToItem(it) }
     }
-    // Grown by the ring's width on every side, rows kept where the mockup puts
-    // them: a list clips its children, and the focus ring is drawn outside its row.
+    GuideList(state) {
+        itemsIndexed(channels, key = { _, c -> c.id }) { i, c -> ChannelRow(c, showFocus && i == focused) }
+    }
+}
+
+/**
+ * The left-hand list's frame, for channels and for Local News' states alike:
+ * grown by the ring's width on every side, rows kept where the mockup puts
+ * them -- a list clips its children, and the focus ring is drawn outside its row.
+ */
+@Composable
+internal fun GuideList(state: LazyListState, content: LazyListScope.() -> Unit) {
     LazyColumn(
         state = state,
         userScrollEnabled = false,
@@ -303,23 +433,28 @@ private fun ChannelList(channels: List<LiveTvData.Channel>, focused: Int, showFo
         modifier = Modifier
             .offset(LIST_LEFT - FOCUS_RING, LIST_TOP - FOCUS_RING)
             .size(LIST_WIDTH + FOCUS_RING * 2, LIST_HEIGHT + FOCUS_RING * 2),
-    ) {
-        itemsIndexed(channels, key = { _, c -> c.id }) { i, c -> ChannelRow(c, showFocus && i == focused) }
-    }
+        content = content,
+    )
 }
 
+/** One row of the left-hand list: blue with the white ring when focused. */
 @Composable
-private fun ChannelRow(channel: LiveTvData.Channel, focused: Boolean) {
-    val shape = RoundedCornerShape(ROW_RADIUS)
+internal fun RowFrame(focused: Boolean, content: @Composable RowScope.() -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
             .height(ROW_HEIGHT)
             .focusRing(focused, ROW_RADIUS)
-            .background(if (focused) ROW_FOCUSED else ROW_IDLE, shape)
+            .background(if (focused) ROW_FOCUSED else ROW_IDLE, RoundedCornerShape(ROW_RADIUS))
             .padding(horizontal = ROW_PAD_H),
-    ) {
+        content = content,
+    )
+}
+
+@Composable
+private fun ChannelRow(channel: LiveTvData.Channel, focused: Boolean) {
+    RowFrame(focused) {
         LiveText(
             channel.number.toString(), NUMBER_TEXT, if (focused) NUMBER_FOCUSED else NUMBER_IDLE,
             AppTypography.interSemiBold, Modifier.width(NUMBER_WIDTH),
@@ -337,7 +472,7 @@ private fun ChannelRow(channel: LiveTvData.Channel, focused: Boolean) {
 
 /** The right-hand panel: [band] across its top, then [content]. */
 @Composable
-private fun PanelFrame(band: Color, content: @Composable ColumnScope.() -> Unit) {
+internal fun PanelFrame(band: Color, content: @Composable ColumnScope.() -> Unit) {
     val shape = RoundedCornerShape(PANEL_RADIUS)
     Column(
         Modifier
@@ -377,13 +512,13 @@ private fun DetailPanel(channel: LiveTvData.Channel) {
 }
 
 @Composable
-private fun GuideHintBar() {
+private fun GuideHintBar(picking: Boolean) {
     HintBox(Modifier.offset(HINT_LEFT, HINT_TOP).size(HINT_WIDTH, HINT_HEIGHT)) {
-        KeyHint("▲▼", "channels")
+        KeyHint("▲▼", if (picking) "states" else "channels")
         HintSeparator()
-        KeyHint("‹ ›", "categories")
+        if (picking) KeyHint("Click", "choose") else KeyHint("‹ ›", "categories")
         HintSeparator()
-        KeyHint("↩", "back")
+        KeyHint("↩", if (picking) "cancel" else "back")
     }
 }
 
@@ -419,7 +554,7 @@ internal fun LiveText(
 }
 
 @Composable
-private fun Tag(text: String) {
+internal fun Tag(text: String) {
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier

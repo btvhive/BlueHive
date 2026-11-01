@@ -10,7 +10,9 @@ import kotlinx.coroutines.coroutineScope
 /**
  * Live TV's channel list as the page shows it: the server's rows, numbered like
  * a cable box (row 1 = 101, 102...; row 2 = 201...), Kids-only for a kids
- * profile, and the profile's own "Recently watched" row first.
+ * profile, and the profile's own "Recently watched" row first. Local News shows
+ * the stations of the state picked on this TV -- none until one is picked, and
+ * the row stays even then, so its state pill can be reached.
  */
 internal object LiveTvData {
 
@@ -19,9 +21,14 @@ internal object LiveTvData {
     private const val RECENT_MAX = 10
     private const val PREFS = "bluehive_live_tv"
     private const val RECENT_COLOR = 0xFF2644A6
+    private const val LOCAL_STATE = "local_state"
 
     /** The channel the player last tuned, so the page puts its cursor there on return. */
     @Volatile var lastWatchedId: String? = null
+
+    // The last list from the server, so picking a state rebuilds the rows at once.
+    @Volatile private var lastServer: List<LiveRowDto> = emptyList()
+    @Volatile private var lastKids = false
 
     data class Channel(
         val id: String,
@@ -39,10 +46,17 @@ internal object LiveTvData {
     data class Row(val name: String, val color: Long, val channels: List<Channel>)
 
     /** Server rows to page rows. Pure, so the JVM tests call it. */
-    fun buildRows(server: List<LiveRowDto>, kids: Boolean, recentIds: List<String>): List<Row> {
+    fun buildRows(
+        server: List<LiveRowDto>,
+        kids: Boolean,
+        recentIds: List<String>,
+        localState: String? = null,
+    ): List<Row> {
         val numbered = server.mapIndexed { r, row ->
             val color = parseColor(row.color)
-            Row(row.name, color, row.channels.mapIndexed { i, c ->
+            val local = row.name == LocalNews.ROW
+            val listed = if (local) LocalNews.stationsFor(row, localState) else row.channels
+            val channels = listed.mapIndexed { i, c ->
                 Channel(
                     id = c.id,
                     name = c.name,
@@ -54,8 +68,9 @@ internal object LiveTvData {
                     off = c.status == "off",
                     number = (r + 1) * 100 + i + 1,
                 )
-            })
-        }.filter { it.channels.isNotEmpty() && (!kids || it.name == KIDS_ROW) }
+            }
+            Row(row.name, color, channels)
+        }.filter { (it.channels.isNotEmpty() || it.name == LocalNews.ROW) && (!kids || it.name == KIDS_ROW) }
         val byId = numbered.flatMap { it.channels }.associateBy { it.id }
         val recent = recentIds.mapNotNull { byId[it] }
         return if (recent.isEmpty()) numbered else listOf(Row(RECENT_ROW, RECENT_COLOR, recent)) + numbered
@@ -78,7 +93,25 @@ internal object LiveTvData {
             runCatchingCancellable { ApiClient.bluehiveApi.listProfiles() }.getOrNull()
                 ?.firstOrNull { it.id == profileId }?.profile_type == "kids"
         }
-        buildRows(channels.await().rows, kids.await(), recentIds(context, profileId))
+        lastServer = channels.await().rows
+        lastKids = kids.await()
+        rebuild(context, profileId)
+    }
+
+    /** The last list again, with the state picked just now: no network. */
+    fun rebuild(context: Context, profileId: Int): List<Row> =
+        buildRows(lastServer, lastKids, recentIds(context, profileId), localState(context))
+
+    /** The states the Local News picker offers, from the last list. */
+    fun stateChoices(): List<LocalNews.StateChoice> =
+        LocalNews.choices(lastServer.firstOrNull { it.name == LocalNews.ROW })
+
+    /** The state picked on this TV (a household's TVs share a place, so not per profile). */
+    fun localState(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(LOCAL_STATE, null)
+
+    fun setLocalState(context: Context, code: String) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(LOCAL_STATE, code).apply()
     }
 
     fun recentIds(context: Context, profileId: Int): List<String> =

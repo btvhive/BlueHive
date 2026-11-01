@@ -30,6 +30,12 @@ data class LiveChannelDto(
     val backup: String?,
     /** "ok" / "off" / "unknown": the channel's last resolve on the server. */
     val status: String?,
+    /**
+     * A Local News station's states (home state first); empty for one that
+     * serves everyone. Null on every other channel, and from a server before
+     * build h (2026-11-01).
+     */
+    val states: List<String>? = null,
 )
 
 /** POST /api/live/{channel}/session */

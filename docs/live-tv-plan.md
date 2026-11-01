@@ -52,6 +52,32 @@ design C is built to its exact sizes and colours (spec in §4a).
 - Kids profiles search the Kids row only. Code: `LiveSearch.kt` (pure, `LiveSearchTest`) and
   `LiveSearchPage.kt`.
 
+**Local News (API build h + TV v583, 2026-11-01):** the user asked for "local news networks to my
+state".
+- **Server:** a "Local News" row before News, made from the 88 local news stations in Vizio's free
+  channel list (`build_local`). Each station carries the states it serves, worked out from its
+  zip codes: 43 states plus DC. One station serves everyone (Local Now, flagged US). Only the
+  master playlist is relayed; the variant playlists and chunks are plain HLS on Amagi and Wurl,
+  which the TV fetches directly. They are not tied to an IP: a link fetched from the VPS played
+  from a home line. The check is lighter than zlive's: the best variant must list timed
+  segments. Its height gives the FHD/HD tag (`live:quality`). Off switch: `LIVE_LOCAL=0`.
+- **TV:** the row starts with a state entry, "Choose your state" or the state already picked.
+  Clicking it opens a state list in the channel list's place; the panel shows each state's
+  station count and a few of its stations. The choice is kept on the TV, not per profile.
+- **TV order:** working stations first (as in every row); within that, the state's own stations,
+  then neighbours' stations that also serve it, then Local Now. Back cancels the list.
+- **TV, elsewhere:** the player, search and Recently watched skip the state entry, and captions
+  are off in the live player (these streams mark them as on by default). Code: `LocalNews.kt`
+  (pure, `LocalNewsTest`), `LocalNewsViews.kt`.
+- **Also in build h / v583, zlive's third chunk wrapping:**
+  - Since about 12:55 UTC that day, zlive's chunks come from enterprise.content.tenovos.io.
+  - Each one is a PNG whose IDAT holds the raw MPEG-TS, uncompressed.
+  - Build g's check rejected it ("chunk is not MPEG-TS", 151 feeds), so the guide showed 78 of
+    237 channels as working.
+  - Server fix: `png_raw_ts`. TV fix: `ChunkUnwrap.rawTsInPng`. Relayed playlists now also make
+    `URI="..."` attributes absolute (News 12's captions use a relative one).
+  - Tests: 94/94 on the image.
+
 ## 1. What the viewer gets
 
 - Sidebar → Live TV opens a channel page instead of "Feature still in development".

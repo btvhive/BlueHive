@@ -36,6 +36,17 @@ internal val BAR_BG = Color(0xFF0E0F14)
 internal val BAR_EDGE = Color(0xFF2A2D37)
 internal val BAR_INK = Color(0xFF8B90A0)
 
+// ── Local News' state pill (design C of live_tv_state_entry_designs_abcd) ────
+// In Local News the bar gives up its right end to the pill: Up to the bar, Right.
+internal val BAR_LOCAL_WIDTH = 321.9.dp      // 228 px
+internal val PILL_LEFT = 355.8.dp            // 252 px
+internal val PILL_WIDTH = 135.6.dp           // 96 px, to the list's right edge
+internal val PILL_GAP = 7.1.dp               // 5 px
+internal val PILL_BG = Color(0x2E7CB342)     // Local News green at 18%
+internal val PILL_EDGE = Color(0x997CB342)   // at 60%
+internal val PILL_INK = Color(0xFFCDEBA6)
+internal val EMPTY_TOP = 14.1.dp             // 10 px into the list: "Pick your state..."
+
 // ── Channel list (left) ───────────────────────────────────────────────────────
 internal val LIST_LEFT = 22.6.dp             // 16 px
 // 92 px: the bar's 28 px plus 14 px, the same gap as chips to bar (the user

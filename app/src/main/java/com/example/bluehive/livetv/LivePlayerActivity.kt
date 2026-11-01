@@ -25,6 +25,7 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.media3.common.C
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
@@ -155,6 +156,11 @@ class LivePlayerActivity : ComponentActivity() {
         player = ExoPlayerConfig.buildPlayer(this).also {
             it.addListener(listener)
             it.addAnalyticsListener(loadErrors)
+            // Local News streams list their captions as on by default (Amagi, Wurl;
+            // 2026-11-01). Channels play without them, as they always have here.
+            it.trackSelectionParameters = it.trackSelectionParameters.buildUpon()
+                .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
+                .build()
         }
         ExoPlayerConfig.keepScreenOnWhilePlaying(this, player)
         setContent { PlayerScreen() }
