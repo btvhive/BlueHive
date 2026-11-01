@@ -18,7 +18,10 @@ import java.util.zip.Inflater
 //      4 MB per 3.8 s chunk (Sky Sports F1, HBO, Disney...);
 //    - the "artemis" feeds (ESPN Backup): a PNG whose PIXELS are the data --
 //      b"TIKTIKPX" + u32 big-endian size + a gzip stream of the MPEG-TS.
-//  ExoPlayer can parse neither, so [unwrapping] turns both back into plain
+//  MEASURED 2026-11-01, a third, on a new host (enterprise.content.tenovos.io),
+//  which took most channels off air until it was handled: a PNG whose IDAT
+//  holds the MPEG-TS UNCOMPRESSED (IHDR width = the payload size, height 1).
+//  ExoPlayer can parse none of them, so [unwrapping] turns each back into plain
 //  MPEG-TS and passes everything else (the playlist itself, plain TS) through
 //  untouched. Pure JVM code on streams, no Android types, so the unit tests
 //  run it directly.
@@ -26,7 +29,7 @@ import java.util.zip.Inflater
 
 internal object ChunkUnwrap {
 
-    enum class Kind { WEBP, PIXEL_PNG, PASSTHROUGH }
+    enum class Kind { WEBP, PIXEL_PNG, RAW_PNG, PASSTHROUGH }
 
     class Unwrapped(val kind: Kind, val stream: InputStream)
 
@@ -52,7 +55,8 @@ internal object ChunkUnwrap {
             isWebp(head) -> Unwrapped(Kind.WEBP, webpPayload(pb))
             isPng(head) -> {
                 val bytes = pb.readBytes()
-                decodePixelPng(bytes)?.let { Unwrapped(Kind.PIXEL_PNG, ByteArrayInputStream(it)) }
+                rawTsInPng(bytes)?.let { Unwrapped(Kind.RAW_PNG, it) }
+                    ?: decodePixelPng(bytes)?.let { Unwrapped(Kind.PIXEL_PNG, ByteArrayInputStream(it)) }
                     ?: Unwrapped(Kind.PASSTHROUGH, ByteArrayInputStream(bytes))
             }
             else -> Unwrapped(Kind.PASSTHROUGH, pb)
@@ -92,6 +96,34 @@ internal object ChunkUnwrap {
                 skipFully(pb, size + (size and 1L))
             }
         }
+    }
+
+    /**
+     * The MPEG-TS a PNG carries uncompressed as its IDAT data, read in place (no
+     * copy for the one IDAT measured), or null if [b] is not one: its IDAT must
+     * start with two TS packets' sync bytes, which compressed pixels never do.
+     */
+    fun rawTsInPng(b: ByteArray): InputStream? {
+        if (!isPng(b)) return null
+        var p = 8
+        val idat = ArrayList<Pair<Int, Int>>()          // (offset, length) of each IDAT's data
+        while (p + 8 <= b.size) {
+            val n = beInt(b, p)
+            if (n < 0 || p + 12L + n > b.size) return null
+            when (String(b, p + 4, 4, Charsets.ISO_8859_1)) {
+                "IDAT" -> idat += (p + 8) to n
+                "IEND" -> break
+            }
+            p += 12 + n
+        }
+        val (at, length) = idat.firstOrNull() ?: return null
+        if (length <= TS_PACKET || (b[at].toInt() and 0xff) != TS_SYNC ||
+            (b[at + TS_PACKET].toInt() and 0xff) != TS_SYNC
+        ) return null
+        if (idat.size == 1) return ByteArrayInputStream(b, at, length)
+        val all = ByteArrayOutputStream()
+        idat.forEach { (off, n) -> all.write(b, off, n) }
+        return ByteArrayInputStream(all.toByteArray())
     }
 
     /**

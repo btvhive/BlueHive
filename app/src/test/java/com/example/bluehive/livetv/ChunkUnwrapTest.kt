@@ -14,8 +14,9 @@ import java.util.zip.DeflaterOutputStream
 import java.util.zip.GZIPOutputStream
 
 /**
- * The two wrappings measured on zlive.st 2026-10-28, rebuilt byte for byte:
- * MPEG-TS in a WebP's EXIF chunk, and MPEG-TS gzipped into a PNG's pixels.
+ * The wrappings measured on zlive.st, rebuilt byte for byte: MPEG-TS in a
+ * WebP's EXIF chunk and MPEG-TS gzipped into a PNG's pixels (2026-10-28), and
+ * MPEG-TS as a PNG's uncompressed IDAT (2026-11-01).
  */
 class ChunkUnwrapTest {
 
@@ -138,6 +139,40 @@ class ChunkUnwrapTest {
         assertArrayEquals(payload, ChunkUnwrap.decodePixelPng(pixelPng(payload, width = 100, colour = 0)))
         assertArrayEquals(payload, ChunkUnwrap.decodePixelPng(pixelPng(payload, width = 37, colour = 6)))
         assertArrayEquals(payload, ChunkUnwrap.decodePixelPng(pixelPng(payload, width = 512) { 4 }))
+    }
+
+    /** As measured 2026-11-01 (tenovos.io): IHDR width = payload size, height 1, RGB; IDAT = the raw TS. */
+    private fun rawTsPng(vararg idats: ByteArray): ByteArray {
+        val size = idats.sumOf { it.size }
+        val ihdr = be(size) + be(1) + byteArrayOf(8, 2, 0, 0, 0)
+        return byteArrayOf(0x89.toByte(), 'P'.code.toByte(), 'N'.code.toByte(), 'G'.code.toByte(), 13, 10, 26, 10) +
+            pngChunk("IHDR", ihdr) + idats.fold(byteArrayOf()) { acc, d -> acc + pngChunk("IDAT", d) } +
+            pngChunk("IEND", byteArrayOf())
+    }
+
+    @Test
+    fun rawTsPng_asMeasured_givesTheExactTs() {
+        val payload = ts(2000)
+        val out = unwrap(rawTsPng(payload))
+        assertEquals(ChunkUnwrap.Kind.RAW_PNG, out.kind)
+        assertArrayEquals(payload, out.stream.readBytes())
+    }
+
+    @Test
+    fun rawTsPng_splitAcrossIdats_andResumedAtAnOffset() {
+        val payload = ts(600)
+        val split = rawTsPng(payload.copyOfRange(0, 188 * 250), payload.copyOfRange(188 * 250, payload.size))
+        assertArrayEquals(payload, unwrap(split).stream.readBytes())
+        val out = unwrap(rawTsPng(payload))
+        ChunkUnwrap.skipFully(out.stream, 5000)
+        assertArrayEquals(payload.copyOfRange(5000, payload.size), out.stream.readBytes())
+    }
+
+    @Test
+    fun rawTsPng_isNotTakenForAPixelPng_andTheOtherWayRound() {
+        assertNull(ChunkUnwrap.rawTsInPng(pixelPng(ts(300))))        // compressed pixels never start with sync bytes
+        assertNull(ChunkUnwrap.decodePixelPng(rawTsPng(ts(300))))
+        assertArrayEquals(ts(300), unwrap(pixelPng(ts(300))).stream.readBytes())
     }
 
     @Test
