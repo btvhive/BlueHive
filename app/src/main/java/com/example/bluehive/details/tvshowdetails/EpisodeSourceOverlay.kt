@@ -68,6 +68,27 @@ private val SOURCE_BUTTON_HEIGHT = 40.dp  // face + the strip under it
  */
 private val SOURCE_BUTTON_ROOM = 55.8.dp
 
+/** Which step of the anime flow the card shows (v585): the server choice lives in the card. */
+internal enum class AnimeCardStep { Language, Pair, List }
+
+/**
+ * The step the anime flow asks for. The pair stays while "Visiting the site
+ * to list its servers…" runs, so the language row does not flash up behind
+ * the loading screen.
+ */
+internal fun animeCardStep(
+    isAnime: Boolean,
+    showServerPicker: Boolean,
+    hasServers: Boolean,
+    showDefaultPrompt: Boolean,
+    checkingServers: Boolean,
+): AnimeCardStep = when {
+    !isAnime -> AnimeCardStep.Language
+    showServerPicker && hasServers -> AnimeCardStep.List
+    showDefaultPrompt || checkingServers -> AnimeCardStep.Pair
+    else -> AnimeCardStep.Language
+}
+
 /** The still fades into the card from 45% of its height down, as in the mockup. */
 private val StillFade = Brush.verticalGradient(
     0.45f to Color.Transparent,
@@ -223,6 +244,32 @@ internal fun BoxScope.EpisodeSourceOverlay(
         }
     }
 
+    // The anime step. HELD while the card snaps: Default server or a picked
+    // server closes the flow's state in the same frame the snap starts, and
+    // the dust should be the step that was pressed, not the language row.
+    val wantedStep = animeCardStep(
+        isAnime           = isAnime,
+        showServerPicker  = anime.showServerPicker,
+        hasServers        = anime.serverOptions.isNotEmpty(),
+        showDefaultPrompt = anime.showDefaultPrompt,
+        checkingServers   = anime.isCheckingServers,
+    )
+    val cardIdle by remember(snap) { derivedStateOf { snap.phase == EpisodeSnapState.Phase.Idle } }
+    val heldStep = remember { arrayOf(AnimeCardStep.Language) }
+    val fromList = remember { booleanArrayOf(false) }
+    // The language a server choice was for, so BACK lands on its button again.
+    val pairLanguage = remember { intArrayOf(-1) }
+    val step = if (!cardIdle && wantedStep == AnimeCardStep.Language) heldStep[0] else wantedStep
+    SideEffect {
+        if (wantedStep != AnimeCardStep.Language || cardIdle) heldStep[0] = wantedStep
+        when (step) {
+            AnimeCardStep.List -> fromList[0] = true
+            AnimeCardStep.Language -> fromList[0] = false
+            AnimeCardStep.Pair -> pairLanguage[0] = if (anime.pendingDub) 0 else 1
+        }
+    }
+    val pairFocus = remember { List(2) { FocusRequester() } }
+
     val closeToTile: () -> Unit = {
         episodesState.selectedEpisodeOverlayIndex = -1
         val targetIndex = episodesState.lastFocusedEpisodeIndex
@@ -258,7 +305,8 @@ internal fun BoxScope.EpisodeSourceOverlay(
         )
 
         val overview = selectedEpisode.overview.orEmpty()
-        if (overview.isNotBlank()) {
+        // The server list takes the overview's place as well as the buttons'.
+        if (overview.isNotBlank() && step != AnimeCardStep.List) {
             Text(
                 text = overview,
                 fontFamily = dongleRegular,
@@ -276,17 +324,64 @@ internal fun BoxScope.EpisodeSourceOverlay(
         // (20.2 dp under the glow room, which holds the other 15.8).
         val buttonCount = if (isAnime) 2 else episodeSources.size.coerceAtMost(focusMap.providers.size)
         val rows = (buttonCount + 1) / 2
-        Box(
+        val gridWidth = SOURCE_COLUMN_STEP + SOURCE_BUTTON_WIDTH
+        val gridHeight = SOURCE_ROW_STEP * (rows - 1).coerceAtLeast(0) + SOURCE_BUTTON_ROOM
+        if (step == AnimeCardStep.List) {
+            AnimeInlineServerList(
+                servers      = anime.serverOptions,
+                defaultIndex = anime.serverDefaultIdx,
+                dub          = anime.pendingDub,
+                onSelect     = { name -> anime.onServerPicked(name) },
+                onBack       = { anime.onPromptBack() },
+                modifier     = Modifier
+                    .padding(top = 14.dp, bottom = 24.dp)
+                    .padding(horizontal = 31.dp)
+                    .width(gridWidth)
+                    .focusGroup(),
+            )
+        } else Box(
             modifier = Modifier
                 .padding(top = 30.dp, bottom = 36.dp - (SOURCE_BUTTON_ROOM - SOURCE_BUTTON_HEIGHT))
                 .padding(horizontal = 31.dp)
-                .size(
-                    width = SOURCE_COLUMN_STEP + SOURCE_BUTTON_WIDTH,
-                    height = SOURCE_ROW_STEP * (rows - 1).coerceAtLeast(0) + SOURCE_BUTTON_ROOM,
-                )
+                .size(width = gridWidth, height = gridHeight)
                 .focusGroup()
         ) {
-            if (isAnime) {
+            if (isAnime && step == AnimeCardStep.Pair) {
+                // Default server / Choose a server, where English / Japanese
+                // were -- the same buttons and glow, faded in once the row's
+                // dust is gone (v585).
+                AnimeServerStepLabel(
+                    dub = anime.pendingDub,
+                    text = "which server?",
+                    modifier = Modifier.offset(y = (-22).dp),
+                )
+                AnimeServerChoiceButtons(
+                    dub             = anime.pendingDub,
+                    passionFont     = passionFont,
+                    focusRequesters = pairFocus,
+                    startOn         = if (fromList[0]) 1 else 0,
+                    onDefault       = { anime.onDefaultServer() },
+                    onChoose        = { anime.onChooseServer() },
+                    onBack          = { anime.onPromptBack() },
+                )
+                Text(
+                    text = "BACK: change language",
+                    color = Color(0xFF8B8D9A),
+                    fontFamily = AppTypography.interSemiBold,
+                    fontSize = 8.sp,
+                    modifier = Modifier.align(Alignment.BottomCenter).offset(y = 10.dp),
+                )
+            } else if (isAnime) {
+                // The row's own box, the glow's overhang included (12 dp each
+                // side, 3 dp on top), so the dust takes the whole of both
+                // buttons -- see RowSnapState. Centred over the grid by
+                // requiredSize, the buttons padded back to where they were.
+                Box(
+                    Modifier
+                        .requiredSize(gridWidth + 24.dp, gridHeight + 6.dp)
+                        .rowSnap(snap.row)
+                ) {
+                Box(Modifier.padding(start = 12.dp, top = 3.dp).size(gridWidth, gridHeight)) {
                 // Anime: exactly English / Japanese. Both run the Miruro flow
                 // (the URL already carries ?ep=, so the extractor clicks
                 // the right episode).
@@ -312,7 +407,8 @@ internal fun BoxScope.EpisodeSourceOverlay(
                         episodesState.pendingSeason      = season
                         episodesState.pendingEpisode     = episodeNumber
                         episodesState.pendingEpisodeName = epName
-                        anime.showDefaultPrompt  = true
+                        // The row turns to dust, then the server choice fades in.
+                        snap.row.snapThen { anime.showDefaultPrompt = true }
                     },
                     onSub = { url ->
                         val epName = selectedEpisode.title
@@ -324,11 +420,14 @@ internal fun BoxScope.EpisodeSourceOverlay(
                         episodesState.pendingSeason      = season
                         episodesState.pendingEpisode     = episodeNumber
                         episodesState.pendingEpisodeName = epName
-                        anime.showDefaultPrompt  = true
+                        snap.row.snapThen { anime.showDefaultPrompt = true }
                     },
                     onUnavailable = onUnavailable,
                     onBack = closeToTile,
+                    startOn = pairLanguage[0].coerceAtLeast(0),
                 )
+                }
+                }
             } else {
                 EpisodeSourceButtons(
                     passionFont = passionFont,
@@ -370,7 +469,7 @@ internal fun BoxScope.EpisodeSourceOverlay(
  */
 @Composable
 private fun EpisodeSnapRendererWhenWanted(snap: EpisodeSnapState) {
-    if (snap.rendererWanted) EpisodeSnapRenderer(snap)
+    if (snap.rendererWanted || snap.row.rendererWanted) EpisodeSnapRenderer(snap)
 }
 
 /**

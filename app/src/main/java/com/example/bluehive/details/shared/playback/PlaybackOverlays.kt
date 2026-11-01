@@ -90,7 +90,16 @@ fun PlaybackErrorOverlay(
  * or closing re-runs this and not the whole overlay stack.
  */
 @Composable
-fun BoxScope.AnimeServerOverlays(anime: AnimePlaybackController, dongleRegular: FontFamily) {
+fun BoxScope.AnimeServerOverlays(
+    anime: AnimePlaybackController,
+    dongleRegular: FontFamily,
+    /**
+     * The TV page asks for the server inside its episode card (v585), so the
+     * prompt and the picker below are not drawn there -- only the movie page's
+     * anime flow still opens them as overlays.
+     */
+    serverChoiceInCard: Boolean = false,
+) {
     // ── "Checking servers" overlay (No path, phase 1) ───────────────────
     if (anime.isCheckingServers) {
         // Focus TRAP, not decoration. ExtractionLoadingOverlay draws a scrim but
@@ -117,7 +126,7 @@ fun BoxScope.AnimeServerOverlays(anime: AnimePlaybackController, dongleRegular: 
     }
 
     // ── Instant "default server?" Yes/No prompt ─────────────────────────
-    if (anime.showDefaultPrompt) {
+    if (anime.showDefaultPrompt && !serverChoiceInCard) {
         DefaultServerPrompt(
             onDefault = { anime.onDefaultServer() },
             onChoose  = { anime.onChooseServer() },
@@ -125,7 +134,7 @@ fun BoxScope.AnimeServerOverlays(anime: AnimePlaybackController, dongleRegular: 
     }
 
     // ── Server picker (No path, phase 1 result) ─────────────────────────
-    if (anime.showServerPicker && anime.serverOptions.isNotEmpty()) {
+    if (anime.showServerPicker && anime.serverOptions.isNotEmpty() && !serverChoiceInCard) {
         ServerPickerOverlay(
             servers    = anime.serverOptions,
             audioLabel = if (anime.pendingDub) "Dub" else "Sub",

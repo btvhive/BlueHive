@@ -469,7 +469,7 @@ fun TvShowDetailsScreen(
             // The anime flow's server overlays -- the "Checking servers" trap, the
             // default-server prompt, the picker and the "couldn't reach" notice,
             // in that order -- see AnimeServerOverlays.
-            AnimeServerOverlays(anime, dongleRegular)
+            AnimeServerOverlays(anime, dongleRegular, serverChoiceInCard = true)
 
             // The press-again notice of an armed unaired episode -- see UnairedNotice.
             UnairedNotice(unairedGate, episodesState, dongleRegular)
