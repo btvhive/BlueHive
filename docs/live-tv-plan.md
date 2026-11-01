@@ -61,9 +61,13 @@ state".
   which the TV fetches directly. They are not tied to an IP: a link fetched from the VPS played
   from a home line. The check is lighter than zlive's: the best variant must list timed
   segments. Its height gives the FHD/HD tag (`live:quality`). Off switch: `LIVE_LOCAL=0`.
-- **TV:** the row starts with a state entry, "Choose your state" or the state already picked.
-  Clicking it opens a state list in the channel list's place; the panel shows each state's
-  station count and a few of its stations. The choice is kept on the TV, not per profile.
+- **TV (v584, design C of `live_tv_state_entry_designs_abcd`):** a green state pill beside the
+  search bar; in Local News the bar is 228 px wide and the pill 96 px. v583 had a state entry as
+  the list's first row, and the user found it "way too similar to the other tiles". To reach the
+  pill, press Up to the bar, then Right. Clicking it opens a state list in the channel list's
+  place; the panel shows each state's station count and a few of its stations. Before a state is
+  picked the row is empty and the focus starts on the pill. A name over nine letters shows its
+  code ("NC"). The choice is kept on the TV, not per profile.
 - **TV order:** working stations first (as in every row); within that, the state's own stations,
   then neighbours' stations that also serve it, then Local Now. Back cancels the list.
 - **TV, elsewhere:** the player, search and Recently watched skip the state entry, and captions
