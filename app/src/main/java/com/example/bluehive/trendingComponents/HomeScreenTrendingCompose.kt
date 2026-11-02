@@ -83,10 +83,8 @@ import androidx.compose.runtime.key
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.layout.onSizeChanged
 import com.example.bluehive.homeScreenSectionRules.ArrowPresses
 import com.example.bluehive.homeScreenSectionRules.PANEL_SELECTED_TINT
-import com.example.bluehive.homeScreenSectionRules.PanelCaption
 import com.example.bluehive.homeScreenSectionRules.PanelHintLayer
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,16 +141,9 @@ private fun TrendingItemAdapterCompose(
     // it, which has always read "3/36".
     position: Int = 0,
     total: Int = 0,
-    // The panel is entered: the title moves to the top-right (PanelCaption).
-    raised: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val context     = LocalContext.current
-    val titleFont   = AppTypography.pattayaRegular
-    val metaFont    = AppTypography.passionRegular
-    val density     = androidx.compose.ui.platform.LocalDensity.current
-    // How much of the top row the badges take, so the raised title stays clear.
-    var badgesWidth by remember { mutableStateOf(0.dp) }
 
     Box(modifier = modifier.fillMaxSize()) {
 
@@ -180,26 +171,15 @@ private fun TrendingItemAdapterCompose(
                 .background(BACKDROP_SCRIM)
         )
 
-        // Title + release year: bottom-left, or top-right while the panel is
-        // entered. Was a bottom-left Column capped at 200 dp that wrapped to two
-        // lines; PanelCaption keeps each to one line and shrinks it to fit.
-        // (Back in v592: the v572 film-strip test that replaced it is gone.)
-        PanelCaption(
-            title         = item.title,
-            subtitle      = item.releaseDate?.take(4),
-            raised        = raised,
-            reservedStart = badgesWidth,
-            titleFont     = titleFont,
-            metaFont      = metaFont
-        )
+        // NO TITLE OR YEAR (owner, 2026-11-01): the panel stays light -- the
+        // backdrop and the badges say enough. Latest Trailers keeps its caption.
 
         // Top-left badges: media type + content rating + rank
         Row(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 // 8dp so the larger badges are not crowded against the frame.
-                .padding(start = 8.dp, top = 8.dp)
-                .onSizeChanged { badgesWidth = with(density) { it.width.toDp() } },
+                .padding(start = 8.dp, top = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             TrendingPillBadge(
@@ -231,8 +211,7 @@ private fun TrendingItemAdapterCompose(
 
         // TOP-RIGHT HAS NO BADGE. The score badge that sat here was removed on
         // request, and the corner now belongs to the remote hints: "Click to
-        // browse" while the panel is focused, and the raised title while it is
-        // entered (PanelHints.kt). item.voteAverage is still carried on the
+        // browse" while the panel is focused (PanelHints.kt). item.voteAverage is still carried on the
         // model and still populated from the detail fetch below.
     }
 }
@@ -501,7 +480,6 @@ private fun TrendingNavigationCompose(
                             item     = items[i],
                             position = i + 1,
                             total    = items.size,
-                            raised   = isInteractive,
                         )
                     }
                 }

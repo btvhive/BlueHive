@@ -9,8 +9,8 @@ import java.io.File
 /**
  * v592: the v572 film-strip test is over (owner, 2026-11-01). The strips cost
  * ~0.87 of a CPU core on an idle home screen (62 full redraws a second) and
- * made the sidebar crawl under its blur. Highest Trending is back to its title
- * and year, with the picture filling the whole screen.
+ * made the sidebar crawl under its blur. The picture fills the whole screen;
+ * since v604 there is no title or year either (owner: keep it light).
  */
 class TrendingNoStripsTest {
 
@@ -21,9 +21,11 @@ class TrendingNoStripsTest {
     }
 
     @Test
-    fun `the trending panel shows its title and year, full screen`() {
+    fun `the trending panel is full screen, with no title or year`() {
         val trending = MainSource.code("trendingComponents/HomeScreenTrendingCompose.kt")
-        assertTrue(trending.contains("PanelCaption("))
+        assertFalse(trending.contains("PanelCaption("))
+        assertTrue("Latest Trailers keeps its caption",
+            MainSource.code("latestTrailersComponents/HomeScreenTrailerAdapterCompose.kt").contains("PanelCaption("))
         assertTrue(trending.contains("val viewportW = TRENDING_VIEWPORT_W; val viewportH = TRENDING_VIEWPORT_H"))
     }
 }
