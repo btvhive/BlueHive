@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -325,7 +326,10 @@ internal fun BoxScope.EpisodeSourceOverlay(
         val buttonCount = if (isAnime) 2 else episodeSources.size.coerceAtMost(focusMap.providers.size)
         val rows = (buttonCount + 1) / 2
         val gridWidth = SOURCE_COLUMN_STEP + SOURCE_BUTTON_WIDTH
-        val gridHeight = SOURCE_ROW_STEP * (rows - 1).coerceAtLeast(0) + SOURCE_BUTTON_ROOM
+        // Every button here is 36 dp: the source buttons since v611, the
+        // anime ones since v622.
+        val extra = SOURCE_BUTTON_EXTRA_HEIGHT
+        val gridHeight = (SOURCE_ROW_STEP + extra) * (rows - 1).coerceAtLeast(0) + SOURCE_BUTTON_ROOM + extra
         if (step == AnimeCardStep.List) {
             AnimeInlineServerList(
                 servers      = anime.serverOptions,
@@ -534,7 +538,7 @@ private fun EpisodeOverlayHeader(
     }
 }
 
-/** The "Watch on ..." buttons, two to a row; focus starts on the first. */
+/** The "Play / from Website N" buttons, two to a row; focus starts on the first. */
 @Composable
 private fun EpisodeSourceButtons(
     passionFont: FontFamily,
@@ -557,7 +561,9 @@ private fun EpisodeSourceButtons(
 
     shown.forEachIndexed { i, source ->
         OverlayWatchButton(
-            text = "Watch on ${source.name}",
+            text = "Play",
+            label = streamSourceLabel(source.coverName),
+            extraHeight = SOURCE_BUTTON_EXTRA_HEIGHT,
             colors = StreamSourceButtonColors,
             passionFont = passionFont,
             focusRequester = focusRequesters[i],
@@ -579,6 +585,10 @@ private fun EpisodeSourceButtons(
 @Composable
 internal fun OverlayWatchButton(
     text: String,
+    /** The whole label, for the source buttons' two lines; null is [text] alone, centred. */
+    label: ModularButtonTextConfig? = null,
+    /** Added to the face, strip offset, glow and row step: SOURCE_BUTTON_EXTRA_HEIGHT for the source buttons. */
+    extraHeight: Dp = 0.dp,
     colors: ModularButtonColors,
     passionFont: FontFamily,
     focusRequester: FocusRequester,
@@ -589,14 +599,14 @@ internal fun OverlayWatchButton(
 ) {
     val total = focusRequesters.size
     ModularButton(
-        textConfig = ModularButtonTextConfig(text = text, fontSize = 14f, shadow = ButtonLabelShadow),
+        textConfig = label ?: ModularButtonTextConfig(text = text, fontSize = 14f, shadow = ButtonLabelShadow),
         isToggleable = false,
         fontFamily = passionFont,
         focusRequester = focusRequester,
         modifier = Modifier
             .offset(
                 x = if (index % 2 == 0 && index == total - 1) SOURCE_COLUMN_STEP / 2 else SOURCE_COLUMN_STEP * (index % 2),
-                y = SOURCE_ROW_STEP * (index / 2),
+                y = (SOURCE_ROW_STEP + extraHeight) * (index / 2),
             )
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -616,9 +626,9 @@ internal fun OverlayWatchButton(
                 true
             },
         dimensions = ModularButtonDimensions(
-            mainWidth = SOURCE_BUTTON_WIDTH, mainHeight = 33.dp, mainYOffset = 0.7.dp,
-            secondWidth = SOURCE_BUTTON_WIDTH, secondHeight = 22.dp, secondYOffset = 18.dp,
-            shadowHeight = 12.dp, glowWidth = SOURCE_BUTTON_WIDTH + 23.8.dp, glowHeight = 55.8.dp,
+            mainWidth = SOURCE_BUTTON_WIDTH, mainHeight = 33.dp + extraHeight, mainYOffset = 0.7.dp,
+            secondWidth = SOURCE_BUTTON_WIDTH, secondHeight = 22.dp, secondYOffset = 18.dp + extraHeight,
+            shadowHeight = 12.dp, glowWidth = SOURCE_BUTTON_WIDTH + 23.8.dp, glowHeight = 55.8.dp + extraHeight,
             mainCornerRadius = 7f, secondCornerRadius = 8f,
         ),
         colors = colors,

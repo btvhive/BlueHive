@@ -116,12 +116,13 @@ fun MoviesStreamerButton(
     onClick: () -> Unit
 ) {
     ModularButton(
-        textConfig = ModularButtonTextConfig(
-            text = if (source.name == "M Extract") "M Extract" else "Watch on ${source.name}",
-            fontSize = 14f,
-            // A shadow under the label -- see ButtonLabelShadow.
-            shadow = ButtonLabelShadow,
-        ),
+        // "Play / from Website 1" -- see streamSourceLabel. The viewer's name
+        // for the source, never its routing name.
+        textConfig = if (source.name == "M Extract") {
+            ModularButtonTextConfig(text = "M Extract", fontSize = 14f, shadow = ButtonLabelShadow)
+        } else {
+            streamSourceLabel(source.coverName)
+        },
         isToggleable = false,
         fontFamily = fontFamily,
         focusRequester = focusRequester,
@@ -170,16 +171,18 @@ fun MoviesStreamerButton(
                     false
                 }
             },
+        // 3 dp taller than the anime buttons (SOURCE_BUTTON_EXTRA_HEIGHT, v611):
+        // face, strip offset and glow all grow by it.
         dimensions = ModularButtonDimensions(
             mainWidth = 162.dp,
-            mainHeight = 33.dp,
+            mainHeight = 33.dp + SOURCE_BUTTON_EXTRA_HEIGHT,
             mainYOffset = 0.7.dp,
             secondWidth = 162.dp,
             secondHeight = 22.dp,
-            secondYOffset = 18.dp,
+            secondYOffset = 18.dp + SOURCE_BUTTON_EXTRA_HEIGHT,
             shadowHeight = (12).dp,
             glowWidth = 185.8.dp,
-            glowHeight = 55.8.dp,
+            glowHeight = 55.8.dp + SOURCE_BUTTON_EXTRA_HEIGHT,
             mainCornerRadius = 7f,
             secondCornerRadius = 8f,
         ),
@@ -226,7 +229,8 @@ fun AnimeDubButton(
         // "English" / "Japanese" rather than "DuB" / "SuB". Dub and sub are
         // fan shorthand; the language is what a viewer is actually choosing.
         // The same label shadow as the Watch on ... buttons -- see ButtonLabelShadow.
-        textConfig = ModularButtonTextConfig(text = "Watch in English", fontSize = 14f, shadow = ButtonLabelShadow),
+        // Two lines like the source buttons, "Watch in" over the language (v622).
+        textConfig = animeLanguageLabel("English"),
         isToggleable = false,
         fontFamily = fontFamily,
         focusRequester = focusRequester,
@@ -245,9 +249,9 @@ fun AnimeDubButton(
                 } else false
             },
         dimensions = ModularButtonDimensions(
-            mainWidth = 162.dp, mainHeight = 33.dp, mainYOffset = 0.7.dp,
-            secondWidth = 162.dp, secondHeight = 22.dp, secondYOffset = 18.dp,
-            shadowHeight = 12.dp, glowWidth = 185.8.dp, glowHeight = 55.8.dp,
+            mainWidth = 162.dp, mainHeight = 33.dp + SOURCE_BUTTON_EXTRA_HEIGHT, mainYOffset = 0.7.dp,
+            secondWidth = 162.dp, secondHeight = 22.dp, secondYOffset = 18.dp + SOURCE_BUTTON_EXTRA_HEIGHT,
+            shadowHeight = 12.dp, glowWidth = 185.8.dp, glowHeight = 55.8.dp + SOURCE_BUTTON_EXTRA_HEIGHT,
             mainCornerRadius = 7f, secondCornerRadius = 8f,
         ),
         // Palette and press feel are shared with the TV screen — see
@@ -278,7 +282,7 @@ fun AnimeSubButton(
     onClick: () -> Unit
 ) {
     ModularButton(
-        textConfig = ModularButtonTextConfig(text = "Watch in Japanese", fontSize = 14f, shadow = ButtonLabelShadow),
+        textConfig = animeLanguageLabel("Japanese"),
         isToggleable = false,
         fontFamily = fontFamily,
         focusRequester = focusRequester,
@@ -297,9 +301,9 @@ fun AnimeSubButton(
                 } else false
             },
         dimensions = ModularButtonDimensions(
-            mainWidth = 162.dp, mainHeight = 33.dp, mainYOffset = 0.7.dp,
-            secondWidth = 162.dp, secondHeight = 22.dp, secondYOffset = 18.dp,
-            shadowHeight = 12.dp, glowWidth = 185.8.dp, glowHeight = 55.8.dp,
+            mainWidth = 162.dp, mainHeight = 33.dp + SOURCE_BUTTON_EXTRA_HEIGHT, mainYOffset = 0.7.dp,
+            secondWidth = 162.dp, secondHeight = 22.dp, secondYOffset = 18.dp + SOURCE_BUTTON_EXTRA_HEIGHT,
+            shadowHeight = 12.dp, glowWidth = 185.8.dp, glowHeight = 55.8.dp + SOURCE_BUTTON_EXTRA_HEIGHT,
             mainCornerRadius = 7f, secondCornerRadius = 8f,
         ),
         // Palette and press feel are shared with the TV screen — see

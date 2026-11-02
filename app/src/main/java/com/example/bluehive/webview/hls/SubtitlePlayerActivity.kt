@@ -473,6 +473,9 @@ abstract class SubtitlePlayerActivity : ComponentActivity() {
     /** Set once the band's controls have been given their focus sound. */
     private var bandSoundWired = false
 
+    /** The PlayerView the band chrome was last attached to; see attachBandChrome. */
+    private var bandChromeView: PlayerView? = null
+
     /**
      * The same hover note the rest of the app plays, for the control bar.
      *
@@ -530,6 +533,16 @@ abstract class SubtitlePlayerActivity : ComponentActivity() {
     }
 
     protected fun attachBandChrome(pv: PlayerView) {
+        // A NEW PlayerView starts with a bare control bar. The Subtitles button
+        // and the focus sounds are injected once per VIEW, but their guards are
+        // fields on this Activity, so a player that swaps its PlayerView (the
+        // HLS player's fresh-surface rebuild after a frozen decoder) would keep
+        // the guards set and get neither. Clear them for the view in hand.
+        if (bandChromeView !== pv) {
+            bandChromeView = pv
+            subtitlesButton = null
+            bandSoundWired = false
+        }
         pv.apply {
             setControllerVisibilityListener(
                 PlayerView.ControllerVisibilityListener { vis ->
@@ -1494,6 +1507,12 @@ abstract class SubtitlePlayerActivity : ComponentActivity() {
         // Dimmer and unbolded against the show title, so it reads as a tag
         // rather than as part of the name. Same colour as the episode line
         // beside it.
+        //
+        // THE REAL SITE NAME, "(MoviesAPI)", NOT "(Website 4)", ON PURPOSE (the
+        // user's call, 2026-11-01): the details buttons say "Website N" for
+        // viewers, but this tag is where a playback problem gets diagnosed, and
+        // that needs the actual source. Map with SourceCatalog.labelFor if that
+        // ever changes.
         val source = intent.getStringExtra("SOURCE_NAME")
             // Inner brackets are flattened rather than nested: the anime path
             // sends "Miruro (Dub)", and "(Miruro (Dub))" is a worse label than

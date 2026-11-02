@@ -304,8 +304,11 @@ fun HomeScreenSidebarCompose(
         // ========================================
         // Search -- or a finished Voice search -- hands the text to the search
         // page, which runs it; BACK just closes the keyboard.
-        if (isSearchActive && hasEverBeenFocused) {
+        // Always called: it builds itself hidden once home settles, so a
+        // press only has to show it (v627).
+        run {
             HoneycombKeyboardPopup(
+                visible = isSearchActive && hasEverBeenFocused,
                 onSearch = { query ->
                     val q = query.trim()
                     isSearchActive = false

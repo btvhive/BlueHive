@@ -72,8 +72,11 @@ fun BoxScope.DetailsSearchKeyboard(search: DetailsSearchState, profileId: Int) {
             )
         }
     }
-    if (show) {
+    // Always called: it builds itself hidden once the page settles, so a
+    // press only has to show it (v627).
+    run {
         HoneycombKeyboardPopup(
+            visible = show,
             onSearch = { query ->
                 search.close()
                 openSearchScreen(context, profileId, query)

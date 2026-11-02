@@ -41,6 +41,7 @@ import com.example.bluehive.BuildConfig
 import com.example.bluehive.IdleWatcher
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.utilities.runCatchingCancellable
+import com.example.bluehive.webview.BeeLogo
 import com.example.bluehive.webview.exoplayer_resources.ExoPlayerConfig
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -70,12 +71,25 @@ import java.io.IOException
 @UnstableApi
 class LivePlayerActivity : ComponentActivity() {
 
-    data class Channel(val id: String, val name: String, val row: String, val quality: String)
+    /** A channel as the tuning card shows it: an On now game has no number, and its start, league and sport. */
+    data class Channel(
+        val id: String,
+        val name: String,
+        val row: String,
+        val quality: String,
+        val number: Int = 0,
+        val rowColor: Long = 0xFF2644A6,
+        val start: Long = 0L,
+        val league: String = "",
+        val sport: String = "",
+    )
 
     private enum class Phase { TUNING, PLAYING, OFF_AIR }
 
     // ── What the overlays show ────────────────────────────────────────────────
     private var phase by mutableStateOf(Phase.TUNING)
+    /** How far a tune has got ([LiveTuning.STAGES]): 1 = the server finding the stream, 2 = the picture loading. */
+    private var tuneStage by mutableIntStateOf(1)
     private var shown by mutableIntStateOf(0)
     private var bannerVisible by mutableStateOf(false)
     private var notice by mutableStateOf<String?>(null)
@@ -152,6 +166,8 @@ class LivePlayerActivity : ComponentActivity() {
         shown = intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(channels.indices)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).hide(WindowInsetsCompat.Type.systemBars())
+        // The tuning screen's globe carries the bee; decoded once, before the first tune.
+        BeeLogo.prime(this)
 
         player = ExoPlayerConfig.buildPlayer(this).also {
             it.addListener(listener)
@@ -193,14 +209,15 @@ class LivePlayerActivity : ComponentActivity() {
             )
             val channel = channels[shown]
             when (phase) {
-                Phase.TUNING -> TuningOverlay(channel.name)
+                Phase.TUNING -> TuningOverlay(channel, tuneStage, notice)
                 Phase.OFF_AIR -> OffAirCard(channel.name, offAirButton)
                 Phase.PLAYING -> if (bannerVisible) {
                     ChannelBanner(channel.name, channel.quality, channel.row)
                     PlayerHintBar()
                 }
             }
-            notice?.let { NoticeBar(it) }
+            // While tuning, the card's amber line shows the notice instead.
+            if (phase != Phase.TUNING) notice?.let { NoticeBar(it) }
             if (listOpen) ChannelListOverlay(listTitle, channels.map { it.name }, listFocus)
             stillWatchingLeft?.let { StillWatchingCard(channel.name, it) }
         }
@@ -213,6 +230,7 @@ class LivePlayerActivity : ComponentActivity() {
         tuneJob?.cancel()
         shown = index
         phase = Phase.TUNING
+        tuneStage = 1
         preparedAt = 0L
         stall.reset()
         bannerVisible = false
@@ -227,6 +245,7 @@ class LivePlayerActivity : ComponentActivity() {
                 return@launch
             }
             tuned = index
+            tuneStage = 2
             when {
                 session.backup && afterDrop -> showNotice("${channel.name} dropped, switched to the backup feed")
                 session.backup -> showNotice("${channel.name}'s main feed is down, playing the backup feed")
@@ -251,6 +270,7 @@ class LivePlayerActivity : ComponentActivity() {
         player.stop()
         shown = (shown + delta).mod(channels.size)
         phase = Phase.TUNING
+        tuneStage = 1
         preparedAt = 0L
         zapJob?.cancel()
         zapJob = lifecycleScope.launch {
@@ -492,6 +512,11 @@ class LivePlayerActivity : ComponentActivity() {
         private const val EXTRA_NAMES = "LIVE_NAMES"
         private const val EXTRA_ROWS = "LIVE_ROWS"
         private const val EXTRA_QUALITIES = "LIVE_QUALITIES"
+        private const val EXTRA_NUMBERS = "LIVE_NUMBERS"
+        private const val EXTRA_COLORS = "LIVE_COLORS"
+        private const val EXTRA_STARTS = "LIVE_STARTS"
+        private const val EXTRA_LEAGUES = "LIVE_LEAGUES"
+        private const val EXTRA_SPORTS = "LIVE_SPORTS"
 
         private const val BANNER_MS = 4_000L
         private const val NOTICE_MS = 5_000L
@@ -516,6 +541,11 @@ class LivePlayerActivity : ComponentActivity() {
                     .putStringArrayListExtra(EXTRA_NAMES, ArrayList(c.map { it.name }))
                     .putStringArrayListExtra(EXTRA_ROWS, ArrayList(c.map { it.row }))
                     .putStringArrayListExtra(EXTRA_QUALITIES, ArrayList(c.map { it.quality }))
+                    .putExtra(EXTRA_NUMBERS, c.map { it.number }.toIntArray())
+                    .putExtra(EXTRA_COLORS, c.map { it.rowColor }.toLongArray())
+                    .putExtra(EXTRA_STARTS, c.map { it.start }.toLongArray())
+                    .putStringArrayListExtra(EXTRA_LEAGUES, ArrayList(c.map { it.league }))
+                    .putStringArrayListExtra(EXTRA_SPORTS, ArrayList(c.map { it.sport }))
             )
         }
 
@@ -524,8 +554,20 @@ class LivePlayerActivity : ComponentActivity() {
             val names = intent.getStringArrayListExtra(EXTRA_NAMES).orEmpty()
             val rows = intent.getStringArrayListExtra(EXTRA_ROWS).orEmpty()
             val qualities = intent.getStringArrayListExtra(EXTRA_QUALITIES).orEmpty()
+            val numbers = intent.getIntArrayExtra(EXTRA_NUMBERS) ?: IntArray(0)
+            val colors = intent.getLongArrayExtra(EXTRA_COLORS) ?: LongArray(0)
+            val starts = intent.getLongArrayExtra(EXTRA_STARTS) ?: LongArray(0)
+            val leagues = intent.getStringArrayListExtra(EXTRA_LEAGUES).orEmpty()
+            val sports = intent.getStringArrayListExtra(EXTRA_SPORTS).orEmpty()
             return ids.indices.map { i ->
-                Channel(ids[i], names.getOrElse(i) { ids[i] }, rows.getOrElse(i) { "" }, qualities.getOrElse(i) { "" })
+                Channel(
+                    ids[i], names.getOrElse(i) { ids[i] }, rows.getOrElse(i) { "" }, qualities.getOrElse(i) { "" },
+                    number = numbers.getOrElse(i) { 0 },
+                    rowColor = colors.getOrElse(i) { 0xFF2644A6 },
+                    start = starts.getOrElse(i) { 0L },
+                    league = leagues.getOrElse(i) { "" },
+                    sport = sports.getOrElse(i) { "" },
+                )
             }
         }
     }

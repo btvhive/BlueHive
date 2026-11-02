@@ -50,9 +50,13 @@ internal object LiveGames {
         Instant.ofEpochSecond(startS).atZone(zone).format(CLOCK)
 
     /** The panel's line: "NFL · kicked off 1:00 PM", "F1 · starts 3:00 PM". */
-    fun startLine(game: LiveTvData.Channel, nowS: Long, zone: ZoneId = ZoneId.systemDefault()): String {
-        val time = Instant.ofEpochSecond(game.start).atZone(zone).format(CLOCK_AMPM)
-        val verb = if (!started(game, nowS)) "starts" else if (game.sport == "NFL" || game.sport == "Football") "kicked off" else "started"
-        return listOf(game.league, "$verb $time").filter { it.isNotEmpty() }.joinToString(" · ")
+    fun startLine(game: LiveTvData.Channel, nowS: Long, zone: ZoneId = ZoneId.systemDefault()): String =
+        startLine(game.start, game.sport, game.league, nowS, zone)
+
+    /** The same from a game's parts, for the player, which keeps no [LiveTvData.Channel]. */
+    fun startLine(start: Long, sport: String, league: String, nowS: Long, zone: ZoneId = ZoneId.systemDefault()): String {
+        val time = Instant.ofEpochSecond(start).atZone(zone).format(CLOCK_AMPM)
+        val verb = if (start > nowS) "starts" else if (sport == "NFL" || sport == "Football") "kicked off" else "started"
+        return listOf(league, "$verb $time").filter { it.isNotEmpty() }.joinToString(" · ")
     }
 }

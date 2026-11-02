@@ -70,6 +70,36 @@ internal val GAME_META_GAP = 8.5.dp          // 6 px: LIVE to "NFL · kicked off
 internal val GAME_HINT_TOP = 16.9.dp         // 12 px
 internal val GAME_ART_BG = Color(0xFF0B1433)
 
+// ── The player's tuning screen (design B of live_tv_tuning_globe_designs_abc) ─
+// Laid out in the mockup's 680 px frame like the guide: the movie loader's
+// globe at 62 px (its 100 dp radius is 70.8 px there), the channel's card under it.
+internal val TUNE_TAGS_TOP = 56.5.dp         // 40 px
+internal val TUNE_TAG_HEIGHT = 24.dp         // 17 px
+internal val TUNE_TAG_PAD_H = 8.5.dp         // 6 px
+internal val TUNE_TAG_GAP = 4.2.dp           // 3 px
+internal val TUNE_GLOBE_Y = 211.8.dp         // 150 px: the globe's centre
+internal const val TUNE_GLOBE_SCALE = 0.875f // 62 / 70.8 px
+internal val TUNE_NAME_TOP = 338.9.dp        // 240 px
+internal val TUNE_NAME_TEXT = 42.4.sp        // 30 px
+internal val TUNE_META_TOP = 398.2.dp        // 282 px
+internal val TUNE_DOT_GAP = 7.1.dp           // 5 px
+internal val TUNE_DETAIL_TOP = 426.4.dp      // 302 px
+internal val TUNE_LINE_TEXT = 15.5.sp        // 11 px
+internal val TUNE_BAR_TOP = 463.1.dp         // 328 px
+internal val TUNE_BAR_WIDTH = 220.dp         // 156 px, the movie loader's bar
+internal val TUNE_BAR_HEIGHT = 2.dp
+internal val TUNE_DOTS_TOP = 480.dp          // 340 px
+internal val TUNE_DOTS_HEIGHT = 8.5.dp       // 6 px
+internal val TUNE_DOTS_GAP = 8.5.dp          // 6 px
+internal val TUNE_NOTE_TOP = 497.dp          // 352 px: the movie loader's amber warning line
+internal val TUNE_NAME_MAX = 800.dp
+internal val TUNE_NOTE_MAX = 480.dp
+internal val TUNE_DETAIL = Color(0x99FFFFFF)  // white at 60%, as the movie loader's detail
+internal val TUNE_NOTE = Color(0xF2FFB74D)    // its amber at 95%
+internal val TUNE_DOT_ACTIVE = Color(0xFF88BBFF)
+internal val TUNE_DOT_DONE = Color(0xFF4466FF)
+internal val TUNE_DOT_TODO = Color(0x1FFFFFFF)
+
 // ── Channel list (left) ───────────────────────────────────────────────────────
 internal val LIST_LEFT = 22.6.dp             // 16 px
 // 92 px: the bar's 28 px plus 14 px, the same gap as chips to bar (the user

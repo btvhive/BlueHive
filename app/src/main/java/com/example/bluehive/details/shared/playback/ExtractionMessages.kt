@@ -61,8 +61,9 @@ internal fun parseExtractReason(resp: retrofit2.Response<*>?): String? = runCatc
  * for a genuinely missing episode is the opposite. One message could not serve
  * both, and the wrong one sends people hunting for a problem that isn't there.
  *
- * The source is NAMED. "Your network is blocking VidFast" is a fact someone can
- * act on; "this source is unavailable" is not.
+ * The source is NAMED, by the viewer's name for it: "Your network is blocking
+ * Website 2" is a fact someone can act on; "this source is unavailable" is
+ * not. Callers pass labels ("Website 2"), never routing names (2026-11-01).
  */
 internal fun extractionErrorMessage(
     httpCode: Int?,
@@ -99,16 +100,16 @@ internal fun extractionErrorMessage(
     // The ISP severed the connection to the source's domain. Nothing the user
     // can fix by retrying, and nothing wrong with the title itself.
     reason == "source_blocked" ->
-        "Your network is blocking $sourceName.\n\nPick a different source below — " +
+        "Your network is blocking $sourceName.\n\nPick a different website below — " +
             "the others usually work."
 
     // Site loaded fine, produced no video. Usually the title genuinely isn't
     // there (or hasn't aired yet).
     reason == "no_stream" ->
-        "$sourceName doesn't have this $unit.\n\nTry a different source."
+        "$sourceName doesn't have this $unit.\n\nTry a different website."
 
     reason == "timeout" ->
-        "$sourceName took too long to respond.\n\nTry again, or pick another source."
+        "$sourceName took too long to respond.\n\nTry again, or pick another website."
 
     // The manifest loaded and its segments are dead — the source has a broken
     // copy. MEASURED 2026-08-30: MoviesAPI served Jeepers Creepers as a playlist
@@ -117,12 +118,24 @@ internal fun extractionErrorMessage(
     // someone hunting for a network problem that is not there; the title is fine
     // and another source has it.
     reason == "dead_segments" ->
-        "$sourceName has a broken copy of this $unit.\n\nTry another source — " +
+        "$sourceName has a broken copy of this $unit.\n\nTry another website — " +
             "the $unit itself is fine."
 
     else ->
-        "Couldn't load this $unit from $sourceName.\n\nTry another source."
+        "Couldn't load this $unit from $sourceName.\n\nTry another website."
 }
+
+/**
+ * The loading screen's amber note when a website gave no video and the chain
+ * moves on: "Website 1 is acting up, so we're trying Website 2..." (the
+ * user's wording, 2026-11-01). Both are the viewer's names for the sources.
+ */
+internal fun failoverNote(failed: String, next: String): String =
+    "$failed is acting up, so we\u2019re trying $next\u2026"
+
+/** The same note when the stream died mid-play and the chain picks it up at the dead spot. */
+internal fun droppedNote(failed: String, next: String): String =
+    "$failed dropped out, so we\u2019re picking up on $next\u2026"
 
 /**
  * Relay URL for an anime stream, tagged so the fallback can be accounted for.

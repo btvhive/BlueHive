@@ -1,17 +1,10 @@
 package com.example.bluehive.livetv
 
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -32,16 +25,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -66,40 +56,13 @@ private val BANNER_BG = Color(0xD108090C)     // rgba(8,9,12,.82)
 private val BANNER_BORDER = Color(0xFF2A2E3B)
 private val LIST_BG = Color(0xEB08090C)       // rgba(8,9,12,.92)
 private val HINT_FILL = Color(0xE00A0A0E)     // rgba(10,10,14,.88)
-private val TUNING_BG = Color(0xFF060607)
+/** Behind the tuning screen (LiveTuningViews.kt) and the off-air card. */
+internal val TUNING_BG = Color(0xFF060607)
 private val BUTTON_OFF = Color(0xFF222340)
 private val BUTTON_OFF_TEXT = Color(0xFFD2D0D0)
 
-/** 1 -- black, a turning ring, "Tuning in to <channel>…". */
-@Composable
-internal fun TuningOverlay(name: String) {
-    BoxWithConstraints(Modifier.fillMaxSize().background(TUNING_BG)) {
-        val spin = rememberInfiniteTransition(label = "tuning")
-        val angle by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart), label = "ring")
-        Box(
-            Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = maxHeight * 0.38f)
-                .size(px(30f))
-                .rotate(angle)
-                .drawBehind {
-                    val w = px(3f).toPx()
-                    val inset = Offset(w / 2, w / 2)
-                    val arc = Size(size.width - w, size.height - w)
-                    drawArc(CHIP_ON, 0f, 360f, false, inset, arc, style = Stroke(w))
-                    drawArc(Color.White, -135f, 90f, false, inset, arc, style = Stroke(w))
-                }
-        )
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.align(Alignment.TopCenter).offset(y = maxHeight * 0.60f),
-        ) {
-            LiveText("Tuning in to ", pt(13f), Color.White, AppTypography.interSemiBold)
-            LiveText(name, pt(15f), Color.White, AppTypography.asapCondensedBold)
-            LiveText("…", pt(13f), Color.White, AppTypography.interSemiBold)
-        }
-    }
-}
+// 1 -- tuning: LiveTuningViews.kt (design B of live_tv_tuning_globe_designs_abc
+// since 2026-11-01; it was a turning ring).
 
 /** 2 -- top-left: the channel and "Live · FHD · Motorsport"; fades with the hint bar. */
 @Composable

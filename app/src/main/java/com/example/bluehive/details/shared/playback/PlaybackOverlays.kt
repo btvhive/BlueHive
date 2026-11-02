@@ -52,6 +52,7 @@ fun PlaybackLoadingOverlay(
                 note  = if (session.isBackendExtract) session.extractNote else null,
                 chain = if (session.isBackendExtract) session.extractAttempt to session.chainTotal else null,
                 source = if (session.isBackendExtract) session.extractSourceLabel else null,
+                unit  = session.extractUnit,
             )
         }
     }

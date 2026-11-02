@@ -27,15 +27,14 @@ import com.example.bluehive.R
 import com.example.bluehive.details.shared.state.FavoriteState
 import com.example.bluehive.details.shared.state.TrailerState
 import com.example.bluehive.utilities.ButtonLabelShadow
-import com.example.bluehive.utilities.ExtrasButtonColors
-import com.example.bluehive.utilities.FavoriteLabelHighlight
-import com.example.bluehive.utilities.FavoriteBronzeButtonColors
-import com.example.bluehive.utilities.FavoriteGoldButtonColors
+import com.example.bluehive.utilities.FavoriteButtonColors
+import com.example.bluehive.utilities.FavoriteSavedButtonColors
 import com.example.bluehive.utilities.ModularButton
 import com.example.bluehive.utilities.ModularButtonAnimationConfig
 import com.example.bluehive.utilities.ModularButtonDimensions
 import com.example.bluehive.utilities.ModularButtonGlowConfig
 import com.example.bluehive.utilities.ModularButtonTextConfig
+import com.example.bluehive.utilities.SearchButtonColors
 import com.example.bluehive.utilities.TrailerControlButtonColors
 
 /**
@@ -77,7 +76,7 @@ fun BoxScope.DetailsHeaderButtons(
     trailer: TrailerState,
     /**
      * The Search button, in Extras' old place and size: a magnifying glass on
-     * Extras' forest green. Null shows none.
+     * amethyst (v624). Null shows none.
      */
     onSearch: (() -> Unit)? = null,
 ) {
@@ -91,8 +90,8 @@ fun BoxScope.DetailsHeaderButtons(
     val trailerWidth = 90.dp
     val trailerGlowWidth = 104.5.dp
     val forwardX = trailerX + trailerWidth + PEEK_TRAILER_GAP
-    // The labels carry a shadow, like the Watch buttons; Favorites' dark
-    // label a light highlight instead.
+    // The labels carry a shadow, like the Watch buttons -- Favorites' too,
+    // its letters are white on azure (v624).
     val labelShadow = ButtonLabelShadow
 
     // Favorite Button - Uses internal offset for positioning
@@ -102,7 +101,7 @@ fun BoxScope.DetailsHeaderButtons(
         pressTiming = pressTiming,
         enableFocus = enableFocus,
         isFavorited = favorite.isFavorited,
-        labelShadow = FavoriteLabelHighlight,
+        labelShadow = labelShadow,
         onToggle = { favorite.toggle() }
     )
 
@@ -185,12 +184,15 @@ private fun DetailsFavoriteButton(
     labelShadow: Shadow? = null,
     onToggle: () -> Unit = {}
 ) {
-    // A plain button, gold until the title is a favourite and bronze after,
-    // with the label set from outside -- no held "toggled" look.
+    // A plain button, azure until the title is a favourite and navy-azure
+    // after, with the label set from outside -- no held "toggled" look. A
+    // filled star leads the words either way (v624).
     ModularButton(
         textConfig = ModularButtonTextConfig(
-            text = if (isFavorited) "- Remove from Favorites" else "+ Add to Favorites",
+            text = if (isFavorited) "Remove from Favorites" else "Add to Favorites",
             shadow = labelShadow,
+            leadingIconRes = R.drawable.ic_star_filled,
+            leadingIconSize = 10.dp,
         ),
         isToggleable = false,
         fontFamily = fontFamily,
@@ -224,8 +226,8 @@ private fun DetailsFavoriteButton(
             mainCornerRadius = 7f,
             secondCornerRadius = 8f,
         ),
-        // Shared — see FavoriteGoldButtonColors in utilities/ModularButton.kt.
-        colors = if (isFavorited) FavoriteBronzeButtonColors else FavoriteGoldButtonColors,
+        // Shared — see FavoriteButtonColors in utilities/ModularButton.kt.
+        colors = if (isFavorited) FavoriteSavedButtonColors else FavoriteButtonColors,
         glowConfig = ModularButtonGlowConfig(
             enabled = true,
             defaultRes = R.drawable.button_focus_wide_glow,
@@ -296,8 +298,8 @@ private fun DetailsSearchButton(
             mainCornerRadius = 7f,
             secondCornerRadius = 6f,
         ),
-        // The Extras button's forest green -- see ExtrasButtonColors.
-        colors = ExtrasButtonColors,
+        // Amethyst (v624) -- see SearchButtonColors.
+        colors = SearchButtonColors,
         glowConfig = ModularButtonGlowConfig(
             enabled = true,
             defaultRes = R.drawable.button_focus_narrow_glow,

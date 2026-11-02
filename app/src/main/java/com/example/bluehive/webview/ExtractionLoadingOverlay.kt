@@ -124,10 +124,12 @@ fun ExtractionFocusTrap(content: @Composable () -> Unit) {
 
 /**
  * @param chain  (attempt, planned) while the backend works down the source
- *               chain -- shown as the headline "Browsing source 2 of 4: Royal
- *               Jelly", with [status] beneath it as the detail. null for waits
- *               that are not a chain (anime, server check).
- * @param source the source being tried, by its button label, for the headline.
+ *               chain -- shown as the headline "Getting your movie ready from
+ *               Website 1", then "Now trying Website 2 (2 of 4)", with [status]
+ *               beneath it as the detail. null for waits that are not a chain
+ *               (anime, server check).
+ * @param source the source being tried, by the viewer's name for it, for the headline.
+ * @param unit   "movie" or "episode", for the headline.
  *
  * INTER, NOT THE SYSTEM FONT (v579, option B from the owner's mock-ups): the
  * title and headline in Inter Bold, the detail and the warning in Inter
@@ -152,6 +154,7 @@ fun ExtractionLoadingOverlay(
     note: String? = null,
     chain: Pair<Int, Int>? = null,
     source: String? = null,
+    unit: String = "movie",
 ) {
     val inf = rememberInfiniteTransition(label = "loader")
 
@@ -226,7 +229,7 @@ fun ExtractionLoadingOverlay(
                 if (chain != null) {
                     val (attempt, planned) = chain
                     AnimatedContent(
-                        targetState = chainHeadline(attempt, planned, source),
+                        targetState = chainHeadline(attempt, planned, source, unit),
                         transitionSpec = { fadeIn(tween(300)) togetherWith fadeOut(tween(200)) },
                         label = "chain"
                     ) { h ->
@@ -339,15 +342,19 @@ fun ExtractionLoadingOverlay(
     }
 }
 
-/** "Browsing source 2 of 4: Royal Jelly"; a chain of one, "Browsing Royal Jelly". */
-internal fun chainHeadline(attempt: Int, planned: Int, source: String?): String {
+/**
+ * The first try, "Getting your movie ready from Website 1" (the user's
+ * wording, 2026-11-01); a later one in a chain, "Now trying Website 2 (2 of 4)".
+ * [unit] is "movie" or "episode".
+ */
+internal fun chainHeadline(attempt: Int, planned: Int, source: String?, unit: String = "movie"): String {
     val of = maxOf(planned, attempt)
     val name = source?.takeIf { it.isNotBlank() }
     return when {
-        of > 1 && name != null -> "Browsing source $attempt of $of: $name"
-        of > 1                 -> "Browsing source $attempt of $of"
-        name != null           -> "Browsing $name"
-        else                   -> "Browsing for your stream"
+        attempt > 1 && name != null -> "Now trying $name ($attempt of $of)"
+        attempt > 1                 -> "Now trying website $attempt of $of"
+        name != null                -> "Getting your $unit ready from $name"
+        else                        -> "Getting your $unit ready"
     }
 }
 

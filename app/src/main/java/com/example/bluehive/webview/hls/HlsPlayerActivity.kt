@@ -631,6 +631,47 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
      */
     private val MAX_CODEC_REACQUIRES = 2
 
+    // ── Frozen decoder ───────────────────────────────────────────────────────
+    //
+    // MEASURED 2026-11-02, Fire TV Stick Lite, The Rip at 59:41: the decoder
+    // stopped consuming a full buffer, and the relay rebuild then died RELEASING
+    // it -- the OLD player raised ERROR_CODE_TIMEOUT ("Detaching surface timed
+    // out") into this Activity's listener, which treated it as the current
+    // player's error and closed the film. See rebuildWithFreshSurface.
+
+    /** Bumped to make Compose build a brand-new PlayerView (a new SurfaceView). */
+    private val surfaceGeneration = androidx.compose.runtime.mutableIntStateOf(0)
+    /** The next startPlayback should swap the PlayerView too, not just the player. */
+    private var freshSurfaceNext = false
+    private var contentSet = false
+    private var decoderRebuilds = 0
+
+    /**
+     * Rebuilds after a frozen decoder, per film. Three, because one freeze an
+     * hour is survivable and a device freezing every few minutes needs a
+     * restart that no rebuild can give it.
+     */
+    private val MAX_DECODER_REBUILDS = 3
+
+    /**
+     * New player, new codec, new surface, same url and position.
+     *
+     * The surface has to be new as well: the frozen codec may still be
+     * connected to the old one, and a Surface takes one producer at a time, so
+     * a new codec configured on it would fail too. Returns false once the
+     * budget is spent, leaving the caller's own fallback to run.
+     */
+    private fun rebuildWithFreshSurface(why: String): Boolean {
+        if (decoderRebuilds >= MAX_DECODER_REBUILDS) return false
+        decoderRebuilds++
+        Log.e(TAG, "🧊 $why — new player and surface at ${player?.currentPosition}ms " +
+                "($decoderRebuilds/$MAX_DECODER_REBUILDS)")
+        captureResumeState()
+        freshSurfaceNext = true
+        startPlayback(currentM3u8)
+        return true
+    }
+
     private fun captureResumeState() {
         player?.let {
             if (it.currentPosition > 0) resumePositionMs = it.currentPosition
@@ -767,8 +808,24 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         // thread, so cancelling here guarantees it never touches a released one.
         stallWatchdogJob?.cancel()
         stallWatchdogJob = null
+        // RETIRED BEFORE IT IS TOUCHED. Detaching the view and release() both
+        // block on the playback thread and, when a frozen codec never answers,
+        // report ERROR_CODE_TIMEOUT through this Activity's listener -- while
+        // `player` still pointed at it, so onPlayerError took it for the live
+        // player and closed the film. Clearing the field first lets onPlayerError
+        // recognise and ignore a retired player's last words.
+        val retiring = player
+        player = null
         playerView?.player = null
-        player?.run { stop(); clearMediaItems(); release() }
+        retiring?.run { stop(); clearMediaItems(); release() }
+        if (freshSurfaceNext) {
+            // The old PlayerView's surface may still belong to the frozen codec.
+            // Dropping the reference and bumping the key makes Compose dispose
+            // that view and run the factory again, which binds the new player.
+            freshSurfaceNext = false
+            playerView = null
+            surfaceGeneration.intValue++
+        }
 
         // Buffering / bitrate / player construction all come from the shared
         // ExoPlayerConfig so every site's player behaves identically. Only this
@@ -790,6 +847,9 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
 
         player = ExoPlayerConfig.buildPlayer(this, selector)
             .apply {
+                // This instance, for onPlayerError to tell itself apart from a
+                // player that has since been retired by a rebuild.
+                val builtPlayer: ExoPlayer = this
                 // Diagnostic only: logs the rung actually selected + all rungs offered.
                 ExoPlayerConfig.attachVideoTrackLog(this, TAG)
                 // Hold the display awake while playback is intended (incl. stalls).
@@ -806,7 +866,10 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
                 // a dead url, not a stuck codec — an expired token presents this
                 // way because it hangs instead of erroring, so onPlayerError
                 // never fires and nothing below would otherwise recover.
-                stallWatchdogJob = ExoPlayerConfig.attachStallWatchdog(this, lifecycleScope, TAG) {
+                stallWatchdogJob = ExoPlayerConfig.attachStallWatchdog(
+                    this, lifecycleScope, TAG,
+                    onDecoderFrozen = { rebuildWithFreshSurface("decoder frozen") },
+                ) {
                     // A wedge on a blocked CDN looks like this rather than an
                     // error — the request hangs instead of failing — so the relay
                     // belongs here too.
@@ -964,6 +1027,16 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
                         }
                     }
                     override fun onPlayerError(error: PlaybackException) {
+                        // A RETIRED PLAYER'S LAST WORDS. startPlayback clears
+                        // `player` before detaching and releasing the old one, so
+                        // a timeout raised while letting go of a frozen codec
+                        // lands here with `player` already pointing elsewhere.
+                        // It describes a player nobody is watching: log, ignore.
+                        if (player !== builtPlayer) {
+                            Log.e(TAG, "↷ ignoring ${error.errorCodeName} from a retired player " +
+                                    "(cause=${error.cause?.message})")
+                            return
+                        }
                         Log.e(TAG, "❌ ExoPlayer error: ${error.errorCodeName} | ${error.message} | cause=${error.cause?.message}")
 
                         // Report BEFORE any recovery attempt. A retry that
@@ -1110,6 +1183,23 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
                             return
                         }
 
+                        // ── THE DECODER STOPPED ANSWERING ────────────────────
+                        //
+                        // ERROR_CODE_TIMEOUT is media3 giving up on its own
+                        // playback thread: a surface swap or a release that the
+                        // codec never acknowledged. It is not the source's doing,
+                        // so it used to fall through to finish() and close the
+                        // film. A new player on a new surface usually plays on;
+                        // only when that budget is spent does the viewer hear
+                        // about it, with the one thing that does help.
+                        if (error.errorCode == PlaybackException.ERROR_CODE_TIMEOUT) {
+                            if (rebuildWithFreshSurface("player timed out")) return
+                            showToast("The video player stopped responding. " +
+                                    "Restarting your TV device usually fixes this.")
+                            lifecycleScope.launch { delay(3_000); finish() }  // EXIT: not-the-source
+                            return
+                        }
+
                         // ── THE SYSTEM TOOK THE DECODER ──────────────────────
                         //
                         // Hardware codecs are a scarce global resource and a
@@ -1235,9 +1325,16 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
 
         playerView?.player = player
 
-        if (playerView == null) {
+        // contentSet, not playerView == null: a fresh-surface rebuild nulls
+        // playerView on purpose, and calling setContent again would rebuild the
+        // whole screen rather than just the video view.
+        if (!contentSet) {
+            contentSet = true
             setContent {
                 Box(Modifier.fillMaxSize().background(Color.Black)) {
+                    // Keyed so rebuildWithFreshSurface gets a NEW PlayerView, and
+                    // with it a new SurfaceView, by bumping surfaceGeneration.
+                    androidx.compose.runtime.key(surfaceGeneration.intValue) {
                     AndroidView(
                         modifier = Modifier.fillMaxSize(),
                         factory = { ctx ->
@@ -1263,6 +1360,7 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
                             }
                         }
                     )
+                    }
 
                     SubtitleLayer()
 
@@ -1508,8 +1606,11 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         // Remember where we were BEFORE tearing the player down, so a recovery
         // resumes the episode instead of restarting it.
         captureResumeState()
-        player?.run { stop(); clearMediaItems(); release() }
+        // Retired first, as in startPlayback: a timeout raised by release() must
+        // not be read as the live player's error.
+        val retiring = player
         player = null
+        retiring?.run { stop(); clearMediaItems(); release() }
         // Which extractor to re-run is the caller's decision — this player is
         // shared by several sources and must not hardcode one of them.
         val extractorClass = intent.getStringExtra(HlsExtract.EXTRA_EXTRACTOR_CLASS)
@@ -1804,10 +1905,13 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         progressiveRefreshJob?.cancel()
         stallWatchdogJob?.cancel()
         releaseSubtitleUi()
+        // Retired first (see startPlayback): a frozen codec's timeout on the way
+        // out must be ignored, not answered with a rebuild of a closing screen.
+        val retiring = player
+        player = null
         playerView?.player = null
         playerView = null
-        player?.run { playWhenReady = false; stop(); clearMediaItems(); release() }
-        player = null
+        retiring?.run { playWhenReady = false; stop(); clearMediaItems(); release() }
         super.onDestroy()
     }
 

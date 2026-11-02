@@ -31,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -67,9 +68,10 @@ import androidx.compose.ui.zIndex
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.R
 import com.example.bluehive.utilities.AppTypography
-import com.example.bluehive.utilities.ExtrasButtonColors
+import com.example.bluehive.utilities.SearchButtonColors
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  HONEYCOMB KEYBOARD — BlueHive's own keyboard
@@ -124,10 +126,12 @@ private val FOCUS_INK    = Color(0xFF111111)
 // A Shift that is on reads gold.
 private val GOLD         = Color(0xFFD19814)
 // Search and Done, the keys that hand the text on: the details pages' Search
-// button's forest green, read from it so the two cannot drift, with white on
-// it (the user's calls: Search 2026-10-28, Done -- the profile name keyboard
-// -- 2026-10-29; both were gold with dark text).
-private val FINISH_GREEN = ExtrasButtonColors.mainDefault
+// button's amethyst, read from it so the two cannot drift, with white on it
+// (the user's calls: Search 2026-10-28, Done -- the profile name keyboard --
+// 2026-10-29, both gold with dark text before; forest green until v625). A
+// flat key, so it takes the button's band -- the brighter purple the button
+// reads as -- not its darker top.
+private val FINISH_PURPLE = SearchButtonColors.band
 private val VOICE_BLUE   = Color(0xFF4C63AC)
 private val VOICE_LIT    = Color(0xFF7C93DC)
 private val PLACEHOLDER  = Color(0x806F7482)       // the hint in the empty box, at half opacity
@@ -181,18 +185,37 @@ fun Modifier.hiveBackdropBlur(active: Boolean): Modifier =
     } else this
 
 /**
- * Search, over home or the media catalog. A pop-up window, so the screen
- * underneath keeps its own state while this has the focus; BACK closes it.
+ * Search, over home, the media catalog and the details pages. A pop-up
+ * window, so the screen underneath keeps its own state while this has the
+ * focus; BACK closes it. Call it always, with [visible] saying whether it
+ * shows.
+ *
+ * KEPT WARM (v627). Building the card took ~170 ms of the ~300 ms from the
+ * press to its first frame, and the window ~50 ms more (measured on the onn
+ * box, 2026-11-02). So it is built once, hidden and not focusable,
+ * [KEYBOARD_WARM_DELAY_MS] after the screen opens -- out of the way of the
+ * screen's own first frames -- and a press only shows it. A press before
+ * then builds it on the spot, as it always did.
  */
 @Composable
 fun HoneycombKeyboardPopup(
+    visible: Boolean,
     onSearch: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    CardPopup(onDismiss) {
-        HoneycombKeyboardCard(initialText = "", onSubmit = onSearch)
+    var warm by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        delay(KEYBOARD_WARM_DELAY_MS)
+        warm = true
+    }
+    if (!warm && !visible) return
+    CardPopup(onDismiss, focusable = visible) {
+        HoneycombKeyboardCard(initialText = "", onSubmit = onSearch, shown = visible)
     }
 }
+
+/** How long after a screen opens its search keyboard is built, hidden. */
+private const val KEYBOARD_WARM_DELAY_MS = 2_000L
 
 /**
  * A profile name. [onChange] follows every key, so a screen that shows the
@@ -278,7 +301,7 @@ internal fun HoneycombKeyboardInline(
 }
 
 @Composable
-private fun CardPopup(onDismiss: () -> Unit, card: @Composable () -> Unit) {
+private fun CardPopup(onDismiss: () -> Unit, focusable: Boolean = true, card: @Composable () -> Unit) {
     Popup(
         popupPositionProvider = CenteredInWindow,
         onDismissRequest = {
@@ -286,7 +309,9 @@ private fun CardPopup(onDismiss: () -> Unit, card: @Composable () -> Unit) {
             onDismiss()
         },
         properties = PopupProperties(
-            focusable = true,
+            // False while a warm keyboard is hidden: the screen keeps the
+            // focus and the keys.
+            focusable = focusable,
             dismissOnBackPress = true,
             dismissOnClickOutside = false,
         ),
@@ -316,6 +341,8 @@ private fun HoneycombKeyboardCard(
     maxLength: Int = MAX_QUERY,
     onDraftChange: (String) -> Unit = {},
     inline: HiveInline? = null,
+    /** False while a warm keyboard is hidden -- see HoneycombKeyboardPopup. */
+    shown: Boolean = true,
 ) {
     val forNames  = mode == HiveMode.NAME
     var draft     by remember { mutableStateOf(initialText.take(maxLength)) }
@@ -366,13 +393,32 @@ private fun HoneycombKeyboardCard(
     var spot     by remember { mutableStateOf(keyboard.firstKey) }
     var stickyX  by remember { mutableFloatStateOf(keyboard.centre(spot)) }
 
-    // Arrives with a short fade and settle rather than popping in.
+    // Arrives with a short fade and settle rather than popping in -- each
+    // time it is shown. A warm keyboard stays built while hidden, so every
+    // opening after its first starts over: an empty box, letters, on 'a'.
     val appear = remember { Animatable(0f) }
-    LaunchedEffect(Unit) {
-        appear.animateTo(1f, tween(220, easing = FastOutSlowInEasing))
-    }
-
-    LaunchedEffect(Unit) {
+    var openings by remember { mutableIntStateOf(0) }
+    LaunchedEffect(shown) {
+        if (!shown) {
+            if (voice.listening) voice.cancel()
+            appear.snapTo(0f)
+            return@LaunchedEffect
+        }
+        if (openings++ > 0) {
+            draft = initialText.take(maxLength)
+            numbers = false
+            shift = false
+            voiceHint = null
+            val letters = HiveKeyboard(
+                numbers  = false,
+                hasVoice = !forNames && voice.available,
+                forNames = forNames,
+                upper    = false,
+            )
+            spot = letters.firstKey
+            stickyX = letters.centre(spot)
+        }
+        launch { appear.animateTo(1f, tween(220, easing = FastOutSlowInEasing)) }
         awaitFrame()
         runCatching { hostFR.requestFocus() }
     }
@@ -499,6 +545,7 @@ private fun HoneycombKeyboardCard(
             .padding(horizontal = 21.dp, vertical = 18.dp),
     ) {
         DraftField(
+            active      = shown,
             draft       = draft,
             listening   = voice.listening,
             placeholder = inline?.placeholder ?: if (forNames) "Enter a name..." else "Search movies, shows and anime",
@@ -548,18 +595,22 @@ private val NO_SPOT = HiveSpot(-1, -1)
 
 @Composable
 private fun DraftField(
+    /** False while hidden: the cursor holds still (no frames for an unseen card). */
+    active: Boolean,
     draft: String,
     listening: Boolean,
     placeholder: String,
     count: String?,
     searchIcon: Boolean,
 ) {
-    val blink by rememberInfiniteTransition(label = "cursor").animateFloat(
-        initialValue = 1f,
-        targetValue = 0f,
-        animationSpec = infiniteRepeatable(tween(530), RepeatMode.Reverse),
-        label = "cursorAlpha",
-    )
+    val blink = if (active) {
+        rememberInfiniteTransition(label = "cursor").animateFloat(
+            initialValue = 1f,
+            targetValue = 0f,
+            animationSpec = infiniteRepeatable(tween(530), RepeatMode.Reverse),
+            label = "cursorAlpha",
+        ).value
+    } else 1f
     val cursor = @Composable {
         Box(
             Modifier
@@ -690,12 +741,16 @@ private fun ActionRow(
     voice: VoiceSearchState,
     shiftOn: Boolean,
 ) {
-    val pulse = rememberInfiniteTransition(label = "voicePulse").animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
-        label = "voicePulseLevel",
-    )
+    // Runs only while listening: an idle card -- shown or warm and hidden --
+    // asks for no frames.
+    val pulse = if (voice.listening) {
+        rememberInfiniteTransition(label = "voicePulse").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(650), RepeatMode.Reverse),
+            label = "voicePulseLevel",
+        )
+    } else null
     Row(
         modifier = Modifier.width(COMB_W),
         horizontalArrangement = Arrangement.spacedBy(PILL_GAP, Alignment.CenterHorizontally),
@@ -708,10 +763,10 @@ private fun ActionRow(
                 shape     = FIELD_SHAPE,
                 // Read only while listening, so the pulse never recomposes an idle card.
                 accent    = when {
-                    HiveKeyboard.isFinish(key.action) -> FINISH_GREEN
+                    HiveKeyboard.isFinish(key.action) -> FINISH_PURPLE
                     key.action == HiveAction.VOICE -> lerp(
                         VOICE_BLUE, VOICE_LIT,
-                        if (voice.listening) maxOf(pulse.value, voice.level) else 0f,
+                        if (voice.listening) maxOf(pulse?.value ?: 0f, voice.level) else 0f,
                     )
                     else -> null
                 },
@@ -745,7 +800,7 @@ private fun PillRow(keyboard: HiveKeyboard, focused: HiveSpot) {
 
 /**
  * Any key that is not a hexagon. Focus is white; [accent] colours Voice (blue)
- * and Search/Done (forest green), with [accentInk] on it; [lit] is a Shift that is on,
+ * and Search/Done (amethyst), with [accentInk] on it; [lit] is a Shift that is on,
  * which reads gold even when the focus is elsewhere.
  */
 @Composable

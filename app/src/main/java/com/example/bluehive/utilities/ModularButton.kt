@@ -23,8 +23,15 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -39,6 +46,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.BoxScope
@@ -66,7 +74,7 @@ data class ModularButtonDimensions(
     val glowHeight: Dp = 58.5.dp,
     val mainCornerRadius: Float = 8f,
     val secondCornerRadius: Float = 6f,
-    val shadowOffset: Dp = 0.dp
+    val shadowOffset: Dp = 0.dp,
 )
 
 @Stable
@@ -83,7 +91,19 @@ data class ModularButtonColors(
     // Used when toggleable & toggled (unfocused)
     val textToggled: Color = Color(0xFF8A8F97),
     // ⭐ NEW: used when toggleable & toggled & focused (glow on it)
-    val textToggledFocus: Color = Color(0xFFCDCDCD)
+    val textToggledFocus: Color = Color(0xFFCDCDCD),
+    /**
+     * The split face (source buttons, v613): a band of its own colour across
+     * the lower [BAND_FRACTION] of the face, and a 1 dp edge around it, each
+     * with an idle, focused and pressed colour. Unset draws neither.
+     */
+    val band: Color = Color.Unspecified,
+    val bandFocused: Color = Color.Unspecified,
+    val bandToggled: Color = Color.Unspecified,
+    val outline: Color = Color.Unspecified,
+    val outlineFocused: Color = Color.Unspecified,
+    /** The shadow the face casts onto the strip just under it (drawSecond); unset casts none. */
+    val faceShadow: Color = Color.Unspecified,
 )
 
 // ── The "watch" button palettes ─────────────────────────────────────────────
@@ -108,64 +128,69 @@ data class ModularButtonColors(
 // DARKER than their idle counterpart, fighting the glow instead of supporting it.
 
 /**
- * "Watch in DuB" — the red anime button on both detail screens.
+ * "Watch in English" -- the red anime button, on both details pages and on
+ * Default server after English.
  *
- * Same hole as the stream buttons had: mainDefault was set, mainFocused was not,
- * so focusing a RED button turned it the shared neutral grey (0xFF535C67).
- *
- * Focused values are the idle hue lifted in lightness at full saturation, which
- * is what makes focus read as the button lighting up rather than changing
- * identity.
+ * THE ROYAL SPLIT IN RED (the user's pick, v622, mock-up A2): the source
+ * buttons' recipe -- a deep top, a brighter band across the lower part, a
+ * 1 dp edge, the face's shadow on the strip -- at hue 0. Each part keeps the
+ * royal split's lightness (+4%, since red reads darker than purple at equal
+ * lightness) at FULL saturation; royal's own saturation made a brownish red
+ * next to the purple. Focus lifts every part toward white (top 18%, band
+ * 20%, edge 35%, strip 10%), as on the source buttons. It replaced a flat
+ * 0xFFCC0000 face over a 0xFF7A0000 strip.
  */
 val AnimeDubButtonColors = ModularButtonColors(
-    // Idle face: deep red.                       HSL   0°, 100%, 40%
-    mainDefault   = Color(0xFFCC0000),
-    // Focused face: same hue, lifted to 55%.     HSL   0°, 100%, 55%
-    mainFocused   = Color(0xFFFF2020),
-    mainToggled   = Color(0xFF7A0000),
-    // Idle strip.                                HSL   0°, 100%, 24%
-    secondDefault = Color(0xFF7A0000),
-    // Focused strip, lifted to 41%.              HSL   0°, 100%, 41%
-    secondFocused = Color(0xFFC21212),
-    // Selected/pressed strip. Without this every palette here fell back to
+    mainDefault   = Color(0xFFAE0000),
+    mainFocused   = Color(0xFFBD2E2E),
+    // Pressed: the same split, darker.
+    mainToggled   = Color(0xFF7D0000),
+    band          = Color(0xFFEA0000),
+    bandFocused   = Color(0xFFEE3333),
+    bandToggled   = Color(0xFFA80000),
+    outline       = Color(0xFFFF4949),
+    outlineFocused = Color(0xFFFF8989),
+    // The strip under the face.
+    secondDefault = Color(0xFF800000),
+    secondFocused = Color(0xFF8D1A1A),
+    // Selected/pressed strip. Without one every palette here fell back to
     // ModularButtonColors' default 0xFF372B67 -- a PURPLE strip under a red,
     // green or blue button the moment it was toggled.
-    secondToggled = Color(0xFF4A0000),
+    secondToggled = Color(0xFF600000),
+    faceShadow    = Color(0x99000000),
     textUnfocusedToggled = Color(0xFF9E3939),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFD6D6D6),
 )
 
 /**
- * "Watch in SuB" — the vibrant purple anime button.
+ * "Watch in Japanese" -- the purple anime button, on both details pages and
+ * on Default server after Japanese.
  *
- * One hue (275°) at high saturation, lifted for focus like the other two. Reads
- * as a distinct third identity next to the red dub button without competing with
- * it for attention the way the previous yellow did.
- *
- * A SIDE BENEFIT OVER THE OLD YELLOW: white on 0xFFCCA000 was the weakest label
- * contrast of any button here, and it got worse as the focused face brightened.
- * Purple is dark enough at both states that white sits on it cleanly, so this no
- * longer needs the dark-text workaround gold was heading for.
+ * THE ROYAL SPLIT IN PURPLE (the user's pick, v622, mock-up A): every part
+ * at the royal split's own saturation and lightness, moved to hue 275. It
+ * replaced a flat 0xFF8A1FD6 face over a 0xFF50127D strip.
  */
 val AnimeSubButtonColors = ModularButtonColors(
-    // Idle face: vibrant purple.                 HSL 275°,  75%, 48%
-    mainDefault   = Color(0xFF8A1FD6),
-    // Focused face: same hue, lifted.            HSL 275°,  85%, 63%
-    mainFocused   = Color(0xFFAE50F1),
-    mainToggled   = Color(0xFF3B0F63),
-    // Idle strip: deeper purple.                 HSL 275°,  75%, 28%
-    secondDefault = Color(0xFF50127D),
-    // Focused strip, lifted.                     HSL 275°,  75%, 42%
-    secondFocused = Color(0xFF781BBB),
-    secondToggled = Color(0xFF2E0A4A),
-    textUnfocusedToggled = Color(0xFF61388B),
+    mainDefault   = Color(0xFF551A80),
+    mainFocused   = Color(0xFF744397),
+    mainToggled   = Color(0xFF3A1158),
+    band          = Color(0xFF7628AE),
+    bandFocused   = Color(0xFF9153BE),
+    bandToggled   = Color(0xFF521A7A),
+    outline       = Color(0xFFA45CD8),
+    outlineFocused = Color(0xFFC495E6),
+    secondDefault = Color(0xFF3C125A),
+    secondFocused = Color(0xFF502A6A),
+    secondToggled = Color(0xFF2A0C40),
+    faceShadow    = Color(0x99000000),
+    textUnfocusedToggled = Color(0xFF5F3C78),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFD6D6D6),
 )
 
 /**
- * "Watch on <source>" — VidNest, VidLove, VidFast, MoviesAPI.
+ * The source buttons, "Play / from Website 1" ... "Website 4".
  *
  * ONE PLACE, because there were three: the same colour block was pasted into
  * MoviesDetailsScreenCompose and twice into TVShowsDetailsScreenCompose, each
@@ -185,37 +210,78 @@ val ButtonLabelShadow = Shadow(
 )
 
 /**
- * Add to Favorites' label instead (the user's call, 2026-10-26): its text is
- * dark on gold or bronze, where a dark shadow only smudged it, so it gets a
- * pale-gold highlight just below the letters -- a slight emboss. In px: 2
- * down, 2 of blur.
+ * The colour of the source buttons' "from Website N" line: butter (the
+ * user's pick, v596; silver 0xFFC9CEE8 was tried in v598 and dropped, gold
+ * 0xFFF0B44C before both).
  */
-val FavoriteLabelHighlight = Shadow(
-    color = Color(0x8CFFE6A3),
-    offset = androidx.compose.ui.geometry.Offset(0f, 2f),
-    blurRadius = 2f,
-)
+val SOURCE_LABEL_COLOR = Color(0xFFFFE58A)
 
 val StreamSourceButtonColors = ModularButtonColors(
-    // 70% OF THE OLD SATURATION AT REST, THE OLD COLOURS ON FOCUS (the user's
-    // picks, 2026-10-26): the pure 100% blue glared on four buttons at once, so
-    // they rest muted and only the one under the cursor wears it.
-    // Idle face: muted blue.                     HSL 241°, 70%, 50%
-    mainDefault   = Color(0xFF2926D9),
-    // Focused face: the original pure blue.      HSL 241°, 100%, 50%
-    mainFocused   = Color(0xFF0004FF),
-    mainToggled   = Color(0xFF0D0B29),
-    // Idle strip: muted violet.                  HSL 262°, 48%, 35%
-    secondDefault = Color(0xFF4E2E84),
-    // Focused strip: the original deep violet.   HSL 262°, 69%, 35%
-    secondFocused = Color(0xFF471C98),
-    // Deep violet rather than the shared default: this palette is the one
-    // place a purple strip was ever in-family, but it should be ITS violet.
-    secondToggled = Color(0xFF2F1C54),
-    textUnfocusedToggled = Color(0xFF3C3A61),
+    // ROYAL SPLIT (the user's pick, v613, back again at v621, mock-up 3): a
+    // deep royal top over a brighter band across the lower part, with a light
+    // 1 dp edge. The split face replaced the pure 0xFF0004FF electric blue,
+    // which glared on a TV and fought the navy page. Focus lifts every part
+    // toward white (top 18%, band 20%, edge 35%, strip 10%), as in the
+    // mock-up. Tried and dropped: charcoal + blue band (v617) top 1C1F2A,
+    // band 1C2A7C, edge 4658A6, strip 14161E; midnight + teal band (v618) top
+    // 10204A, band 155A70, edge 3E92AC, strip 0C1838; halfway between royal
+    // and charcoal (v619) top 1B2655, band 223595, edge 5166BF, strip 131B3C;
+    // royal with the top 8% darker (v620) top 182876.
+    mainDefault   = Color(0xFF1A2C80),
+    mainFocused   = Color(0xFF435297),
+    // Pressed: the same split, darker.
+    mainToggled   = Color(0xFF111D58),
+    band          = Color(0xFF2840AE),
+    bandFocused   = Color(0xFF5366BE),
+    bandToggled   = Color(0xFF1A2C7A),
+    outline       = Color(0xFF5C74D8),
+    outlineFocused = Color(0xFF95A5E6),
+    // The strip under the face.
+    secondDefault = Color(0xFF121F5A),
+    secondFocused = Color(0xFF2A356B),
+    secondToggled = Color(0xFF0C1540),
+    // The face's shadow on the strip (v616): black at 60%, fading out.
+    faceShadow    = Color(0x99000000),
+    textUnfocusedToggled = Color(0xFF3C4A78),
     textFocused   = Color.White,
     textUnfocused = Color(0xFFD6D6D6),
 )
+
+/**
+ * How much taller the two-line buttons' face is than the other watch buttons'
+ * 33 dp: 36 dp (the user's pick from the 33/36/38 mock-ups, v611) -- the
+ * source buttons and, since v622, Watch in English / Japanese and the server
+ * pair after them. Both details pages add it to the face, the strip's offset,
+ * the glow and the row step, so the gaps between buttons do not change.
+ */
+val SOURCE_BUTTON_EXTRA_HEIGHT = 3.dp
+
+/**
+ * The source buttons' label (option B, v609): a rounded play symbol, then a
+ * small "Play from" (Inter Bold, 8 sp, the label's colour) over a big
+ * "Website N" (Passion One, 15 sp, butter), the group centred on the face.
+ * The website is the line people need to read and say, so it is the big one:
+ * "from Website N" at 6.5 sp under "Play" was unreadable (v606), and taller
+ * buttons for a 10 sp line (option E, v607-v608) were dropped for this.
+ * One place for both details pages, like StreamSourceButtonColors.
+ */
+fun streamSourceLabel(coverName: String, fontSize: Float = 15f) = ModularButtonTextConfig(
+    text = coverName,
+    fontSize = fontSize,
+    shadow = ButtonLabelShadow,
+    mainColor = SOURCE_LABEL_COLOR,
+    subText = "Play from",
+    subFontSize = 8f,
+    subAbove = true,
+    leadingIconRes = com.example.bluehive.R.drawable.ic_play_rounded,
+    leadingIconSize = 16.dp,
+)
+
+/**
+ * Watch in English / Japanese, in the source buttons' two lines (v622): a
+ * small "Watch in" over the language, with the same play icon.
+ */
+fun animeLanguageLabel(language: String) = streamSourceLabel(language).copy(subText = "Watch in")
 
 /**
  * Play Trailer and the two episode arrows on both detail screens.
@@ -236,79 +302,90 @@ val StreamSourceButtonColors = ModularButtonColors(
  * control. This one is desaturated and darker: clearly red, clearly secondary.
  */
 val TrailerControlButtonColors = ModularButtonColors(
-    // Idle face: muted brick red.                HSL 0°, 57%, 39%
+    // THE SAME RED, NOW SPLIT (v623, mock-up 8g): the idle face is still
+    // 0xFF9E2B2B; a brighter band across its lower part, a 1 dp edge and the
+    // face's shadow on the strip build it like the Website buttons. Focus
+    // lifts every part toward white (top 18%, band 20%, edge 35%, strip 10%).
     mainDefault   = Color(0xFF9E2B2B),
-    // Focused face: same hue, lifted.            HSL 0°, 57%, 54%
-    mainFocused   = Color(0xFFCD4747),
-    mainToggled   = Color(0xFF5C1F1F),
-    // Idle strip, replacing the old near-black 0xFF2E2C37.
-    secondDefault = Color(0xFF3A1618),
-    // Focused strip, lifted.
-    secondFocused = Color(0xFF6B2224),
-    secondToggled = Color(0xFF250D0E),
+    mainFocused   = Color(0xFFAF5151),
+    mainToggled   = Color(0xFF6B1D1D),
+    band          = Color(0xFFC23A3A),
+    bandFocused   = Color(0xFFCE6161),
+    bandToggled   = Color(0xFF842727),
+    outline       = Color(0xFFDC7474),
+    outlineFocused = Color(0xFFE8A5A5),
+    secondDefault = Color(0xFF741F1F),
+    secondFocused = Color(0xFF823535),
+    secondToggled = Color(0xFF4F1515),
+    faceShadow    = Color(0x99000000),
     textUnfocusedToggled = Color(0xFF804444),
     textFocused   = Color.White,
-    textUnfocused = Color(0xFFBEBEBE),
+    textUnfocused = Color(0xFFF0F0F0),
 )
 
 /**
- * Extras / Providers — the toggle on both detail screens.
- *
- * Forest green: dark and desaturated enough to sit beside the red playback
- * controls without competing with them, and distinct from the blue of anything
- * that starts playback. This button reveals information; it does not play
- * anything, and the colour should not suggest otherwise.
+ * The details pages' Search button (v624): amethyst, the split recipe at a
+ * jewel's saturation (hue 278, 55%), next to the azure Favorites and the
+ * trailer red. Hot pink (v623) read as candy.
  */
-val ExtrasButtonColors = ModularButtonColors(
-    // Idle face: deep forest.                    HSL 137°, 51%, 28%
-    mainDefault   = Color(0xFF246B38),
-    // Focused face: same hue, lifted.            HSL 137°, 46%, 43%
-    mainFocused   = Color(0xFF3AA057),
-    mainToggled   = Color(0xFF143D20),
-    secondDefault = Color(0xFF143D20),
-    secondFocused = Color(0xFF276E3E),
-    secondToggled = Color(0xFF0D2715),
-    textUnfocusedToggled = Color(0xFF316141),
+val SearchButtonColors = ModularButtonColors(
+    mainDefault   = Color(0xFF582277),
+    mainFocused   = Color(0xFF764A8F),
+    mainToggled   = Color(0xFF3C1751),
+    band          = Color(0xFF7B30A6),
+    bandFocused   = Color(0xFF9559B8),
+    bandToggled   = Color(0xFF542171),
+    outline       = Color(0xFFAB6ECF),
+    outlineFocused = Color(0xFFC8A1E0),
+    secondDefault = Color(0xFF3D1853),
+    secondFocused = Color(0xFF502F64),
+    secondToggled = Color(0xFF291038),
+    faceShadow    = Color(0x99000000),
     textFocused   = Color.White,
-    textUnfocused = Color(0xFFBEBEBE),
+    textUnfocused = Color.White,
 )
 
 /**
- * Add to Favorites on both details pages (peek layout; movie 2026-10-26, TV
- * v469): gold while the title is not a favourite, bronze once it is. Not a
- * toggle -- the colour says which, and a press only dips.
- *
- * DARK TEXT ON THE GOLD. White on a bright gold face is thin, and got thinner
- * as focus lifted it -- what retired the first gold palette -- so this takes
- * the honeycomb keyboard's gold Search key's answer instead: a near-black brown label, about 6:1 on the idle
- * face. The bronze wears the same label (the user's pick, 2026-10-26): about
- * 4.4:1 on its focused face, 2.7:1 on the idle one.
+ * Add to Favorites on both details pages (v624, the user's pick "azure"):
+ * a bright sky blue in the split recipe (hue 210, 85%), white words and a
+ * filled star. Lime (v623) read as candy; gold and bronze before that.
  */
-val FavoriteGoldButtonColors = ModularButtonColors(
-    // Idle face: deep gold.                      HSL 41°, 83%, 41%
-    mainDefault   = Color(0xFFC08A12),
-    // Focused face: same hue, lifted.            HSL 40°, 73%, 53%
-    mainFocused   = Color(0xFFE0A82E),
-    mainToggled   = Color(0xFF6E4F0A),
-    secondDefault = Color(0xFF6E4F0A),
-    secondFocused = Color(0xFF9A6F10),
-    secondToggled = Color(0xFF4A3507),
-    textFocused   = Color(0xFF2A1C00),
-    textUnfocused = Color(0xFF3A2905),
+val FavoriteButtonColors = ModularButtonColors(
+    mainDefault   = Color(0xFF1278DE),
+    mainFocused   = Color(0xFF388EE3),
+    mainToggled   = Color(0xFF0C5297),
+    band          = Color(0xFF3491EF),
+    bandFocused   = Color(0xFF59A5F2),
+    bandToggled   = Color(0xFF2363A3),
+    outline       = Color(0xFF73B0EC),
+    outlineFocused = Color(0xFFA4CCF3),
+    secondDefault = Color(0xFF0D549C),
+    secondFocused = Color(0xFF2565A6),
+    secondToggled = Color(0xFF09396A),
+    faceShadow    = Color(0x99000000),
+    textFocused   = Color.White,
+    textUnfocused = Color.White,
 )
 
-/** Add to Favorites once the title is a favourite: bronze, the gold's dark label. See FavoriteGoldButtonColors. */
-val FavoriteBronzeButtonColors = ModularButtonColors(
-    // Idle face: bronze.                         HSL 29°, 59%, 34%
-    mainDefault   = Color(0xFF8A5524),
-    // Focused face: same hue, lifted.            HSL 28°, 50%, 46%
-    mainFocused   = Color(0xFFB0703A),
-    mainToggled   = Color(0xFF4A2C12),
-    secondDefault = Color(0xFF4A2C12),
-    secondFocused = Color(0xFF6B4220),
-    secondToggled = Color(0xFF331E0C),
-    textFocused   = FavoriteGoldButtonColors.textFocused,
-    textUnfocused = FavoriteGoldButtonColors.textUnfocused,
+/**
+ * Remove from Favorites, once the title is saved (v624, mock-up A): the
+ * azure dropped to a deep navy-azure, the words and star in pale ice blue.
+ */
+val FavoriteSavedButtonColors = ModularButtonColors(
+    mainDefault   = Color(0xFF0F488A),
+    mainFocused   = Color(0xFF35659D),
+    mainToggled   = Color(0xFF0A315E),
+    band          = Color(0xFF1461B8),
+    bandFocused   = Color(0xFF3E7DC5),
+    bandToggled   = Color(0xFF0E427D),
+    outline       = Color(0xFF2C7FDD),
+    outlineFocused = Color(0xFF76ACE9),
+    secondDefault = Color(0xFF082749),
+    secondFocused = Color(0xFF213D5B),
+    secondToggled = Color(0xFF051B32),
+    faceShadow    = Color(0x99000000),
+    textFocused   = Color(0xFFA9D3FF),
+    textUnfocused = Color(0xFFA9D3FF),
 )
 
 @Immutable
@@ -342,6 +419,23 @@ data class ModularButtonTextConfig(
      */
     val iconRes: Int? = null,
     val iconSize: Dp = 12.dp,
+
+    /**
+     * A second, smaller line in Inter Bold, under [text] or above it with
+     * [subAbove] ("Play from" over "Website 1"), in [subColor] when set, else
+     * the label's focus colour. With it the label is [leadingIconRes] with the
+     * two lines beside it, the group centred on the button. Null keeps the one
+     * centred line every other button has.
+     */
+    val subText: String? = null,
+    val subFontSize: Float = 10f,
+    val subColor: Color = Color.Unspecified,
+    val subAbove: Boolean = false,
+    /** [text]'s colour whatever the focus, for a stacked label; unset follows the focus colour. */
+    val mainColor: Color = Color.Unspecified,
+    /** Tinted with the label colour, like [iconRes]. */
+    val leadingIconRes: Int? = null,
+    val leadingIconSize: Dp = 16.dp,
 )
 
 @Immutable
@@ -412,6 +506,14 @@ val WatchButtonAnimation = ModularButtonAnimationConfig(
     clickDelayMillis = 400,
 )
 
+/**
+ * ModularButton's default palette, built once. As an inline default
+ * (`= ModularButtonColors()`) its constructor and every field's default ran
+ * inside ModularButton, which is held to 2,500 units / 100 registers
+ * (checkMethodSizes); the split-face fields (v613) took it to 2,490 / 96.
+ */
+private val DefaultButtonColors = ModularButtonColors()
+
 @Composable
 fun ModularButton(
     modifier: Modifier = Modifier,
@@ -423,7 +525,7 @@ fun ModularButton(
     fontFamily: FontFamily,
     focusRequester: FocusRequester,
     dimensions: ModularButtonDimensions = ModularButtonDimensions(),
-    colors: ModularButtonColors = ModularButtonColors(),
+    colors: ModularButtonColors = DefaultButtonColors,
     glowConfig: ModularButtonGlowConfig = ModularButtonGlowConfig(),
     animationConfig: ModularButtonAnimationConfig = ModularButtonAnimationConfig(),
     externalToggled: Boolean? = null,       // parent-controlled toggle (for radio-style groups)
@@ -452,12 +554,13 @@ fun ModularButton(
     // ✅ single source-of-truth for toggle state
     val effectiveToggled = externalToggled ?: internalToggled
 
-    val mainYOffset by animateDpAsState(
+    val faceYOffset = animateDpAsState(
         targetValue = if ((isToggleable && effectiveToggled) || (!isToggleable && pressWave % 2 == 1))
             animationConfig.pressOffset else 0.dp,
         animationSpec = tween(durationMillis = animationConfig.durationMillis),
         label = "mainYOffset"
     )
+    val mainYOffset by faceYOffset
 
     // Read while placing (offsetWithY), never while composing: a press
     // re-placed the label but recomposed the whole button every frame (v515).
@@ -630,22 +733,7 @@ fun ModularButton(
                     }
 
                     // Second (middle) surface
-                    drawRoundRect(
-                        color = when {
-                            isToggleable && effectiveToggled -> colors.secondToggled
-                            isFocused -> colors.secondFocused
-                            else -> colors.secondDefault
-                        },
-                        topLeft = Offset(0f, dimensions.secondYOffset.toPx()),
-                        size = Size(
-                            dimensions.secondWidth.toPx(),
-                            dimensions.secondHeight.toPx()
-                        ),
-                        cornerRadius = CornerRadius(
-                            dimensions.secondCornerRadius,
-                            dimensions.secondCornerRadius
-                        )
-                    )
+                    drawSecond(colors, isFocused, isToggleable && effectiveToggled, dimensions, mainYOffset)
 
 
                     // Main top surface
@@ -664,6 +752,7 @@ fun ModularButton(
                             dimensions.mainCornerRadius
                         )
                     )
+                    drawSplit(colors, isFocused, (isToggleable && effectiveToggled) || isPressed, dimensions, mainYOffset)
                 }
         ) {
             val labelText =
@@ -733,7 +822,11 @@ fun ModularButton(
                         handleButtonClick()
                     }
             ) {
-                ModularButtonLabel(textConfig, labelText, labelColor, fontFamily, textYOffset)
+                ModularButtonLabel(
+                    textConfig, labelText, labelColor, fontFamily, textYOffset,
+                    // The face's own press, from the label's resting offset.
+                    stackedY = { animationConfig.textOffsetDefault + faceYOffset.value },
+                )
             }
         }
     }
@@ -778,7 +871,8 @@ private fun BoxScope.ModularButtonGlow(
 
 /**
  * The button's label: an icon (with its blurred shadow) or text. [textYOffset]
- * is the press-in, read while placing (offsetWithY).
+ * is the press-in, read while placing (offsetWithY). A stacked label rides
+ * [stackedY] instead -- see StackedLabel.
  */
 @Composable
 private fun ModularButtonLabel(
@@ -787,8 +881,13 @@ private fun ModularButtonLabel(
     labelColor: Color,
     fontFamily: FontFamily,
     textYOffset: State<Dp>,
+    stackedY: () -> Dp,
 ) {
-    if (textConfig.iconRes != null) {
+    if (textConfig.subText != null) {
+        StackedLabel(textConfig, labelText, labelColor, fontFamily, stackedY)
+    } else if (textConfig.leadingIconRes != null) {
+        IconTextLabel(textConfig, labelText, labelColor, fontFamily, textYOffset)
+    } else if (textConfig.iconRes != null) {
         val iconShadow = textConfig.shadow
         if (iconShadow != null) {
             val density = LocalDensity.current
@@ -827,6 +926,258 @@ private fun ModularButtonLabel(
             modifier = Modifier
                 .offsetWithY(textConfig.offsetX) { textYOffset.value }
                 .semantics { contentDescription = labelText }
+        )
+    }
+}
+
+/**
+ * One line after a leading icon: Favorites' star (v623). The two ride the
+ * label's own press offset together, centred as one group; the icon gets a
+ * sharp shadow copy like StackedLabel's.
+ */
+@Composable
+private fun IconTextLabel(
+    textConfig: ModularButtonTextConfig,
+    labelText: String,
+    labelColor: Color,
+    fontFamily: FontFamily,
+    textYOffset: State<Dp>,
+) {
+    val shadow = textConfig.shadow
+    val res = textConfig.leadingIconRes ?: return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .offsetWithY(textConfig.offsetX) { textYOffset.value }
+            .semantics { contentDescription = labelText },
+    ) {
+        Box {
+            if (shadow != null) {
+                val density = LocalDensity.current
+                Image(
+                    painter = painterResource(id = res),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(shadow.color),
+                    modifier = Modifier
+                        .size(textConfig.leadingIconSize)
+                        .offset(
+                            x = with(density) { shadow.offset.x.toDp() },
+                            y = with(density) { shadow.offset.y.toDp() },
+                        ),
+                )
+            }
+            Image(
+                painter = painterResource(id = res),
+                contentDescription = null,
+                colorFilter = ColorFilter.tint(labelColor),
+                modifier = Modifier.size(textConfig.leadingIconSize),
+            )
+        }
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = labelText,
+            color = labelColor,
+            fontSize = textConfig.fontSize.sp,
+            fontFamily = fontFamily,
+            maxLines = 1,
+            style = LocalTextStyle.current.let { base -> if (shadow != null) base.copy(shadow = shadow) else base },
+        )
+    }
+}
+
+/**
+ * Two lines beside a leading icon: "Play" over "from Website 1" (see
+ * ModularButtonTextConfig.subText). The icon and the lines, as one group, sit
+ * dead centre on the button both ways; the lines' leading is trimmed to the
+ * glyphs so font padding cannot push the group off centre. The icon and the
+ * first line take the focus colour; the second keeps its own.
+ *
+ * IT RIDES THE FACE'S OWN PRESS ANIMATION, not the label's: the shared label
+ * press (WatchButtonAnimation, 1 -> 2.4 dp) travels 1.4 dp while the face
+ * drops 2.5 dp, so the words lagged the face on every press (the user's
+ * report, v598). One animation, one distance, the same frame.
+ * The icon's shadow is a sharp copy, not a blur: a blur on every source
+ * button would be four RenderEffect layers on the overlay.
+ */
+/**
+ * Where the stacked label is nudged so the DRAWN group sits dead centre on the
+ * face. Layout-centring is not enough: fonts leave uneven empty space above
+ * and below their glyphs, and the glyphs' side bearings put the group 1 dp
+ * right. Measured from onn box screencaps, glyph pixels against the face:
+ * option B (v609, "Play from" over Passion One "Website N") drew 2.5 px high
+ * at -0.5 dp -- 8 px of face above, 13 below -- hence +0.75 dp.
+ * Re-measure if the fonts, sizes or line order change.
+ */
+private val STACKED_LABEL_LIFT = 0.75.dp
+private val STACKED_LABEL_SHIFT_X = (-1).dp
+
+@Composable
+private fun StackedLabel(
+    textConfig: ModularButtonTextConfig,
+    labelText: String,
+    labelColor: Color,
+    fontFamily: FontFamily,
+    /** The face's press offset plus the label's resting one, read while placing. */
+    pressY: () -> Dp,
+) {
+    val shadow = textConfig.shadow
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier
+            .fillMaxSize()
+            .offsetWithY(STACKED_LABEL_SHIFT_X) { pressY() + STACKED_LABEL_LIFT }
+            .semantics {
+                contentDescription = if (textConfig.subAbove) "${textConfig.subText} $labelText"
+                                     else "$labelText ${textConfig.subText}"
+            },
+    ) {
+        textConfig.leadingIconRes?.let { res ->
+            Box {
+                if (shadow != null) {
+                    val density = LocalDensity.current
+                    Image(
+                        painter = painterResource(id = res),
+                        contentDescription = null,
+                        colorFilter = ColorFilter.tint(shadow.color),
+                        modifier = Modifier
+                            .size(textConfig.leadingIconSize)
+                            .offset(
+                                x = with(density) { shadow.offset.x.toDp() },
+                                y = with(density) { shadow.offset.y.toDp() },
+                            ),
+                    )
+                }
+                Image(
+                    painter = painterResource(id = res),
+                    contentDescription = null,
+                    colorFilter = ColorFilter.tint(labelColor),
+                    modifier = Modifier.size(textConfig.leadingIconSize),
+                )
+            }
+            Spacer(Modifier.width(7.dp))
+        }
+        Column {
+            val base = LocalTextStyle.current
+                .copy(lineHeightStyle = LineHeightStyle(LineHeightStyle.Alignment.Center, LineHeightStyle.Trim.Both))
+                .let { if (shadow != null) it.copy(shadow = shadow) else it }
+            // The small line in Inter Bold (SemiBold thinned out at this
+            // size, v594), 1 dp from the main line on whichever side it sits.
+            val sub: @Composable () -> Unit = {
+                Text(
+                    text = textConfig.subText.orEmpty(),
+                    color = textConfig.subColor.takeIf { it.isSpecified } ?: labelColor,
+                    fontSize = textConfig.subFontSize.sp,
+                    lineHeight = (textConfig.subFontSize * 1.2f).sp,
+                    fontFamily = AppTypography.interBold,
+                    maxLines = 1,
+                    style = base,
+                    modifier = Modifier.padding(
+                        top = if (textConfig.subAbove) 0.dp else 1.dp,
+                        bottom = if (textConfig.subAbove) 1.dp else 0.dp,
+                    ),
+                )
+            }
+            if (textConfig.subAbove) sub()
+            Text(
+                text = labelText,
+                color = textConfig.mainColor.takeIf { it.isSpecified } ?: labelColor,
+                fontSize = textConfig.fontSize.sp,
+                lineHeight = (textConfig.fontSize * 1.1f).sp,
+                fontFamily = fontFamily,
+                maxLines = 1,
+                style = base,
+            )
+            if (!textConfig.subAbove) sub()
+        }
+    }
+}
+
+/**
+ * The strip under the face. With a [ModularButtonColors.faceShadow] the face
+ * casts a soft shadow onto it (the user's pick, v616, "option 3"): darkest
+ * right under the face's bottom edge, gone [FACE_SHADOW_DEPTH] below, so the
+ * face reads as resting on a second layer. It follows the face down on a
+ * press. Outside ModularButton for the same method budget as drawSplit.
+ */
+private fun DrawScope.drawSecond(
+    colors: ModularButtonColors,
+    focused: Boolean,
+    pressed: Boolean,
+    dimensions: ModularButtonDimensions,
+    pressY: Dp,
+) {
+    val base = when {
+        pressed -> colors.secondToggled
+        focused -> colors.secondFocused
+        else -> colors.secondDefault
+    }
+    val top = dimensions.secondYOffset.toPx()
+    val radius = CornerRadius(dimensions.secondCornerRadius, dimensions.secondCornerRadius)
+    val size = Size(dimensions.secondWidth.toPx(), dimensions.secondHeight.toPx())
+    drawRoundRect(color = base, topLeft = Offset(0f, top), size = size, cornerRadius = radius)
+    if (!colors.faceShadow.isSpecified) return
+    val faceBottom = (dimensions.mainYOffset + pressY + dimensions.mainHeight).toPx()
+    drawRoundRect(
+        brush = Brush.verticalGradient(
+            listOf(colors.faceShadow, Color.Transparent),
+            startY = faceBottom,
+            endY = faceBottom + FACE_SHADOW_DEPTH.toPx(),
+        ),
+        topLeft = Offset(0f, top),
+        size = size,
+        cornerRadius = radius,
+    )
+}
+
+/** How far below the face its shadow on the strip fades out (6 px in the mock-up, ~4 dp on the TV). */
+private val FACE_SHADOW_DEPTH = 4.dp
+
+/** How much of the face, from the bottom, the split's band covers (as in the mock-up). */
+private const val BAND_FRACTION = 0.43f
+
+/**
+ * The split face's band and edge, drawn over the face: the band across its
+ * lower [BAND_FRACTION], clipped to the rounded corners, then a 1 dp edge
+ * inset half a stroke. Both move with the press like the face. Nothing for a
+ * palette without them.
+ *
+ * THE COLOUR CHOICE LIVES HERE, not in ModularButton: that method is held to
+ * 2,500 units / 100 registers (checkMethodSizes, the R8 register bug of
+ * v371-v375), and choosing these inline took it to 2,490 / 96.
+ */
+private fun DrawScope.drawSplit(
+    colors: ModularButtonColors,
+    focused: Boolean,
+    pressed: Boolean,
+    dimensions: ModularButtonDimensions,
+    pressY: Dp,
+) {
+    val band = when {
+        pressed -> colors.bandToggled
+        focused -> colors.bandFocused
+        else -> colors.band
+    }
+    val outline = if (focused && !pressed) colors.outlineFocused else colors.outline
+    if (!band.isSpecified && !outline.isSpecified) return
+    val top = (dimensions.mainYOffset + pressY).toPx()
+    val w = dimensions.mainWidth.toPx()
+    val h = dimensions.mainHeight.toPx()
+    val radius = CornerRadius(dimensions.mainCornerRadius, dimensions.mainCornerRadius)
+    if (band.isSpecified) {
+        val face = Path().apply { addRoundRect(RoundRect(0f, top, w, top + h, radius)) }
+        clipPath(face) {
+            drawRect(color = band, topLeft = Offset(0f, top + h * (1f - BAND_FRACTION)), size = Size(w, h * BAND_FRACTION))
+        }
+    }
+    if (outline.isSpecified) {
+        val stroke = 1.dp.toPx()
+        drawRoundRect(
+            color = outline,
+            topLeft = Offset(stroke / 2, top + stroke / 2),
+            size = Size(w - stroke, h - stroke),
+            cornerRadius = radius,
+            style = Stroke(width = stroke),
         )
     }
 }

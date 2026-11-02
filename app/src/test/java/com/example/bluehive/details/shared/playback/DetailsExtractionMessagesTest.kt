@@ -25,90 +25,101 @@ import java.net.URLEncoder
 class DetailsExtractionMessagesTest {
 
     // ── extractionErrorMessage ──────────────────────────────────────────────
+    // Callers pass the viewer's names ("Website 1"), never routing names.
 
     @Test
     fun `several sources tried names every one and claims only that none played`() {
         assertEquals(
-            "Tried VidNest, VidFast and VidLove.\n\nNone of them could play this episode.",
-            extractionErrorMessage(502, "no_stream", "VidLove", "episode",
-                listOf("VidNest", "VidFast", "VidLove")),
+            "Tried Website 1, Website 2 and Website 3.\n\nNone of them could play this episode.",
+            extractionErrorMessage(502, "no_stream", "Website 3", "episode",
+                listOf("Website 1", "Website 2", "Website 3")),
         )
     }
 
     @Test
     fun `two sources tried are joined with and`() {
         assertEquals(
-            "Tried VidNest and MoviesAPI.\n\nNone of them could play this movie.",
-            extractionErrorMessage(null, null, "MoviesAPI", "movie", listOf("VidNest", "MoviesAPI")),
+            "Tried Website 1 and Website 4.\n\nNone of them could play this movie.",
+            extractionErrorMessage(null, null, "Website 4", "movie", listOf("Website 1", "Website 4")),
         )
     }
 
     @Test
     fun `the several-sources message wins over a 503 and over the reason`() {
         assertEquals(
-            "Tried VidNest and VidFast.\n\nNone of them could play this episode.",
-            extractionErrorMessage(503, "source_blocked", "VidFast", "episode", listOf("VidNest", "VidFast")),
+            "Tried Website 1 and Website 2.\n\nNone of them could play this episode.",
+            extractionErrorMessage(503, "source_blocked", "Website 2", "episode", listOf("Website 1", "Website 2")),
         )
     }
 
     @Test
     fun `a single source tried reads like no chain at all`() {
         assertEquals(
-            extractionErrorMessage(502, "timeout", "VidNest", "episode"),
-            extractionErrorMessage(502, "timeout", "VidNest", "episode", listOf("VidNest")),
+            extractionErrorMessage(502, "timeout", "Website 1", "episode"),
+            extractionErrorMessage(502, "timeout", "Website 1", "episode", listOf("Website 1")),
         )
     }
 
     @Test
     fun `503 is our extractor starting up, whatever the reason says`() {
         assertEquals(
-            "VidNest is starting up.\n\nGive it a moment and try again.",
-            extractionErrorMessage(503, "no_stream", "VidNest", "episode"),
+            "Website 1 is starting up.\n\nGive it a moment and try again.",
+            extractionErrorMessage(503, "no_stream", "Website 1", "episode"),
         )
     }
 
     @Test
-    fun `source_blocked names the source and points at the others`() {
+    fun `source_blocked names the website and points at the others`() {
         assertEquals(
-            "Your network is blocking VidFast.\n\nPick a different source below — the others usually work.",
-            extractionErrorMessage(502, "source_blocked", "VidFast", "movie"),
+            "Your network is blocking Website 2.\n\nPick a different website below — the others usually work.",
+            extractionErrorMessage(502, "source_blocked", "Website 2", "movie"),
         )
     }
 
     @Test
-    fun `no_stream says the source lacks the title`() {
+    fun `no_stream says the website lacks the title`() {
         assertEquals(
-            "VidLove doesn't have this episode.\n\nTry a different source.",
-            extractionErrorMessage(502, "no_stream", "VidLove", "episode"),
+            "Website 3 doesn't have this episode.\n\nTry a different website.",
+            extractionErrorMessage(502, "no_stream", "Website 3", "episode"),
         )
     }
 
     @Test
-    fun `timeout says the source was slow`() {
+    fun `timeout says the website was slow`() {
         assertEquals(
-            "VidNest took too long to respond.\n\nTry again, or pick another source.",
-            extractionErrorMessage(502, "timeout", "VidNest", "movie"),
+            "Website 1 took too long to respond.\n\nTry again, or pick another website.",
+            extractionErrorMessage(502, "timeout", "Website 1", "movie"),
         )
     }
 
     @Test
     fun `dead_segments says the copy is broken, not the title`() {
         assertEquals(
-            "MoviesAPI has a broken copy of this movie.\n\nTry another source — the movie itself is fine.",
-            extractionErrorMessage(502, "dead_segments", "MoviesAPI", "movie"),
+            "Website 4 has a broken copy of this movie.\n\nTry another website — the movie itself is fine.",
+            extractionErrorMessage(502, "dead_segments", "Website 4", "movie"),
         )
     }
 
     @Test
     fun `anything else is a plain could-not-load`() {
         assertEquals(
-            "Couldn't load this episode from VidNest.\n\nTry another source.",
-            extractionErrorMessage(502, "unknown", "VidNest", "episode"),
+            "Couldn't load this episode from Website 1.\n\nTry another website.",
+            extractionErrorMessage(502, "unknown", "Website 1", "episode"),
         )
         assertEquals(
-            "Couldn't load this movie from VidFast.\n\nTry another source.",
-            extractionErrorMessage(null, null, "VidFast", "movie"),
+            "Couldn't load this movie from Website 2.\n\nTry another website.",
+            extractionErrorMessage(null, null, "Website 2", "movie"),
         )
+    }
+
+    // ── failoverNote / droppedNote ──────────────────────────────────────────
+
+    @Test
+    fun `the failover notes name both websites`() {
+        assertEquals("Website 1 is acting up, so we’re trying Website 2…",
+            failoverNote("Website 1", "Website 2"))
+        assertEquals("Website 2 dropped out, so we’re picking up on Website 3…",
+            droppedNote("Website 2", "Website 3"))
     }
 
     // ── parseExtractReason ──────────────────────────────────────────────────

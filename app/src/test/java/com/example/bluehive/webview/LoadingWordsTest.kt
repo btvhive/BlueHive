@@ -46,11 +46,12 @@ class LoadingWordsTest {
     }
 
     @Test
-    fun `the headline names the source`() {
-        assertEquals("Browsing source 2 of 3: Royal Jelly", chainHeadline(2, 3, "Royal Jelly"))
-        assertEquals("Browsing Royal Jelly", chainHeadline(1, 1, "Royal Jelly"))
-        assertEquals("Browsing source 1 of 3", chainHeadline(1, 3, null))
-        assertEquals("Browsing for your stream", chainHeadline(1, 1, ""))
+    fun `the headline names the website`() {
+        assertEquals("Getting your movie ready from Website 1", chainHeadline(1, 3, "Website 1"))
+        assertEquals("Getting your episode ready from Website 1", chainHeadline(1, 1, "Website 1", "episode"))
+        assertEquals("Now trying Website 2 (2 of 3)", chainHeadline(2, 3, "Website 2"))
+        assertEquals("Now trying website 2 of 3", chainHeadline(2, 3, null))
+        assertEquals("Getting your movie ready", chainHeadline(1, 1, ""))
     }
 
     @Test

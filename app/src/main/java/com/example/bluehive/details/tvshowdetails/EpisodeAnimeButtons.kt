@@ -102,6 +102,8 @@ internal fun AnimeEpisodeProviderButtons(
     // Left / Right move, every edge goes nowhere -- see OverlayWatchButton.
     OverlayWatchButton(
         text = "Watch in English",
+        label = animeLanguageLabel("English"),
+        extraHeight = SOURCE_BUTTON_EXTRA_HEIGHT,
         colors = AnimeDubButtonColors,
         passionFont = passionFont,
         focusRequester = focusRequesters[0],
@@ -118,6 +120,8 @@ internal fun AnimeEpisodeProviderButtons(
     )
     OverlayWatchButton(
         text = "Watch in Japanese",
+        label = animeLanguageLabel("Japanese"),
+        extraHeight = SOURCE_BUTTON_EXTRA_HEIGHT,
         colors = AnimeSubButtonColors,
         passionFont = passionFont,
         focusRequester = focusRequesters[1],
@@ -143,20 +147,38 @@ internal fun AnimeEpisodeProviderButtons(
 // own colour and "Choose a server" a darker shade of it. Choose a server opens
 // the list in the same card (AnimeInlineServerList). BACK walks back a step.
 
-/** "Choose a server" after English: the dub red, darker; focus still lights it. */
+/**
+ * "Choose a server" after English: the red split (v622) darker -- top, band
+ * and strip at 60%, the edge at 70% -- lifted toward white on focus like the
+ * rest.
+ */
 internal val AnimeDubChooseColors = AnimeDubButtonColors.copy(
-    mainDefault   = Color(0xFF4A1212),
-    mainFocused   = Color(0xFF9E1C1C),
-    secondDefault = Color(0xFF2B0909),
-    secondFocused = Color(0xFF5E1010),
+    mainDefault    = Color(0xFF680000),
+    mainFocused    = Color(0xFF832E2E),
+    mainToggled    = Color(0xFF490000),
+    band           = Color(0xFF8C0000),
+    bandFocused    = Color(0xFFA33333),
+    bandToggled    = Color(0xFF620000),
+    outline        = Color(0xFFB23333),
+    outlineFocused = Color(0xFFCD7A7A),
+    secondDefault  = Color(0xFF4D0000),
+    secondFocused  = Color(0xFF5F1A1A),
+    secondToggled  = Color(0xFF360000),
 )
 
-/** "Choose a server" after Japanese: the sub purple, darker. */
+/** "Choose a server" after Japanese: the purple split, darker the same way. */
 internal val AnimeSubChooseColors = AnimeSubButtonColors.copy(
-    mainDefault   = Color(0xFF3A1659),
-    mainFocused   = Color(0xFF6E2BA6),
-    secondDefault = Color(0xFF210C33),
-    secondFocused = Color(0xFF461A6B),
+    mainDefault    = Color(0xFF33104D),
+    mainFocused    = Color(0xFF583B6D),
+    mainToggled    = Color(0xFF240B36),
+    band           = Color(0xFF471868),
+    bandFocused    = Color(0xFF6C4686),
+    bandToggled    = Color(0xFF321149),
+    outline        = Color(0xFF734097),
+    outlineFocused = Color(0xFFA483BB),
+    secondDefault  = Color(0xFF240B36),
+    secondFocused  = Color(0xFF3A234A),
+    secondToggled  = Color(0xFF190826),
 )
 
 /** The language's dot: the dub red or the sub purple. */
@@ -190,6 +212,7 @@ internal fun AnimeServerChoiceButtons(
     Box(Modifier.fillMaxSize().graphicsLayer { alpha = fade.value }) {
         OverlayWatchButton(
             text = "Default server",
+            extraHeight = SOURCE_BUTTON_EXTRA_HEIGHT,
             colors = if (dub) AnimeDubButtonColors else AnimeSubButtonColors,
             passionFont = passionFont,
             focusRequester = focusRequesters[0],
@@ -200,6 +223,7 @@ internal fun AnimeServerChoiceButtons(
         )
         OverlayWatchButton(
             text = "Choose a server",
+            extraHeight = SOURCE_BUTTON_EXTRA_HEIGHT,
             colors = if (dub) AnimeDubChooseColors else AnimeSubChooseColors,
             passionFont = passionFont,
             focusRequester = focusRequesters[1],

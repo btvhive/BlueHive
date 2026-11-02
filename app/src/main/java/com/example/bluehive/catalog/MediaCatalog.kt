@@ -805,8 +805,11 @@ fun MediaCatalogScreen(profileId: Int = -1) {
                 onOpen = { showSearchKeyboard = true },
             )
 
-            if (showSearchKeyboard) {
+            // Always called: it builds itself hidden once the catalog
+            // settles, so a press only has to show it (v627).
+            run {
                 HoneycombKeyboardPopup(
+                    visible = showSearchKeyboard,
                     onSearch = { query ->
                         showSearchKeyboard = false
                         openSearchScreen(context, profileId, query)

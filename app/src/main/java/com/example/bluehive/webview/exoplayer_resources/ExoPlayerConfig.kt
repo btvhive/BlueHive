@@ -392,6 +392,23 @@ object ExoPlayerConfig {
     const val STALL_REPREPARES_BEFORE_GIVEUP = 2
 
     /**
+     * Buffered-but-not-moving threshold that names a FROZEN DECODER.
+     *
+     * MEASURED 2026-11-02, Fire TV Stick Lite (MT8695, 1 GB), The Rip at 59:41:
+     * the picture stopped with the spinner up while the stick pulled 0-3 KB/s
+     * on a 310 Mbps line, and the same segments downloaded at ~20x real time
+     * from a PC in the same house. The video was there; the decoder had stopped
+     * taking it. The ladder below read that as a dead URL and switched to the
+     * relay, which cannot help a decoder, and the rebuild then died releasing
+     * it ("Detaching surface timed out").
+     *
+     * A dead URL drains the buffer (nothing new arrives); a frozen decoder
+     * leaves it full (nothing is consumed). bufferedPosition - currentPosition
+     * tells the two apart without guessing.
+     */
+    const val FROZEN_DECODER_AHEAD_MS = 10_000L
+
+    /**
      * Recover from a playback deadlock the player itself never reports.
      *
      * MEASURED FAILURE (2026-07-30, VidFast 1080p on the Amlogic box): playback
@@ -431,6 +448,17 @@ object ExoPlayerConfig {
         scope: kotlinx.coroutines.CoroutineScope,
         tag: String,
         /**
+         * Called when a seek has failed to unwedge playback while plenty is
+         * buffered ahead — the decoder, not the stream. Returns true if the
+         * caller rebuilt the player (fresh codec, fresh surface); false sends
+         * the wedge down the url ladder as before. Null (the default) keeps the
+         * url ladder only.
+         *
+         * BEFORE onManifestDead on purpose: callers pass that one as a trailing
+         * lambda, which Kotlin binds to the LAST function parameter.
+         */
+        onDecoderFrozen: (() -> Boolean)? = null,
+        /**
          * Called once when seeks AND re-prepares have both failed — i.e. the url
          * itself is the problem. Null (the default) keeps the original
          * retry-forever behaviour for callers with no way to get a fresh one.
@@ -467,6 +495,21 @@ object ExoPlayerConfig {
 
                 if (gaveUp) { stalledMs = 0L; continue }   // handoff already made
 
+                // A SEEK ALREADY FAILED AND THE BUFFER IS FULL: the decoder froze.
+                // Re-preparing or re-fetching the url cannot reach it, so hand it
+                // to the caller for a whole new player before the url ladder runs.
+                val aheadMs = player.bufferedPosition - pos
+                if (seeks >= 1 && aheadMs >= FROZEN_DECODER_AHEAD_MS && onDecoderFrozen != null) {
+                    Log.e(tag, "🧊 decoder frozen at ${pos}ms with ${aheadMs}ms buffered " +
+                        "after $seeks seek(s) — rebuilding the player")
+                    if (onDecoderFrozen()) {
+                        // The rebuilt player has its own watchdog; this loop
+                        // holds the old one and is cancelled with it.
+                        stalledMs = 0L
+                        continue
+                    }
+                }
+
                 if (seeks < STALL_SEEKS_BEFORE_REPREPARE) {
                     seeks++
                     Log.w(
@@ -481,7 +524,7 @@ object ExoPlayerConfig {
                     reprepares++
                     Log.e(tag, "🩺 still wedged after $seeks seeks — re-preparing the source " +
                         "($reprepares/$STALL_REPREPARES_BEFORE_GIVEUP)")
-                    player.prepare()
+                    rePrepare(player)
                     seeks = 0
                 } else if (onManifestDead != null) {
                     // Seeks flush the codec, prepare() re-reads the same url. Both
@@ -493,12 +536,28 @@ object ExoPlayerConfig {
                     onManifestDead()
                 } else {
                     Log.e(tag, "🩺 still wedged after $seeks seeks — re-preparing the source")
-                    player.prepare()
+                    rePrepare(player)
                     seeks = 0
                 }
                 stalledMs = 0L
             }
         }
+    }
+
+    /**
+     * Reload the current source from the url, keeping the position.
+     *
+     * prepare() ALONE IS A NO-OP here. It only acts in STATE_IDLE, and a wedged
+     * player is BUFFERING or READY, so the "re-prepare" rungs of the watchdog
+     * reloaded nothing (2026-11-02: two of them ran on the Fire Stick Lite and
+     * changed nothing). stop() drops to IDLE and keeps the playlist and the
+     * position, so the prepare() after it genuinely re-reads the manifest.
+     */
+    private fun rePrepare(player: ExoPlayer) {
+        val pos = player.currentPosition
+        player.stop()
+        player.prepare()
+        player.seekTo(pos)
     }
 
     // ── Playback diagnostics ─────────────────────────────────────────────────
@@ -728,19 +787,45 @@ object ExoPlayerConfig {
 
     // ── Factories ────────────────────────────────────────────────────────────
 
-    /** Shared buffering policy. */
-    fun loadControl(): LoadControl =
-        DefaultLoadControl.Builder()
+    // ── Low-memory buffering ─────────────────────────────────────────────────
+    //
+    // MEASURED 2026-11-02 on the Fire TV Stick Lite (922 MB total, ~190 MB
+    // free): the app heap sat at 114 of 120 MB with a 250 ms GC every ~27 s for
+    // the whole film, and the decoder froze an hour in. MAX_BUFFER_MS of 1080p
+    // (~5.5 Mbps) is ~80 MB of that heap. The onn box (2 GB) has room for it;
+    // a 1-1.5 GB stick does not, so those get a shorter, byte-capped buffer.
+    // 50 s still rides out any CDN hiccup measured so far (the worst, 18 s).
+
+    /** Devices with less total RAM than this get the low-memory buffer. */
+    const val LOW_RAM_TOTAL_BYTES = 1_536L * 1024 * 1024
+    const val LOW_RAM_MIN_BUFFER_MS = 20_000
+    const val LOW_RAM_MAX_BUFFER_MS = 50_000
+    /** ~60 s of 1080p; time wins below MIN, this caps it above. */
+    const val LOW_RAM_TARGET_BUFFER_BYTES = 40 * 1024 * 1024
+
+    /** 1-1.5 GB sticks (Fire TV Stick Lite, Fire TV Stick 4K 2018); not the onn box. */
+    fun isLowRamTv(context: Context): Boolean = runCatching {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        val info = android.app.ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
+        am.isLowRamDevice || info.totalMem in 1 until LOW_RAM_TOTAL_BYTES
+    }.getOrDefault(false)
+
+    /** Shared buffering policy, sized for the device when [context] is given. */
+    fun loadControl(context: Context? = null): LoadControl {
+        val lowRam = context != null && isLowRamTv(context)
+        return DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                MIN_BUFFER_MS,
-                MAX_BUFFER_MS,
+                if (lowRam) LOW_RAM_MIN_BUFFER_MS else MIN_BUFFER_MS,
+                if (lowRam) LOW_RAM_MAX_BUFFER_MS else MAX_BUFFER_MS,
                 BUFFER_FOR_PLAYBACK_MS,
                 BUFFER_FOR_PLAYBACK_AFTER_REBUFFER_MS,
             )
+            .apply { if (lowRam) setTargetBufferBytes(LOW_RAM_TARGET_BUFFER_BYTES) }
             // Prefer keeping playback going over strictly honouring size limits —
             // the right call for a video player on a memory-tight device.
             .setPrioritizeTimeOverSizeThresholds(true)
             .build()
+    }
 
     // ── Video ceiling ────────────────────────────────────────────────────────
     //
@@ -2458,9 +2543,17 @@ object ExoPlayerConfig {
         context: Context,
         selector: DefaultTrackSelector = trackSelector(context),
     ): ExoPlayer =
-        ExoPlayer.Builder(context)
+        ExoPlayer.Builder(
+            context,
+            // DECODER FALLBACK: a player rebuilt after a frozen decoder may find
+            // the hardware decoder still held by the stuck one. Fallback lets it
+            // take the next decoder on the list instead of failing to start.
+            // Changes nothing while the first decoder initialises normally.
+            androidx.media3.exoplayer.DefaultRenderersFactory(context)
+                .setEnableDecoderFallback(true),
+        )
             .setTrackSelector(selector)
-            .setLoadControl(loadControl())
+            .setLoadControl(loadControl(context))
             // THE CONTROL BAR'S SEEK BUTTONS READ THESE, not SEEK_INCREMENT_MS.
             // media3 wires exo_rew and exo_ffwd straight to player.seekBack()
             // and seekForward(), which use the PLAYER's increments -- and

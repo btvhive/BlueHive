@@ -12,6 +12,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bluehive.utilities.RecommendedRowEntry
+import com.example.bluehive.utilities.SOURCE_BUTTON_EXTRA_HEIGHT
 
 /**
  * The details screens' peek layout (the movie page's approved mockup, 2026-10-26): no Extras
@@ -137,8 +138,11 @@ val PEEK_TITLE_FONT_SIZE: TextUnit = 14.sp
  */
 val PEEK_RIGHT_COLUMN_X: Dp = 220.75.dp
 
-/** One row of play buttons, as the grid has always spaced them. */
-val PEEK_SOURCE_ROW_STEP: Dp = 55.5.dp
+/**
+ * One row of play buttons: 55.5 dp as the grid always spaced them, plus the
+ * source buttons' extra height (36 dp faces, v611) so the gap stays the same.
+ */
+val PEEK_SOURCE_ROW_STEP: Dp = 55.5.dp + SOURCE_BUTTON_EXTRA_HEIGHT
 
 /**
  * The row's cards are 160 dp tall and their tops sit 9.25 dp under

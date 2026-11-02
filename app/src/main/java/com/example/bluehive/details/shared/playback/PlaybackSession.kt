@@ -71,16 +71,19 @@ class PlaybackSession internal constructor() {
     var chainTotal by mutableIntStateOf(1)
 
     /**
-     * Amber line under it once a source has failed -- "Royal Jelly's page had no working video,
-     * opening Honeycomb" -- kept up for the rest of the chain.
+     * Amber line under it once a source has failed -- "Website 1 is acting up,
+     * so we're trying Website 2..." -- kept up for the rest of the chain.
      */
     var extractNote by mutableStateOf<String?>(null)
 
     /**
-     * The source being tried, by its button label ("Royal Jelly") -- the
-     * loading screen's headline, "Browsing source 1 of 3: Royal Jelly".
+     * The source being tried, by the viewer's name for it ("Website 1") -- the
+     * loading screen's headline, "Getting your movie ready from Website 1".
      */
     var extractSourceLabel by mutableStateOf<String?>(null)
+
+    /** "movie" or "episode", for that headline. */
+    var extractUnit by mutableStateOf("movie")
 
     /**
      * The server browser's real step for the attempt on screen ("opening",

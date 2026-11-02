@@ -38,7 +38,7 @@ object SourceCatalog {
 
     data class Source(
         val name: String,      // routing name — "VidFast". Must match the backend key.
-        val label: String,     // what the button says — "Queen Stream"
+        val label: String,     // what the viewer sees — "Website 2"
         val url: String,       // template with {tmdb_id} / {season} / {episode}
         // May the failover chain land here automatically? A source with this
         // false still gets a button; it is just never reached on its own.
@@ -165,18 +165,43 @@ object SourceCatalog {
     // the same day -- so this is a menu decision, not a capability one.
     // Re-adding them is just restoring the entries; usesBackendExtraction
     // already matches both names.
+    //
+    // "WEBSITE N", FIXED PER SOURCE (the user's call, 2026-11-01): the cover
+    // names (Royal Jelly, Nectar Stream...) and the routing names on the
+    // buttons confused people, so a viewer now sees one name everywhere --
+    // button, loading screen, failover note, error, player title. The number
+    // belongs to the source, not its slot, so "Website 3" is always VidLove;
+    // the same table heads /opt/bluehive/config/sources.conf. Order and labels
+    // here match that file.
     private val BUILTIN_TV = listOf(
-        Source("VidNest",   "Royal Jelly",   "https://vidnest.fun/tv/{tmdb_id}/{season}/{episode}"),
-        Source("VidLove",   "Nectar Stream", "https://player.vidlove.cc/embed/tv/{tmdb_id}/{season}/{episode}"),
-        Source("VidFast",   "Queen Stream",  "https://vidfast.pro/tv/{tmdb_id}/{season}/{episode}?autoPlay=true"),
-        Source("MoviesAPI", "Purple Stream", "https://moviesapi.to/tv/{tmdb_id}/{season}/{episode}"),
+        Source("VidNest",   "Website 1", "https://vidnest.fun/tv/{tmdb_id}/{season}/{episode}"),
+        Source("VidFast",   "Website 2", "https://vidfast.pro/tv/{tmdb_id}/{season}/{episode}?autoPlay=true"),
+        Source("VidLove",   "Website 3", "https://player.vidlove.cc/embed/tv/{tmdb_id}/{season}/{episode}"),
+        Source("MoviesAPI", "Website 4", "https://moviesapi.to/tv/{tmdb_id}/{season}/{episode}"),
     )
     private val BUILTIN_MOVIE = listOf(
-        Source("VidNest",   "Royal Jelly",   "https://vidnest.fun/movie/{tmdb_id}"),
-        Source("VidLove",   "Nectar Stream", "https://player.vidlove.cc/embed/movie/{tmdb_id}"),
-        Source("VidFast",   "Queen Stream",  "https://vidfast.pro/movie/{tmdb_id}?autoPlay=true"),
-        Source("MoviesAPI", "Purple Stream", "https://moviesapi.to/movie/{tmdb_id}"),
+        Source("VidNest",   "Website 1", "https://vidnest.fun/movie/{tmdb_id}"),
+        Source("VidFast",   "Website 2", "https://vidfast.pro/movie/{tmdb_id}?autoPlay=true"),
+        Source("VidLove",   "Website 3", "https://player.vidlove.cc/embed/movie/{tmdb_id}"),
+        Source("MoviesAPI", "Website 4", "https://moviesapi.to/movie/{tmdb_id}"),
     )
+
+    /**
+     * What the viewer calls the source routed as [name] -- "Website 3" for
+     * "VidLove" -- from the backend's list when loaded, else the built-ins.
+     * A name in neither (an anime "Miruro Dub") comes back unchanged.
+     *
+     * For the viewer-facing places that only hold the routing name: the error
+     * after a failed chain and the dropped-stream note. NOT the player's title
+     * tag, which keeps the real site name for troubleshooting.
+     */
+    fun labelFor(name: String): String {
+        val n = name.trim()
+        for (l in listOf(memTv, memMovie, BUILTIN_TV)) {
+            l?.firstOrNull { it.name.equals(n, ignoreCase = true) }?.let { return it.label }
+        }
+        return name
+    }
 
     /**
      * Ceiling on how many sources a screen will render.
