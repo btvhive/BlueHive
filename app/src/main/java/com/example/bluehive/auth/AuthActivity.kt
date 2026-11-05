@@ -142,6 +142,22 @@ class AuthActivity : ComponentActivity() {
             return
         }
 
+        // ── First-open setup (v656) ──────────────────────────────────────────
+        // "Install unknown apps" (required) and "Display over other apps"
+        // (optional, once) before anything else, like Off-Grid Drive's setup.
+        // SetupStepsActivity comes back here with EXTRA_SETUP_DONE, which is
+        // what stops this from looping when a viewer chooses Not now.
+        if (intent?.getBooleanExtra(EXTRA_SETUP_DONE, false) != true &&
+            com.example.bluehive.update.SetupSteps.anyDue(this)
+        ) {
+            startActivity(
+                Intent(this, com.example.bluehive.update.SetupStepsActivity::class.java)
+                    .putExtras(intent ?: Intent())
+            )
+            finish()
+            return
+        }
+
         val session = SessionManager.init(applicationContext)
 
         // ── Update-first gate ────────────────────────────────────────────────
@@ -286,6 +302,9 @@ class AuthActivity : ComponentActivity() {
 
         /** Set by SelfUpdateActivity when re-entering, to avoid a check loop. */
         const val EXTRA_SKIP_UPDATE_CHECK = "com.example.bluehive.extra.SKIP_UPDATE_CHECK"
+
+        /** Set by SetupStepsActivity when handing back, so the setup gate runs once. */
+        const val EXTRA_SETUP_DONE = "com.example.bluehive.extra.SETUP_DONE"
 
         /**
          * Extra a host app uses to pass an account-standing assertion.

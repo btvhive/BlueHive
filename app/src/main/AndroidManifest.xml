@@ -36,6 +36,13 @@
          flag is ignored and the dialog appears exactly as before. -->
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION" />
 
+    <!-- "Display over other apps" (v656). BlueHive draws nothing over other
+         apps; Android 10+ only lets an app reopen itself after a self-update
+         (PackageReplacedReceiver) when it holds this. Declaring it is what puts
+         BlueHive in the TV's "Allow display over other apps" list; the viewer
+         switches it on in setup step 2, or not. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <!-- Lets SpeechRecognizer locate the on-device recognition service on API 30+ -->
@@ -315,6 +322,13 @@
              start when a newer version exists, before the app opens. -->
         <activity
             android:name=".update.SelfUpdateActivity"
+            android:exported="false"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.BlueHive" />
+
+        <!-- First-open setup (v656): install switch, then the optional reopen switch. -->
+        <activity
+            android:name=".update.SetupStepsActivity"
             android:exported="false"
             android:screenOrientation="landscape"
             android:theme="@style/Theme.BlueHive" />
