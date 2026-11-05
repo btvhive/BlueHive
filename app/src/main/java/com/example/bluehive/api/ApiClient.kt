@@ -176,6 +176,23 @@ object ApiClient {
                 return null
             }
 
+            // NOT SIGNED IN YET IS NOT A REVOKED SESSION (v657). With no refresh
+            // token stored there is no session to expire, so fail the request and
+            // tear nothing down. TokenProvider reports this case as Revoked, and the
+            // branch below used to post SessionExpiredBus, which finishAffinity()s
+            // the screen in front. Since v656 the first-open setup screen comes
+            // BEFORE sign-in while start-up requests are already in flight, so on
+            // every fresh install a 401 closed BlueHive ~1.3 s after it opened
+            // (onn box .173, 2026-11-05: "Host reports revoked -- dropping session",
+            // then wm_finish_activity ... SetupStepsActivity, request-affinity).
+            // isAuthenticated = an access OR a refresh token is stored; any session at
+            // all keeps the old path below exactly as it was.
+            val hasSession = runCatching { SessionManager.get().isAuthenticated }.getOrDefault(true)
+            if (!hasSession) {
+                Log.e(TAG, "401 before sign-in on ${response.request.url.encodedPath} — failing this request, nothing to expire")
+                return null
+            }
+
             val result = com.example.bluehive.auth.TokenProvider.fetchFreshToken()
 
             return when (result) {
