@@ -60,15 +60,20 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.ui.graphics.Path
 import com.example.bluehive.R
 import com.example.bluehive.auth.AuthActivity
 import kotlinx.coroutines.android.awaitFrame
 
 /**
- * BlueHive's first-open setup (v656), layout A of the approved mockups
- * (docs/mockups/bluehive-setup/bh-setup-a1/a2.png): the step on the left, a
- * picture of the TV's own settings list on the right with BlueHive's row framed.
+ * BlueHive's first-open setup (v656; layout H2 since v658, see the layout
+ * section below): the step in a centred bee column, a picture of the TV's own
+ * settings list beside it, and a red arrow at BlueHive's row.
  *
  *   step 1  REQUIRED · ONE TIME   "Install unknown apps", one button, no skip
  *   step 2  STEP 2 · OPTIONAL      "Display over other apps", Turn it on / Not now
@@ -157,10 +162,12 @@ class SetupStepsActivity : ComponentActivity() {
     }
 }
 
-// ── Layout A ─────────────────────────────────────────────────────────────────
+// ── Layout H2 (v658) ─────────────────────────────────────────────────────────
+// The approved hybrid (docs/mockups/bluehive-setup/bh-setup-h2arrow-1/2.png):
+// layout B's centred bee column on the left, layout A's picture of the TV's next
+// screen on the right, and a red arrow pointing at BlueHive's row. No card.
 
 private val Bg = Color(0xFF0E0E10)
-private val Card = Color(0xFF141418)
 private val Accent = Color(0xFF378ADD)
 private val AccentSoft = Color(0xFF85B7EB)
 private val AccentInk = Color(0xFF06121F)
@@ -179,7 +186,7 @@ private fun SetupStepScreen(
             .fillMaxSize()
             .background(Bg)
             .drawBehind {
-                // The faint blue glow behind the card, left of centre as in the mockup.
+                // The faint blue glow, left of centre as in the mockup.
                 drawRect(
                     Brush.radialGradient(
                         colors = listOf(Accent.copy(alpha = 0.10f), Color.Transparent),
@@ -190,17 +197,14 @@ private fun SetupStepScreen(
             },
         contentAlignment = Alignment.Center,
     ) {
+        // -50 dp: shifted left to leave room for the arrow beside the preview.
         Row(
-            Modifier
-                .width(860.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .background(Card)
-                .border(1.dp, Color(0x12FFFFFF), RoundedCornerShape(16.dp))
-                .padding(start = 46.dp, top = 44.dp, end = 40.dp, bottom = 44.dp),
+            Modifier.width(840.dp).offset(x = (-50).dp).height(IntrinsicSize.Min),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(36.dp),
         ) {
-            Column(Modifier.weight(1f)) {
+            Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                BeeRing(required = step == 1)
+                Spacer(Modifier.height(18.dp))
                 Label(
                     text = when {
                         step == 1 -> "REQUIRED · ONE TIME"
@@ -209,23 +213,23 @@ private fun SetupStepScreen(
                     },
                     required = step == 1,
                 )
-                Spacer(Modifier.height(16.dp))
+                Spacer(Modifier.height(14.dp))
                 Text(
                     if (step == 1) "Let BlueHive install its own updates" else "Let BlueHive open again after updates",
                     color = TextHi, fontSize = 26.sp, fontWeight = FontWeight.Bold, lineHeight = 32.sp,
+                    textAlign = TextAlign.Center,
                 )
-                Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
                     if (step == 1)
                         "BlueHive keeps itself up to date. Your TV needs your OK once before BlueHive can install an update."
                     else
                         "Your TV closes BlueHive whenever it installs an update. Switch this on and BlueHive opens again by itself.",
-                    color = TextBody, fontSize = 15.sp, lineHeight = 24.sp,
-                    modifier = Modifier.widthIn(max = 430.dp),
+                    color = TextBody, fontSize = 15.sp, lineHeight = 24.sp, textAlign = TextAlign.Center,
+                    modifier = Modifier.widthIn(max = 440.dp),
                 )
-                Spacer(Modifier.height(30.dp))
-                // -3 dp: the buttons' focus margin, so the pill lines up with the text.
-                Row(Modifier.offset(x = (-3).dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Spacer(Modifier.height(26.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                     PillButton("Turn it on", primary = true, takeFocus = true, onClick = onTurnOn)
                     if (onNotNow != null) PillButton("Not now", primary = false, takeFocus = false, onClick = onNotNow)
                 }
@@ -234,8 +238,39 @@ private fun SetupStepScreen(
                     StepDots(step)
                 }
             }
+            Spacer(Modifier.width(28.dp))
+            // The faint divider, fading out at both ends.
+            Box(
+                Modifier.width(1.dp).fillMaxHeight().background(
+                    Brush.verticalGradient(
+                        0f to Color.Transparent, 0.2f to Color(0xFF2A2B31),
+                        0.8f to Color(0xFF2A2B31), 1f to Color.Transparent,
+                    )
+                )
+            )
+            Spacer(Modifier.width(56.dp))
             NextScreen(step)
         }
+    }
+}
+
+/** Layout B's bee in a ring: blue for the required step, faint for the optional one. */
+@Composable
+private fun BeeRing(required: Boolean) {
+    Box(
+        Modifier
+            .size(96.dp)
+            .clip(CircleShape)
+            .background(Brush.radialGradient(listOf(Accent.copy(alpha = 0.18f), Color.Transparent)))
+            .border(4.dp, if (required) Accent else Color(0x14FFFFFF), CircleShape),
+        contentAlignment = Alignment.Center,
+    ) {
+        // blue_bee.png carries ~20% transparent margin; 98 dp shows the bee itself
+        // at the mockup's 66 dp.
+        Image(
+            painterResource(R.drawable.blue_bee), contentDescription = null,
+            contentScale = ContentScale.Fit, modifier = Modifier.size(98.dp),
+        )
     }
 }
 
@@ -347,35 +382,44 @@ private class FakeRow(val name: String, val allowed: Boolean, val icon: Color?)
 @Composable
 private fun NextScreen(step: Int) {
     val title = if (step == 1) "Install unknown apps" else "Allow display over other apps"
+    // An app above BlueHive, as on real TVs: the list starts on its FIRST app, so
+    // the viewer has to move to BlueHive (Aniyomi / Android TV Remote Service on the
+    // old onn box, 2026-11-05). A null icon marks BlueHive.
     val rows = if (step == 1) listOf(
+        FakeRow("Aniyomi", false, Color(0xFF2F6FD0)),
+        FakeRow("BlueHive", false, null),
         FakeRow("Captive Portal Login", false, Color(0xFF0F8B7D)),
         FakeRow("Downloader", true, Color(0xFFF07D1A)),
-        FakeRow("Off-Grid Drive", true, Color(0xFF2A1A12)),
     ) else listOf(
+        FakeRow("Android TV Remote Service", false, Color(0xFFFFFFFF)),
+        FakeRow("BlueHive", false, null),
         FakeRow("Google Play services", false, Color(0xFFFFFFFF)),
-        FakeRow("Google TV", false, Color(0xFFE8F0FE)),
         FakeRow("Off-Grid Drive", true, Color(0xFF2A1A12)),
     )
-    Column(Modifier.width(300.dp)) {
+    val card = RoundedCornerShape(10.dp)
+    Column(Modifier.width(290.dp)) {
         Text("NEXT SCREEN", color = Color(0xFF888780), fontSize = 11.sp, fontWeight = FontWeight.Bold, letterSpacing = 2.sp)
         Spacer(Modifier.height(9.dp))
+        // NOT CLIPPED: the arrow sits outside the card, beside BlueHive's row.
         Column(
             Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF1F222A))
-                .border(1.dp, Color(0xFF2E3138), RoundedCornerShape(10.dp))
+                .shadow(18.dp, card, clip = false)
+                .background(Color(0xFF1F222A), card)
+                .border(1.dp, Color(0xFF2E3138), card)
                 .padding(start = 22.dp, top = 16.dp, bottom = 10.dp, end = 0.dp),
         ) {
             Text(title, color = Color(0xFFE3E3E6), fontSize = 19.sp, lineHeight = 23.sp)
             Spacer(Modifier.height(12.dp))
-            SettingsRow("BlueHive", false, focused = true, icon = null)
-            rows.forEach { SettingsRow(it.name, it.allowed, focused = false, icon = it.icon) }
+            rows.forEach { r ->
+                val bh = r.icon == null
+                Box {
+                    SettingsRow(r.name, r.allowed, focused = bh, icon = r.icon)
+                    if (bh) PointerArrow(Modifier.align(Alignment.CenterEnd).offset(x = 92.dp))
+                }
+            }
         }
         Spacer(Modifier.height(11.dp))
         Text(
-            // Not "already highlighted": the TV's list starts on its FIRST app, and
-            // anything sorting before BlueHive (Aniyomi, Android TV Remote Service on
-            // the old onn box) takes the highlight. Tested 2026-11-05.
             buildAnnotatedString {
                 append("Highlight ")
                 withStyle(SpanStyle(color = AccentSoft, fontWeight = FontWeight.Medium)) { append("BlueHive") }
@@ -386,20 +430,42 @@ private fun NextScreen(step: Int) {
     }
 }
 
+/**
+ * The red arrow pointing left at BlueHive's row: pure red, white edge, soft white
+ * glow. The glow is drawn as widening, fading white strokes rather than a blur, so
+ * it looks the same on every Android version.
+ */
+@Composable
+private fun PointerArrow(modifier: Modifier = Modifier) {
+    Canvas(modifier.size(width = 84.dp, height = 46.dp)) {
+        val u = size.width / 84f
+        val p = Path().apply {
+            moveTo(2f * u, 23f * u); lineTo(30f * u, 2f * u); lineTo(30f * u, 15f * u)
+            lineTo(82f * u, 15f * u); lineTo(82f * u, 31f * u); lineTo(30f * u, 31f * u)
+            lineTo(30f * u, 44f * u); close()
+        }
+        for ((w, a) in listOf(16f to 0.10f, 11f to 0.18f, 7f to 0.35f)) {
+            drawPath(p, Color.White.copy(alpha = a), style = Stroke(width = w * u, join = StrokeJoin.Round))
+        }
+        drawPath(p, Color(0xFFFF1A0F))
+        drawPath(p, Color.White, style = Stroke(width = 2.5f * u, join = StrokeJoin.Round))
+    }
+}
+
 @Composable
 private fun SettingsRow(name: String, allowed: Boolean, focused: Boolean, icon: Color?) {
+    // The TV's own highlight: a light rounded row, no frame (the arrow points).
     val shape = RoundedCornerShape(8.dp)
     Row(
         Modifier
             .then(
                 if (focused) Modifier
                     .offset(x = (-10).dp)
-                    .width(262.dp)
-                    .border(2.5.dp, Accent, shape)
+                    .width(250.dp)
                     .clip(shape)
                     .background(Color(0xFFE8E9EE))
                     .padding(start = 10.dp)
-                else Modifier.width(252.dp)
+                else Modifier.width(240.dp)
             )
             .padding(top = 7.dp, bottom = 7.dp, end = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -417,7 +483,8 @@ private fun SettingsRow(name: String, allowed: Boolean, focused: Boolean, icon: 
         }
         Spacer(Modifier.width(9.dp))
         Column(Modifier.weight(1f)) {
-            Text(name, color = if (focused) Color(0xFF1F222A) else Color(0xFFE3E3E6), fontSize = 12.sp, lineHeight = 14.sp)
+            Text(name, color = if (focused) Color(0xFF1F222A) else Color(0xFFE3E3E6), fontSize = 12.sp, lineHeight = 14.sp,
+                maxLines = 1)
             Text(
                 if (allowed) "Allowed" else "Not allowed",
                 color = if (focused) Color(0xFF5F6368) else Color(0xFF9AA0A6), fontSize = 9.5.sp, lineHeight = 12.sp,
