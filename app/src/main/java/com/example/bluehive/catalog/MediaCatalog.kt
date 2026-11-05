@@ -631,6 +631,7 @@ fun MediaCatalogScreen(profileId: Int = -1) {
                         putExtra("contentRating",       details.content_rating ?: "N/A")
                         putExtra("original_language",   details.original_language ?: "N/A")
                         putExtra("release_date",        details.release_date ?: "N/A")
+                        putExtra("on_streaming",        item.onStreaming == true)
                         putExtra("logo_url",            logoUrl)
                         putExtra("genres",              genresString)
                         putExtra("PROFILE_ID",          profileId)

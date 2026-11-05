@@ -491,7 +491,10 @@ val SIGNED_IN_LABEL_COLOR = Color(0xFF3D5CA8)
 val VERSION_LABEL_X: Dp = 58.dp
 val VERSION_LABEL_Y: Dp = BOTTOM_STRIP_Y
 val VERSION_LABEL_NAME_COLOR = Color(0xFFC9CDD8)
-val VERSION_LABEL_NAME_SIZE = 9.sp
+// 4 sp larger than first built (the user's call, v653: 9 / 7 sp were too
+// small to read from the couch).
+val VERSION_LABEL_NAME_SIZE = 13.sp
+val VERSION_LABEL_LINE_SIZE = 11.sp
 
 /** The second line: the version name and the day the APK was built. */
 internal fun versionLine(versionName: String, buildDate: String): String =
@@ -1321,7 +1324,7 @@ fun ProfileScreen(
                 text       = versionLine(BuildConfig.VERSION_NAME, BuildConfig.BUILD_DATE),
                 color      = SIGNED_IN_LABEL_COLOR,
                 fontFamily = AppTypography.interBold,
-                fontSize   = SIGNED_IN_LABEL_FONT_SIZE,
+                fontSize   = VERSION_LABEL_LINE_SIZE,
                 maxLines   = 1,
             )
         }

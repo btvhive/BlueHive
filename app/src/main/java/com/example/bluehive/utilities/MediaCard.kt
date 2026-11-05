@@ -145,10 +145,10 @@ fun MediaCard(
                 contentScale = ContentScale.Crop,
             )
 
-            // 🔹 "Good copy" countdown – top of the poster, recent movies only
+            // 🔹 "Good copy" countdown – the poster's top-left corner, recent movies only
             val goodCopy = remember(mediaItem) { GoodCopyCountdown.labelFor(mediaItem) }
             if (goodCopy != null) {
-                GoodCopyBadge(goodCopy, Modifier.align(Alignment.TopCenter))
+                GoodCopyBadge(goodCopy, Modifier.align(Alignment.TopStart))
             }
         }
 

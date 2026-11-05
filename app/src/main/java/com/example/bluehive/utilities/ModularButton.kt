@@ -75,6 +75,8 @@ data class ModularButtonDimensions(
     val mainCornerRadius: Float = 8f,
     val secondCornerRadius: Float = 6f,
     val shadowOffset: Dp = 0.dp,
+    /** The soft drop shadow under an unfocused button; home's radio tabs go without (v634). */
+    val dropShadow: Boolean = true,
 )
 
 @Stable
@@ -672,7 +674,7 @@ fun ModularButton(
                 .align(Alignment.TopStart)
                 .drawBehind {
                     // Shadow stack (only when unfocused)
-                    if (!isFocused) {
+                    if (!isFocused && dimensions.dropShadow) {
                         val shadowBaseY =
                             dimensions.mainHeight.toPx() + dimensions.shadowOffset.toPx()
 

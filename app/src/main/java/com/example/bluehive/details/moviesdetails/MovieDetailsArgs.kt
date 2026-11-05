@@ -34,6 +34,12 @@ class MovieDetailsArgs(
     val searchQuery: String?,
     /** Opened in the recommended row. Its intent key keeps the old Extras name, start_in_extras, which history entries carry. */
     val startInRow: Boolean,
+    /**
+     * Already on a streaming service (MediaItem.onStreaming): then there is no
+     * HD to wait for and no "Not in HD yet" banner. Sent by home, the catalog
+     * and search; other ways in leave it false.
+     */
+    val onStreaming: Boolean = false,
 ) {
     /** This page's title as the history stack keeps it, for Back from the title opened next. */
     fun toHistoryItem(): MediaItem = MediaItem(
@@ -86,6 +92,7 @@ class MovieDetailsArgs(
                 sourceScreen = intent.getStringExtra("SOURCE_SCREEN"),
                 searchQuery = intent.getStringExtra("SEARCH_QUERY"),
                 startInRow = intent.getBooleanExtra("start_in_extras", false),
+                onStreaming = intent.getBooleanExtra("on_streaming", false),
             )
         }
     }

@@ -22,17 +22,6 @@ import com.example.bluehive.utilities.ModularButtonTextConfig
 // The title label sits 48.dp above this line; the cards sit 40.dp above it.
 internal val SHELF_STACK_Y = 340.dp  // The whole shelf area up/down on screen — change this to lower "What's Popular"
 
-// ── Shared button palette — used by all radio buttons + top buttons ───────────
-internal val BTN_MAIN_DEFAULT          = Color(0xFF2644A6)
-internal val BTN_MAIN_FOCUSED          = Color(0xFF0D00FF)
-internal val BTN_MAIN_TOGGLED          = Color(0xFF101628)
-internal val BTN_SECOND_DEFAULT        = Color(0xFF222340)
-internal val BTN_SECOND_FOCUSED        = Color(0xFF372B67)
-internal val BTN_SECOND_TOGGLED        = Color(0xFF1B1C34)
-internal val BTN_TEXT_FOCUSED          = Color.White
-internal val BTN_TEXT_UNFOCUSED        = Color(0xFFD2D0D0)
-internal val BTN_TEXT_UNFOCUSED_TOGGLED = Color(0xFF343434)
-
 // ── Radio button shared config ────────────────────────────────────────────────
 internal val RADIO_MAIN_W   = 58.7.dp
 internal val RADIO_GLOW_W   = 68.8.dp
@@ -40,16 +29,29 @@ internal val RADIO_GLOW_W   = 68.8.dp
 internal val passionFont = AppTypography.passionRegular
 
 
+/**
+ * MOVIES / TV SHOWS / ANIME (v641, the user's pick "bright periwinkle"):
+ * the original flat tab -- one-colour face over its lower layer, no drop
+ * shadow -- in a bright blue with a soft lilac tint (hue 232, 70%, 62%) and
+ * white words. The lower layer is the face at half its lightness, so each
+ * tab reads as a raised 3D button; the selected tab sits pressed in, dark,
+ * its words dim, on a blue-grey layer that still shows its edge.
+ * Tried the same day: split sapphire / electric / halfway / A1 (v629-v632),
+ * flat dusty blue (v633-v635), violet (v636-v637), emerald (v638), bright
+ * cobalt (v639), bright cornflower (v640).
+ */
 internal val RADIO_COLORS = ModularButtonColors(
-    mainDefault          = BTN_MAIN_DEFAULT,
-    mainFocused          = BTN_MAIN_FOCUSED,
-    mainToggled          = BTN_MAIN_TOGGLED,
-    secondDefault        = BTN_SECOND_DEFAULT,
-    secondFocused        = BTN_SECOND_FOCUSED,
-    secondToggled        = BTN_SECOND_TOGGLED,
-    textFocused          = BTN_TEXT_FOCUSED,
-    textUnfocused        = BTN_TEXT_UNFOCUSED,
-    textUnfocusedToggled = BTN_TEXT_UNFOCUSED_TOGGLED,
+    mainDefault          = Color(0xFF5A6CE2),
+    mainFocused          = Color(0xFF8693EA),
+    mainToggled          = Color(0xFF141729),
+    secondDefault        = Color(0xFF182686),
+    secondFocused        = Color(0xFF1D2FA5),
+    secondToggled        = Color(0xFF1C1F36),
+    textFocused          = Color.White,
+    textUnfocused        = Color.White,
+    textUnfocusedToggled = Color(0xFF5C607A),
+    textToggled          = Color(0xFF5C607A),
+    textToggledFocus     = Color.White,
 )
 
 internal val RADIO_DIMENSIONS = ModularButtonDimensions(
@@ -64,6 +66,8 @@ internal val RADIO_DIMENSIONS = ModularButtonDimensions(
     glowHeight         = 32.5.dp,
     mainCornerRadius   = 5f,
     secondCornerRadius = 5f,
+    // No drop shadow under the tabs (the user's call, v634).
+    dropShadow         = false,
 )
 
 internal val RADIO_ANIMATION = ModularButtonAnimationConfig(

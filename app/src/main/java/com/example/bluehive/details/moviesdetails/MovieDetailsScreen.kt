@@ -257,6 +257,10 @@ fun MovieDetailsScreen(
     // Get streaming sources based on media type.
     // Japanese animation (anime) → dedicated DuB / SuB set.
     // Everything else keeps the standard 6 buttons.
+    // The poster tile's countdown, for the "Not in HD yet" banner (v649).
+    val notHd = remember(args) {
+        GoodCopyCountdown.labelFor(args.mediaType, args.genres, args.originalLanguage, args.onStreaming, args.releaseDate)
+    }
     val isAnime = remember(args.genres, args.originalLanguage) {
         val result = isJapaneseAnimation(args.genres, args.originalLanguage)
         Log.d("AnimeDetect", "genres='${args.genres}' | originalLanguage='${args.originalLanguage}' | isAnime=$result")
@@ -457,6 +461,7 @@ fun MovieDetailsScreen(
                         notYetAvailable.show()
                     }
                 },
+                notHd                  = notHd,
                 onSourcePress          = { from, source ->
                     // Remember which button launched this so focus comes back
                     // here when the player exits (THE RULE).

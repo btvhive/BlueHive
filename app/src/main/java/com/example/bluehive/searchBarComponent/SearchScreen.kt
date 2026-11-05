@@ -171,6 +171,7 @@ class SearchBarActivity : ComponentActivity() {
             putExtra("contentRating",       media.contentRating ?: "N/A")
             putExtra("original_language",   media.originalLanguage ?: "N/A")
             putExtra("release_date",        media.releaseDate ?: "N/A")
+            putExtra("on_streaming",        media.onStreaming == true)
             putExtra("logo_url",            media.logoUrl ?: "")
             putExtra("genres",              media.genres?.joinToString(", ") ?: "N/A")
             if (mediaType.lowercase() == "tv") {

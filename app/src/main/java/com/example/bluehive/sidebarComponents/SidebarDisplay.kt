@@ -8,6 +8,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.text.TextAutoSize
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -331,14 +336,26 @@ private val PANEL_EDGE           = Color(0xFF333333)
 /** The selected row: the blue the home panels' select glow is tinted from (PANEL_SELECTED_TINT). */
 private val ROW_HIGHLIGHT        = Brush.horizontalGradient(listOf(Color(0xFF1E3A8A), Color(0xFF2563EB)))
 
-// The profile header: the avatar at twice the rail's 20 dp, rounded, with the
-// profile's name and "Switch profile" beside it.
+// The profile header: a card (mock-up 5, v642) so it reads as a button before
+// it is focused -- the avatar with a small blue swap badge on its corner, the
+// profile's name and "Switch profile" beside it. Focused, the card takes the
+// rows' blue highlight. A long name shrinks (13 sp down to 8 sp) before it is
+// cut short.
 private val HEADER_TOP           = 8.dp
 private val HEADER_HEIGHT        = 52.dp
-private val HEADER_AVATAR        = 40.dp
-private val HEADER_AVATAR_SHAPE  = RoundedCornerShape(9.dp)
-private val SWITCH_PROFILE_BLUE  = Color(0xFF3B82F6)
-private val SWITCH_PROFILE_ON_HL = Color(0xFFDBEAFE)    // on the blue highlight, where blue would vanish
+private val HEADER_SIDE          = 5.dp
+private val HEADER_SHAPE         = RoundedCornerShape(8.dp)
+private val HEADER_FILL          = Color(0xFF1F2028)
+private val HEADER_EDGE          = Color(0xFF3A3B46)
+private val HEADER_EDGE_ON       = Color(0xFF60A5FA)
+private val HEADER_AVATAR        = 32.dp
+private val HEADER_AVATAR_SHAPE  = RoundedCornerShape(8.dp)
+private val BADGE_SIZE           = 15.dp
+private val BADGE_BLUE           = Color(0xFF2563EB)
+private val BADGE_RING_ON        = Color(0xFF1E3A8A)    // the highlight's own left end
+private val SWITCH_PROFILE_GREY  = Color(0xFF9A9AA4)
+private val SWITCH_PROFILE_ON_HL = Color(0xFFDBEAFE)    // on the blue highlight
+private val NAME_AUTO_SIZE       = TextAutoSize.StepBased(minFontSize = 8.sp, maxFontSize = 13.sp, stepSize = 0.5.sp)
 
 // The search field: a rounded bar standing in for the "Search Bar" row.
 private val SEARCH_TOP           = 66.dp
@@ -389,31 +406,54 @@ private fun SidebarProfileHeader(item: SidebarMenuItem, selected: Boolean, profi
     Row(
         modifier = Modifier
             .offset(y = HEADER_TOP)
+            .padding(horizontal = HEADER_SIDE)
             .fillMaxWidth()
             .height(HEADER_HEIGHT)
-            .then(if (selected) Modifier.background(ROW_HIGHLIGHT) else Modifier)
-            .padding(horizontal = 7.dp),
+            .clip(HEADER_SHAPE)
+            .then(if (selected) Modifier.background(ROW_HIGHLIGHT) else Modifier.background(HEADER_FILL))
+            .border(1.dp, if (selected) HEADER_EDGE_ON else HEADER_EDGE, HEADER_SHAPE)
+            .padding(horizontal = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(
-            painter            = painterResource(id = item.iconRes),
-            contentDescription = item.label,
-            modifier           = Modifier.size(HEADER_AVATAR).clip(HEADER_AVATAR_SHAPE),
-            contentScale       = ContentScale.Crop,
-        )
-        Spacer(Modifier.width(8.dp))
+        // The avatar, with the swap badge hanging off its bottom-right corner.
+        Box(Modifier.size(HEADER_AVATAR + 4.dp)) {
+            Image(
+                painter            = painterResource(id = item.iconRes),
+                contentDescription = item.label,
+                modifier           = Modifier.size(HEADER_AVATAR).clip(HEADER_AVATAR_SHAPE),
+                contentScale       = ContentScale.Crop,
+            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .size(BADGE_SIZE)
+                    .clip(CircleShape)
+                    .background(BADGE_BLUE)
+                    .border(1.5.dp, if (selected) BADGE_RING_ON else HEADER_FILL, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    painter            = painterResource(id = R.drawable.ic_swap_arrows),
+                    contentDescription = null,
+                    colorFilter        = ColorFilter.tint(Color.White),
+                    modifier           = Modifier.size(8.dp),
+                )
+            }
+        }
+        Spacer(Modifier.width(5.dp))
         Column {
-            Text(
-                text       = profileName.ifBlank { item.label },
-                color      = Color.White,
-                fontSize   = 13.sp,
-                fontWeight = FontWeight.Bold,
-                maxLines   = 1,
-                overflow   = TextOverflow.Ellipsis,
+            // A long name steps down to fit the card (13 sp to 8 sp) before
+            // the ellipsis cuts it.
+            BasicText(
+                text     = profileName.ifBlank { item.label },
+                style    = TextStyle(color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Bold),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                autoSize = NAME_AUTO_SIZE,
             )
             Text(
-                text     = "Switch profile \u203A",
-                color    = if (selected) SWITCH_PROFILE_ON_HL else SWITCH_PROFILE_BLUE,
+                text     = "Switch profile",
+                color    = if (selected) SWITCH_PROFILE_ON_HL else SWITCH_PROFILE_GREY,
                 fontSize = 9.sp,
                 maxLines = 1,
             )
