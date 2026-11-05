@@ -91,6 +91,14 @@ class LiveGamesTest {
     }
 
     @Test
+    fun upFromThePills_reachesTheFirstChannelCategory_pastRecentlyWatched() {
+        assertEquals(2, LiveGames.firstCategoryAfter(listOf(LiveGames.ROW, LiveTvData.RECENT_ROW, "Motorsport", "Football"), 0))
+        assertEquals(1, LiveGames.firstCategoryAfter(listOf(LiveGames.ROW, "Motorsport", "Football"), 0))
+        assertEquals(null, LiveGames.firstCategoryAfter(listOf(LiveGames.ROW, LiveTvData.RECENT_ROW), 0))
+        assertEquals(null, LiveGames.firstCategoryAfter(listOf(LiveGames.ROW), 0))
+    }
+
+    @Test
     fun searchTileMeta_channelsByNumber_gamesByLeagueAndStart() {
         assertEquals("101 · Motorsport", LiveSearch.tileMeta(channel("f1", "Motorsport", 101), at(12), ny))
         assertEquals("201 · News · off air", LiveSearch.tileMeta(channel("cnn", "News", 201, off = true), at(12), ny))

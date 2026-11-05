@@ -36,6 +36,14 @@ internal object LiveGames {
     fun shown(games: List<LiveTvData.Channel>, sport: String?): List<LiveTvData.Channel> =
         if (sport == null) games else games.filter { it.sport.ifEmpty { "Other" } == sport }
 
+    /**
+     * Where Up from the sport pills goes: the first channel category after On now
+     * (Motorsport), past the profile's Recently watched. Leaving the games took
+     * Right through every pill before (the user, 2026-11-05). Null when none follows.
+     */
+    fun firstCategoryAfter(rowNames: List<String>, from: Int): Int? =
+        (from + 1..rowNames.lastIndex).firstOrNull { rowNames[it] != LiveTvData.RECENT_ROW }
+
     /** Started: what LIVE means here (zlive's own flag goes up hours early). */
     fun started(game: LiveTvData.Channel, nowS: Long): Boolean = game.start in 1..nowS
 

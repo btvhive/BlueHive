@@ -288,12 +288,13 @@ internal class LiveTvPageState {
     /**
      * On now's top line is its sport pills, in the search bar's place: Left and
      * Right pick a sport at once (the list follows), past the last pill is the
-     * next category; Down or Click goes into the games.
+     * next category; Up goes straight to the first channel category (Motorsport,
+     * v654); Down or Click goes into the games.
      */
     private fun pillsKey(code: Int, repeat: Int, rows: List<LiveTvData.Row>): Boolean {
         val pills = LiveGames.pills(rows[selectedRow].channels)
         when (code) {
-            AndroidKeyEvent.KEYCODE_DPAD_UP -> Unit
+            AndroidKeyEvent.KEYCODE_DPAD_UP -> LiveGames.firstCategoryAfter(rows.map { it.name }, selectedRow)?.let(::moveRow)
             AndroidKeyEvent.KEYCODE_DPAD_LEFT -> when {
                 pillCursor > 0 -> pickSport(pills, pillCursor - 1)
                 selectedRow > 0 -> moveRow(selectedRow - 1)

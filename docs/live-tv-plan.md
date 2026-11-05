@@ -103,7 +103,8 @@ games, first in the guide.
   and the other rows keep their numbers.
   - Sport pills (All, NFL, Soccer, Hockey, Basketball, Motor..., each with its count) take the
     search bar's place. Up from the first game reaches them; Left and Right pick a sport at once;
-    past the last pill is the next category; Down or Click goes into the games.
+    past the last pill is the next category; Down or Click goes into the games. Since v654, Up
+    from any pill goes straight to the first channel category (Motorsport), past Recently watched.
   - A row shows LIVE (red) or the start in the number column and the league in the flag column.
     The league column widens to the longest league in the list ("Premier League"), so no tag is
     cut. A game still to start is never dimmed.
