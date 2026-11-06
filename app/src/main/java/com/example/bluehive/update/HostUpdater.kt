@@ -39,17 +39,49 @@ object HostUpdater {
     private const val EXTRA_ON_CANCELLED = "io.host.addon.extra.ON_CANCELLED"
     private const val EXTRA_ON_FAILED = "io.host.addon.extra.ON_FAILED"
 
-    /** The app that installed BlueHive, if it can install BlueHive's updates. */
+    /**
+     * Signing keys (SHA-256 of the certificate) of hosts trusted to install
+     * BlueHive's updates when they are NOT its installer of record (v664): after a
+     * fallback self-update, Android lists BlueHive as its own installer. A key, not
+     * a product name. Add the new digest here before a host rotates its key.
+     */
+    private val TRUSTED_HOST_CERTS = setOf(
+        "409e0139a3b89df9a9b0d6a36f19c8c37db47bd91d36f4fce40b12815e4eea1b",
+    )
+
+    /**
+     * The app that will install BlueHive's updates, or null to update ourselves:
+     * the installer of record when it offers [ACTION], else an app offering it that
+     * is signed with a trusted host key (HostUpdaterRules).
+     */
     fun hostPackage(context: Context): String? {
         val pm = context.packageManager
+        val self = context.packageName
         val installer = runCatching {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) pm.getInstallSourceInfo(context.packageName).installingPackageName
-            else @Suppress("DEPRECATION") pm.getInstallerPackageName(context.packageName)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) pm.getInstallSourceInfo(self).installingPackageName
+            else @Suppress("DEPRECATION") pm.getInstallerPackageName(self)
         }.getOrNull()
-        if (installer.isNullOrBlank() || installer == context.packageName) return null
-        val resolves = runCatching { pm.resolveActivity(Intent(ACTION).setPackage(installer), 0) != null }.getOrDefault(false)
-        return if (resolves) installer else null
+        val answering = runCatching {
+            pm.queryIntentActivities(Intent(ACTION), 0).mapNotNull { it.activityInfo?.packageName }.distinct()
+        }.getOrDefault(emptyList())
+        if (answering.isEmpty()) return null
+        val certs = answering.filter { it != self && it != installer }.associateWith { signingCertDigests(context, it) }
+        return HostUpdaterRules.chooseHost(self, installer, answering, certs, TRUSTED_HOST_CERTS)
     }
+
+    /** SHA-256 digests of [pkg]'s signing certificates (Android 9 fallback included). */
+    private fun signingCertDigests(context: Context, pkg: String): List<String> = runCatching {
+        val pm = context.packageManager
+        @Suppress("DEPRECATION")
+        fun legacy() = pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_SIGNATURES).signatures?.toList().orEmpty()
+        val sigs = if (Build.VERSION.SDK_INT >= 28) {
+            pm.getPackageInfo(pkg, android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+                .signingInfo?.apkContentsSigners?.toList()?.takeIf { it.isNotEmpty() } ?: legacy()
+        } else legacy()
+        sigs.map { s ->
+            java.security.MessageDigest.getInstance("SHA-256").digest(s.toByteArray()).joinToString("") { "%02x".format(it) }
+        }
+    }.getOrDefault(emptyList())
 
     fun available(context: Context): Boolean = hostPackage(context) != null
 
