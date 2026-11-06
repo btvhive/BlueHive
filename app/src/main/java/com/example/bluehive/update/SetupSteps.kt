@@ -75,6 +75,8 @@ object SetupSteps {
     /** Step 1 is due: Android 8+, not Fire TV, switch off, and the switch can be reached. */
     fun installStepDue(context: Context): Boolean =
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            // v659: the host app installs the updates, so BlueHive needs no switch.
+            !HostUpdater.available(context) &&
             !isFireTv(context) &&
             !canInstallApps(context) &&
             leadsSomewhere(context, installSettingsIntent(context))
@@ -93,6 +95,8 @@ object SetupSteps {
     /** Step 2 is due: available, switch off, and never shown before. */
     fun reopenStepDue(context: Context): Boolean =
         !prefs(context).getBoolean(REOPEN_ASKED, false) &&
+            // v659: the host app reopens BlueHive from the foreground after an update.
+            !HostUpdater.available(context) &&
             reopenStepAvailable(context) &&
             !canReopenAfterUpdates(context)
 

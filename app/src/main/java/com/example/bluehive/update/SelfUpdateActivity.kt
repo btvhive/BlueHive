@@ -136,6 +136,15 @@ class SelfUpdateActivity : ComponentActivity() {
         const val EXTRA_MIN_SUPPORTED = "extra_min_supported"
 
         /**
+         * v659: the host app could not or did not install this update (see
+         * HostUpdater), so this screen installs it itself instead of asking again.
+         */
+        const val EXTRA_HOST_FALLBACK = "extra_host_fallback"
+
+        /** v659: the person already said yes (in the host's flow): skip the offer. */
+        const val EXTRA_AUTO_ACCEPT = "extra_auto_accept"
+
+        /**
          * AppOpsManager.OPSTR_REQUEST_INSTALL_PACKAGES is @hide, so the literal is
          * spelled out. It is a stable platform string -- the value the Settings
          * toggle writes and PackageInstaller reads -- not something we chose.
@@ -451,6 +460,12 @@ class SelfUpdateActivity : ComponentActivity() {
         }
     }
 
+    override fun onPostCreate(savedInstanceState: Bundle?) {
+        super.onPostCreate(savedInstanceState)
+        // The host replied "can't do it" after the person had already accepted.
+        if (intent.getBooleanExtra(EXTRA_AUTO_ACCEPT, false)) onUpdateAccepted()
+    }
+
     /**
      * The user pressed Accept. Everything from here is the old onCreate tail.
      *
@@ -467,6 +482,17 @@ class SelfUpdateActivity : ComponentActivity() {
         if (!awaitingConsent.value) return
         awaitingConsent.value = false
         Log.i(TAG, "user accepted the update — beginning permission + download")
+
+        // ── THE HOST INSTALLS IT, WHEN THERE IS ONE (v659) ─────────────────────
+        // The app that installed BlueHive (Off-Grid Drive 1.63+) downloads, checks
+        // and installs the update without Android's question, then reopens
+        // BlueHive. Its answers come back here (HostUpdater): "unavailable" lands
+        // with EXTRA_HOST_FALLBACK + EXTRA_AUTO_ACCEPT and continues below.
+        if (!intent.getBooleanExtra(EXTRA_HOST_FALLBACK, false) && HostUpdater.handOff(this, pendingManifest)) {
+            Log.e(TAG, "update ${pendingManifest.latestVersionCode} handed to the host app")
+            finishAndRemoveTask()
+            return
+        }
 
         // ── PERMISSION BEFORE DOWNLOAD ──────────────────────────────────────
         //

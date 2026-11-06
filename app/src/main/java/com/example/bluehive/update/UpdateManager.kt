@@ -472,7 +472,9 @@ object UpdateManager {
                 // -- a sideloaded TV app should not be silently replaceable by
                 // something else -- and adb keeps working because shell holds
                 // INSTALL_PACKAGES and bypasses ownership entirely.
-                if (Build.VERSION.SDK_INT >= 34) {
+                // v659: NOT when a host app installs BlueHive's updates
+                // (HostUpdater): owning ourselves would make every host install ask.
+                if (Build.VERSION.SDK_INT >= 34 && !HostUpdater.available(context)) {
                     setRequestUpdateOwnership(true)
                 }
             }

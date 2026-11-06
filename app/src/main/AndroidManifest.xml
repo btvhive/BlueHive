@@ -57,6 +57,10 @@
              capability any host could implement, so nothing here ties BlueHive to
              a particular vendor. A package name would. -->
         <provider android:authorities="io.host.entitlement.provider" />
+        <!-- v659: to find a host that installs our updates (HostUpdater). -->
+        <intent>
+            <action android:name="io.host.addon.action.INSTALL_UPDATE" />
+        </intent>
         <!-- The BIND_HOST <queries> entry is gone with the companion contract.
              It existed so package-visibility rules on Android 11+ would let
              BlueHive discover and bind a host's ICompanionHost service. BlueHive

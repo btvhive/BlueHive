@@ -158,6 +158,10 @@ class AuthActivity : ComponentActivity() {
             return
         }
 
+        // v659: a host installs our updates now; hand back Android 14's update
+        // ownership if an earlier self-update claimed it (HostUpdater).
+        com.example.bluehive.update.HostUpdater.releaseSelfOwnership(this)
+
         val session = SessionManager.init(applicationContext)
 
         // ── Update-first gate ────────────────────────────────────────────────
