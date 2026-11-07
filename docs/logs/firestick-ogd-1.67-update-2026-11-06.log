@@ -1,0 +1,39 @@
+11-06 18:59:52.534 I/ActivityManager(  537): START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LEANBACK_LAUNCHER] flg=0x10000000 pkg=com.offgriddrive.tv cmp=com.offgriddrive.tv/.MainActivity (has extras)} from uid 1000
+11-06 18:59:53.189 I/ActivityManager(  537): START u0 {cmp=com.offgriddrive.tv/.update.OgdSelfUpdateActivity (has extras)} from uid 10223
+11-06 18:59:59.693 I/ActivityManager(  537): START u0 {act=android.content.pm.action.CONFIRM_PERMISSIONS flg=0x10008000 pkg=com.android.packageinstaller cmp=com.android.packageinstaller/.InstallStart (has extras)} from uid 10223
+11-06 19:00:02.320 I/ActivityManager(  537): Force stopping com.offgriddrive.tv appid=10223 user=-1: installPackageLI
+11-06 19:00:02.320 I/ActivityManager(  537): Killing 31456:com.offgriddrive.tv/u0a223 (adj 0): stop com.offgriddrive.tv
+11-06 19:00:02.321 W/ActivityManager(  537): Force removing ActivityRecord{e785f08 u0 com.offgriddrive.tv/.update.OgdSelfUpdateActivity t5770}: app died, no saved state
+11-06 19:00:02.563 I/PackageManager(  537): Update package com.offgriddrive.tv code path from /data/app/com.offgriddrive.tv-8Jtk_4CtEczhy4fYomFYIw== to /data/app/com.offgriddrive.tv-Wd0OBa9A45eYtOCF4xMdJQ==; Retain data and using new
+11-06 19:00:02.563 I/PackageManager(  537): Update package com.offgriddrive.tv resource path from /data/app/com.offgriddrive.tv-8Jtk_4CtEczhy4fYomFYIw== to /data/app/com.offgriddrive.tv-Wd0OBa9A45eYtOCF4xMdJQ==; Retain data and using new
+11-06 19:00:07.134 I/ActivityManager(  537): START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LEANBACK_LAUNCHER] flg=0x10000000 pkg=com.offgriddrive.tv cmp=com.offgriddrive.tv/.MainActivity (has extras)} from uid 1000
+11-06 19:00:07.187 I/ActivityManager(  537): Start proc 31979:com.offgriddrive.tv/u0a223 for activity com.offgriddrive.tv/.MainActivity
+11-06 19:00:23.763 I/com.android.server.pm.ExternalInstallPackageManagerCallback(  537): Installation succeeded for app com.offgriddrive.tv on internal storage. Return code:1
+11-06 19:00:23.788 I/ActivityManager(  537): Force stopping com.offgriddrive.tv appid=10223 user=0: pkg removed
+11-06 19:00:23.790 I/ActivityManager(  537): Killing 31979:com.offgriddrive.tv/u0a223 (adj 0): stop com.offgriddrive.tv
+11-06 19:00:23.798 W/ActivityManager(  537): Force removing ActivityRecord{3ebc5c9 u0 com.offgriddrive.tv/.MainActivity t5772}: app died, no saved state
+11-06 19:00:23.940 I/ActivityManager(  537): Force stopping com.offgriddrive.tv appid=10223 user=0: pkg removed
+11-06 19:00:24.145 I/AmazonInputSwitchService(  537): Received package deletion event for com.offgriddrive.tv
+11-06 19:00:24.191 I/AmazonInputSwitchService(  537): Received package installation event for com.offgriddrive.tv
+11-06 19:00:24.233 I/AmazonInputSwitchService(  537): Received package installation event for com.offgriddrive.tv
+11-06 19:00:26.238 I/ActivityManager(  537): Start proc 32105:com.offgriddrive.tv/u0a223 for broadcast com.offgriddrive.tv/.update.OgdPackageReplacedReceiver
+11-06 19:00:26.598 I/OgdSelfUpdate(32105): Package replaced — version already opened, not reopening over another app.
+11-06 19:00:33.854 I/ActivityManager(  537): START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LEANBACK_LAUNCHER] flg=0x10000000 pkg=com.offgriddrive.tv cmp=com.offgriddrive.tv/.MainActivity (has extras)} from uid 1000
+11-06 19:00:34.560 I/OgdSelfUpdate(32105): Installed=67, latest=67 (1.67)
+11-06 19:00:34.560 I/OgdSelfUpdate(32105): Already up to date.
+11-06 18:59:42.992 I/am_finish_activity(  537): [0,15442895,5769,com.offgriddrive.tv/.MainActivity,app-request]
+11-06 18:59:52.542 I/am_create_activity(  537): [0,112573643,5770,com.offgriddrive.tv/.MainActivity,android.intent.action.MAIN,NULL,NULL,268435456]
+11-06 18:59:53.191 I/am_create_activity(  537): [0,242769672,5770,com.offgriddrive.tv/.update.OgdSelfUpdateActivity,NULL,NULL,NULL,0]
+11-06 18:59:53.200 I/am_finish_activity(  537): [0,112573643,5770,com.offgriddrive.tv/.MainActivity,app-request]
+11-06 18:59:59.709 I/am_create_activity(  537): [0,31246921,5771,com.android.packageinstaller/.InstallStart,android.content.pm.action.CONFIRM_PERMISSIONS,NULL,NULL,276856832]
+11-06 18:59:59.870 I/am_create_activity(  537): [0,129224315,5771,com.android.packageinstaller/.PackageInstallerActivity,android.content.pm.action.CONFIRM_PERMISSIONS,NULL,NULL,33554432]
+11-06 18:59:59.889 I/am_finish_activity(  537): [0,31246921,5771,com.android.packageinstaller/.InstallStart,app-request]
+11-06 19:00:01.839 I/am_finish_activity(  537): [0,129224315,5771,com.android.packageinstaller/.PackageInstallerActivity,app-request]
+11-06 19:00:02.320 I/am_kill (  537): [0,31456,com.offgriddrive.tv,0,stop com.offgriddrive.tv]
+11-06 19:00:02.321 I/am_finish_activity(  537): [0,242769672,5770,com.offgriddrive.tv/.update.OgdSelfUpdateActivity,proc died without state saved]
+11-06 19:00:07.142 I/am_create_activity(  537): [0,65783241,5772,com.offgriddrive.tv/.MainActivity,android.intent.action.MAIN,NULL,NULL,268435456]
+11-06 19:00:07.187 I/am_proc_start(  537): [0,31979,10223,com.offgriddrive.tv,activity,com.offgriddrive.tv/.MainActivity]
+11-06 19:00:23.790 I/am_kill (  537): [0,31979,com.offgriddrive.tv,0,stop com.offgriddrive.tv]
+11-06 19:00:23.798 I/am_finish_activity(  537): [0,65783241,5772,com.offgriddrive.tv/.MainActivity,proc died without state saved]
+11-06 19:00:26.238 I/am_proc_start(  537): [0,32105,10223,com.offgriddrive.tv,broadcast,com.offgriddrive.tv/.update.OgdPackageReplacedReceiver]
+11-06 19:00:33.897 I/am_create_activity(  537): [0,127301913,5773,com.offgriddrive.tv/.MainActivity,android.intent.action.MAIN,NULL,NULL,268435456]

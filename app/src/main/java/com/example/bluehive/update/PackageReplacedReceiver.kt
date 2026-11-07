@@ -30,8 +30,12 @@ import com.example.bluehive.auth.AuthActivity
 class PackageReplacedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
-        if (!SetupSteps.canReopenAfterUpdates(context)) {
-            Log.i(TAG, "Package replaced. No overlay permission, so Android will not let BlueHive reopen.")
+        // v665: only after an update BlueHive installed itself. When the host app
+        // installed it, the host opens BlueHive; reopening here too started it
+        // twice on Android 9 (SelfInstallMark). Log.e: release strips i/w.
+        val pending = SelfInstallMark.take(context)
+        if (!SelfInstallMark.shouldReopen(pending, com.example.bluehive.BuildConfig.VERSION_CODE, SetupSteps.canReopenAfterUpdates(context))) {
+            Log.e(TAG, "Package replaced. Not reopening (self-install mark $pending, host-installed or Android blocks it).")
             return
         }
         Log.i(TAG, "Package replaced. Reopening (overlay permission on, or Android ${Build.VERSION.RELEASE}).")

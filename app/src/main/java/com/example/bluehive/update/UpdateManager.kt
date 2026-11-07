@@ -491,6 +491,11 @@ object UpdateManager {
                 // Drive does for the same APK (about 1,125 MB against 959 MB on a
                 // Fire TV Stick). A retry finds the file gone and downloads it
                 // again -- beginInstall() already handles that.
+                //
+                // v665: BlueHive itself installs this version, so BlueHive reopens
+                // itself afterwards (SelfInstallMark); a host's install is opened
+                // by the host. Read from the file, so before it is deleted.
+                SelfInstallMark.markPending(context, apk)
                 apk.delete()
                 val intent = Intent(context, SelfUpdateInstallReceiver::class.java)
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or
