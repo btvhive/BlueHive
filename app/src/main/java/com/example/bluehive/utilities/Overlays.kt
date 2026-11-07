@@ -95,6 +95,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.drawscope.scale
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1486,142 +1489,124 @@ fun UpdateRequiredOverlay(
     // does nothing, which is what you want with an install in flight.
     BackHandler(enabled = true) { onClose() }
 
+    // ── v670: approved mockup v3-1 (docs/mockups/bluehive-update-offer) ──────
+    // Said at once, in plain words: BlueHive NEEDS AN UPDATE, and THE APP IS
+    // WORKING FINE (the old card's "required to continue... in step with our
+    // servers" read as something being broken). One centred block on a full
+    // screen; the bee's glow and stars are drawn around it without taking any
+    // layout space, so they never push the block off centre. The buttons keep
+    // their design at 1.645x the old size, and sit 56 dp below the text.
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(overlayScrimColor())
+            .background(Color(0xFF0E0E10))
+            .drawBehind {
+                // Deep blue rising from the bottom edge (CSS: ellipse 80% 60% at 50% 112%).
+                val rx = size.width * 0.80f
+                val ry = size.height * 0.60f
+                val c = Offset(size.width / 2f, size.height * 1.12f)
+                scale(scaleX = 1f, scaleY = ry / rx, pivot = c) {
+                    drawCircle(
+                        brush = Brush.radialGradient(
+                            0f to Color(0x422644A6), 0.70f to Color.Transparent,
+                            center = c, radius = rx,
+                        ),
+                        radius = rx, center = c,
+                    )
+                }
+            },
     )
 
-    Box(
-        contentAlignment = Alignment.Center,
-        modifier = Modifier.fillMaxSize(),
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .background(brush = overlayCardBackgroundBrush(), shape = overlayCardShape())
-                .border(width = 1.dp, color = overlayCardBorderColor(), shape = overlayCardShape())
-                .padding(
-                    horizontal = UPDATE_CARD_PADDING_HORIZONTAL,
-                    vertical   = UPDATE_CARD_PADDING_VERTICAL,
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+
+            // ── Bee, with its glow and four stars around it ───────────────────
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(UPDATE_OFFER_BEE_SIZE)) {
+                Canvas(modifier = Modifier.requiredSize(330.dp, 240.dp)) {
+                    val c = Offset(size.width / 2f, size.height / 2f)
+                    val rx = size.width / 2f
+                    scale(scaleX = 1f, scaleY = size.height / size.width, pivot = c) {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                0f to Color(0x3878A0FF), 0.68f to Color.Transparent,
+                                center = c, radius = rx,
+                            ),
+                            radius = rx, center = c,
+                        )
+                    }
+                    // (dx, dy, size) from the bee's centre, as in the mockup.
+                    for ((dx, dy, s) in UPDATE_OFFER_STARS) {
+                        drawSparkle(
+                            centre = Offset(c.x + (dx + s * 0.5f).dp.toPx(), c.y + (dy + s * 0.6f).dp.toPx()),
+                            radius = (s * 0.38f).dp.toPx(),
+                            color  = Color(0xCCA8BCF2),
+                        )
+                    }
+                }
+                Image(
+                    painter            = painterResource(R.drawable.blue_bee),
+                    contentDescription = null,
+                    contentScale       = ContentScale.Fit,
+                    modifier           = Modifier.fillMaxSize(),
                 )
-                .width(UPDATE_CARD_WIDTH),
-        ) {
+            }
 
-            // ── Mark ──────────────────────────────────────────────────────────
-            // painterResource, not the BitmapFactory path BeeLogo uses. That
-            // cache exists because the extraction overlay appears at a memory
-            // peak on 2 GB boxes; this screen appears at launch or on an idle
-            // home screen, where the ordinary resource loader is fine.
-            Image(
-                painter            = painterResource(R.drawable.blue_bee),
-                contentDescription = null,
-                contentScale       = ContentScale.Fit,
-                modifier           = Modifier.size(UPDATE_LOGO_SIZE),
-            )
-
-            // ── Heading ───────────────────────────────────────────────────────
+            // ── What is needed ────────────────────────────────────────────────
             Text(
-                text       = "A new version of BlueHive is ready",
-                color      = Color.White,
-                fontFamily = AppTypography.interBold,
-                fontWeight = FontWeight.Bold,
-                fontSize   = 18.sp,
-                lineHeight = 24.sp,
-                textAlign  = TextAlign.Center,
-                modifier   = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp),
+                text          = "BlueHive needs an update",
+                color         = Color(0xFFF5F5F2),
+                fontFamily    = AppTypography.interBold,
+                fontWeight    = FontWeight.Bold,
+                fontSize      = 46.sp,
+                lineHeight    = 51.sp,
+                letterSpacing = (-1.2).sp,
+                textAlign     = TextAlign.Center,
+                modifier      = Modifier.padding(top = 18.dp),
             )
 
-            // ── Rule ──────────────────────────────────────────────────────────
-            Box(
-                modifier = Modifier
-                    .padding(top = 14.dp, bottom = 14.dp)
-                    .fillMaxWidth()
-                    .height(1.dp)
-                    .background(updateDividerColor())
-            )
+            // ── How it is ─────────────────────────────────────────────────────
+            Row(
+                verticalAlignment     = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier              = Modifier.padding(top = 10.dp),
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(30.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF2EA05A)),
+                ) {
+                    Canvas(modifier = Modifier.size(17.dp)) { drawCheck(Color.White) }
+                }
+                Text(
+                    text          = "The app is working fine",
+                    color         = Color(0xFF5FCB8A),
+                    fontFamily    = AppTypography.interBold,
+                    fontSize      = 30.sp,
+                    letterSpacing = (-0.5).sp,
+                )
+            }
 
-            // ── Body ──────────────────────────────────────────────────────────
-            // Says what is being asked, why, and what happens next. The line
-            // about the confirmation screen is not filler: Android raises its own
-            // install dialog over the top of this app, and someone who is not
-            // expecting it tends to dismiss it and end up back where they
-            // started with no idea what went wrong.
-            //
-            // KEPT SHORT ON PURPOSE, and the copy is load-bearing on the layout.
-            // An Android TV viewport is 960x540 dp whatever the panel's pixel
-            // count, so this card has ~540 dp of height to live in and no
-            // scrolling to fall back on. At [UPDATE_CARD_WIDTH] each of these
-            // paragraphs wraps to three lines and the whole card stacks to about
-            // 420 dp. Adding a sentence is not free — it is 19 dp off the margin.
+            // ── What to do ────────────────────────────────────────────────────
             Text(
-                text = "This release is required to continue using BlueHive. It keeps " +
-                       "your device in step with our servers, so sign-in, your profiles " +
-                       "and your library all keep working as they should.",
-                color      = updateBodyTextColor(),
-                fontFamily = AppTypography.interSemiBold,
-                fontSize   = 12.sp,
-                lineHeight = 19.sp,
+                text       = "Press the blue button. It takes about 1 minute.",
+                color      = Color(0xFFC9C9C4),
+                fontFamily = AppTypography.interRegular,
+                fontSize   = 20.sp,
                 textAlign  = TextAlign.Center,
-                modifier   = Modifier.fillMaxWidth(),
-            )
-
-            // HEDGED ON PURPOSE. On API 31+ the system confirm dialog is now
-            // suppressed (see UpdateManager.install), so promising it outright
-            // would describe a screen most devices never show. It can still
-            // appear on an older box, or if the platform declines the request,
-            // so the copy prepares for it without depending on it.
-            Text(
-                text = "The download takes only a moment, then BlueHive will close while " +
-                       "the update installs. If your device asks you to confirm, please accept.",
-                color      = updateBodyTextColor(),
-                fontFamily = AppTypography.interSemiBold,
-                fontSize   = 12.sp,
-                lineHeight = 19.sp,
-                textAlign  = TextAlign.Center,
-                modifier   = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-            )
-
-            Text(
-                text       = "Thank you for your patience.",
-                color      = updateBodyTextColor(),
-                fontFamily = AppTypography.interSemiBold,
-                fontSize   = 12.sp,
-                lineHeight = 19.sp,
-                textAlign  = TextAlign.Center,
-                modifier   = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp),
-            )
-
-            // ── Versions ──────────────────────────────────────────────────────
-            Text(
-                text       = "Version $currentVersion  →  Version $newVersion",
-                color      = updateFootnoteTextColor(),
-                fontFamily = AppTypography.interBold,
-                fontSize   = 11.sp,
-                textAlign  = TextAlign.Center,
-                modifier   = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 18.dp, bottom = 20.dp),
+                modifier   = Modifier.padding(top = 16.dp),
             )
 
             // ── Buttons ───────────────────────────────────────────────────────
             // Red on the left, blue on the right, matching every other two-button
             // overlay in this file so the colour keeps meaning the same thing.
             Row(
-                horizontalArrangement = Arrangement.spacedBy(
-                    space     = 15.dp,
-                    alignment = Alignment.CenterHorizontally,
-                ),
-                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(44.dp, Alignment.CenterHorizontally),
+                modifier = Modifier.padding(top = 56.dp),
             ) {
                 ModularButton(
-                    textConfig      = ModularButtonTextConfig(text = "Close Application", fontSize = 10f),
+                    textConfig      = ModularButtonTextConfig(text = "Close Application", fontSize = 10f * UPDATE_OFFER_BUTTON_SCALE),
                     isToggleable    = false,
                     fontFamily      = AppTypography.interBold,
                     focusRequester  = closeFocus,
@@ -1632,14 +1617,14 @@ fun UpdateRequiredOverlay(
                         left  = FocusRequester.Cancel
                         right = acceptFocus
                     },
-                    dimensions      = updateButtonDimensions(),
+                    dimensions      = updateOfferButtonDimensions(),
                     colors          = overlayConfirmButtonColors(),
-                    glowConfig      = updateButtonGlowConfig(),
+                    glowConfig      = updateOfferButtonGlowConfig(),
                     animationConfig = overlayButtonAnimationConfig(),
                 )
 
                 ModularButton(
-                    textConfig      = ModularButtonTextConfig(text = "Accept Update", fontSize = 10f),
+                    textConfig      = ModularButtonTextConfig(text = "Accept Update", fontSize = 10f * UPDATE_OFFER_BUTTON_SCALE),
                     isToggleable    = false,
                     fontFamily      = AppTypography.interBold,
                     focusRequester  = acceptFocus,
@@ -1650,16 +1635,99 @@ fun UpdateRequiredOverlay(
                         left  = closeFocus
                         right = FocusRequester.Cancel
                     },
-                    dimensions      = updateButtonDimensions(),
+                    dimensions      = updateOfferButtonDimensions(),
                     colors          = overlayCancelButtonColors(),
-                    glowConfig      = updateButtonGlowConfig(),
+                    glowConfig      = updateOfferButtonGlowConfig(),
                     animationConfig = overlayButtonAnimationConfig(),
                 )
             }
         }
+
+        // ── Versions, centred on the bottom edge, outside the block ──────────
+        Text(
+            text = androidx.compose.ui.text.buildAnnotatedString {
+                append("Version ")
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = Color(0xFF9A9A95)))
+                append(currentVersion)
+                pop()
+                append("  →  ")
+                pushStyle(androidx.compose.ui.text.SpanStyle(color = Color(0xFF9A9A95)))
+                append(newVersion)
+                pop()
+            },
+            color      = Color(0xFF6E6E6A),
+            fontFamily = AppTypography.interSemiBold,
+            fontSize   = 12.sp,
+            textAlign  = TextAlign.Center,
+            modifier   = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 22.dp),
+        )
     }
 }
 
+/** v670: the update offer's bee (approved mockup v3-1). */
+val UPDATE_OFFER_BEE_SIZE = 100.dp
+
+/** v670: (dx, dy, size) of the four stars around the offer's bee, in dp from its centre. */
+private val UPDATE_OFFER_STARS = listOf(
+    Triple(-95f, -38f, 15f), Triple(88f, -24f, 11f), Triple(-74f, 40f, 10f), Triple(100f, 46f, 15f),
+)
+
+/**
+ * v670: the update offer's buttons are the same design as [updateButtonDimensions],
+ * just bigger (mockup v3-1: 250 dp wide instead of 152) so they read from a sofa.
+ */
+const val UPDATE_OFFER_BUTTON_SCALE = 250f / 152f
+
+fun updateOfferButtonDimensions(): ModularButtonDimensions {
+    val s = UPDATE_OFFER_BUTTON_SCALE
+    val d = updateButtonDimensions()
+    return ModularButtonDimensions(
+        mainWidth          = d.mainWidth * s,
+        mainHeight         = d.mainHeight * s,
+        mainYOffset        = d.mainYOffset * s,
+        secondWidth        = d.secondWidth * s,
+        secondHeight       = d.secondHeight * s,
+        secondYOffset      = d.secondYOffset * s,
+        mainCornerRadius   = d.mainCornerRadius * s,
+        secondCornerRadius = d.secondCornerRadius * s,
+        shadowHeight       = d.shadowHeight * s,
+        glowWidth          = d.glowWidth * s,
+        glowHeight         = d.glowHeight * s,
+    )
+}
+
+fun updateOfferButtonGlowConfig(): ModularButtonGlowConfig {
+    val g = updateButtonGlowConfig()
+    return g.copy(offsetX = g.offsetX * UPDATE_OFFER_BUTTON_SCALE, offsetY = g.offsetY * UPDATE_OFFER_BUTTON_SCALE)
+}
+
+/** A four-pointed sparkle (the mockup's ✦), drawn so no font has to carry the glyph. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSparkle(centre: Offset, radius: Float, color: Color) {
+    val w = radius * 0.28f
+    val p = Path().apply {
+        moveTo(centre.x, centre.y - radius)
+        quadraticTo(centre.x + w * 0.35f, centre.y - w * 0.35f, centre.x + radius, centre.y)
+        quadraticTo(centre.x + w * 0.35f, centre.y + w * 0.35f, centre.x, centre.y + radius)
+        quadraticTo(centre.x - w * 0.35f, centre.y + w * 0.35f, centre.x - radius, centre.y)
+        quadraticTo(centre.x - w * 0.35f, centre.y - w * 0.35f, centre.x, centre.y - radius)
+        close()
+    }
+    drawPath(p, color)
+}
+
+/** The mockup's check mark: (5,12.5) → (9.2,16.7) → (19,7) on a 24-unit grid. */
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawCheck(color: Color) {
+    val u = size.width / 24f
+    val p = Path().apply {
+        moveTo(5f * u, 12.5f * u)
+        lineTo(9.2f * u, 16.7f * u)
+        lineTo(19f * u, 7f * u)
+    }
+    drawPath(p, color, style = Stroke(width = 3f * u,
+        cap = androidx.compose.ui.graphics.StrokeCap.Round, join = androidx.compose.ui.graphics.StrokeJoin.Round))
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // 8. Notice overlay

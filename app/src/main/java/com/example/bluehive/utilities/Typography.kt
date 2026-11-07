@@ -42,6 +42,8 @@ object AppTypography {
     val dongleRegular = FontFamily(Font(R.font.dongle_regular))
     val dongleBold = FontFamily(Font(R.font.dongle_bold))
     val pattayaRegular = FontFamily(Font(R.font.pattaya_regular))
+    /** v670: body text on the update offer (Inter 400, as in the approved mockup v3-1). */
+    val interRegular = FontFamily(Font(R.font.inter_regular))
     val interSemiBold = FontFamily(Font(R.font.inter_semibold))
     val interBold = FontFamily(Font(R.font.inter_bold))
     val lalezarRegular = FontFamily(Font(R.font.lalezar_regular))
