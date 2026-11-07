@@ -1,0 +1,19 @@
+11-06 23:24:21.589 E/SelfUpdate(19053): update 669 handed to the host app
+11-06 23:24:21.814 E/AddonUpdate(19516): updating com.bluehive.tv 668 -> 669 (backup link sent)
+11-06 23:24:21.876 E/AddonUpdate(19516): attempt from GITHUB failed (TRY_LATER): TEMP-TEST forced GitHub timeout
+11-06 23:24:26.877 E/AddonUpdate(19516): attempt from GITHUB failed (TRY_LATER): TEMP-TEST forced GitHub timeout
+11-06 23:24:30.199 E/AddonUpdate(19516): installing com.bluehive.tv 669 from https://updates.daigurrenblue.com/apk/bluehive-669.apk
+11-06 23:24:31.018 E/AddonUpdate(19516): install session 832503867 committed for com.bluehive.tv
+11-06 23:25:12.560 E/AddonUpdate(19516): com.bluehive.tv installed; waiting for Android to finish before opening it
+11-06 23:25:12.608 E/AddonUpdate(19516): Android: android.intent.action.PACKAGE_ADDED for com.bluehive.tv
+11-06 23:25:12.609 E/AddonUpdate(19516): opening com.bluehive.tv (announced=true, 42 ms after the install)
+11-06 23:25:12.753 E/AddonUpdate(19516): Android: android.intent.action.PACKAGE_ADDED for com.bluehive.tv
+11-06 23:25:12.766 E/AddonUpdate(19516): Android: android.intent.action.PACKAGE_REPLACED for com.bluehive.tv
+11-06 23:25:12.766 E/AddonUpdate(19516): Android: android.intent.action.PACKAGE_REPLACED for com.bluehive.tv
+11-06 23:25:16.654 E/OgdTileNudge(19516): Sent com.amazon.tv.action.PACKAGE_REMOVED for com.bluehive.tv to the Appstore.
+11-06 23:25:18.634 E/SelfUpdate(19815): Package replaced. Not reopening (self-install mark 0, host-installed or Android blocks it).
+11-06 23:25:18.703 E/OgdTileNudge(19516): Sent com.amazon.tv.action.PACKAGE_ADDED for com.bluehive.tv to the Appstore.
+11-06 23:25:22.604 E/FireTvTile(19815): Sent com.amazon.tv.action.PACKAGE_REMOVED to the Appstore.
+11-06 23:25:24.608 E/FireTvTile(19815): Sent com.amazon.tv.action.PACKAGE_ADDED to the Appstore.
+11-06 23:27:52.909 E/OgdTileNudge(20171): Sent com.amazon.tv.action.PACKAGE_REMOVED for com.offgriddrive.tv to the Appstore.
+11-06 23:27:54.948 E/OgdTileNudge(20171): Sent com.amazon.tv.action.PACKAGE_ADDED for com.offgriddrive.tv to the Appstore.
