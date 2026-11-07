@@ -30,6 +30,14 @@ import java.util.concurrent.TimeUnit
  */
 object UpdateManager {
 
+    /**
+     * Where [manifest]'s APK is downloaded from. Rebuilt from our configured base:
+     * the manifest's apk_url is absolute with the server's baked-in host, wrong once
+     * the server moves. v668: also sent to the host app as its backup link.
+     */
+    fun downloadUrl(manifest: Manifest): String =
+        ServerConfig.updateBaseUrl + "/apk/" + manifest.apkUrl.substringAfterLast('/')
+
     private const val TAG = "SelfUpdate"
 
     /** Public so HostEntryActivity/SelfUpdateActivity can pass it around. */
@@ -237,9 +245,7 @@ object UpdateManager {
             ?.forEach { it.delete() }
 
         val out = File(context.cacheDir, "update-${manifest.latestVersionCode}.apk")
-        // Rebuild the download URL from our configured base — the manifest's apk_url
-        // is absolute with the server's baked-in host, wrong once the server moves.
-        val apkUrl = ServerConfig.updateBaseUrl + "/apk/" + manifest.apkUrl.substringAfterLast('/')
+        val apkUrl = downloadUrl(manifest)
         try {
             val req = Request.Builder().url(apkUrl).get().build()
             downloadHttp.newCall(req).execute().use { resp ->

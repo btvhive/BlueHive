@@ -35,6 +35,13 @@ object HostUpdater {
     private const val EXTRA_VERSION_CODE = "io.host.addon.extra.VERSION_CODE"
     private const val EXTRA_VERSION_NAME = "io.host.addon.extra.VERSION_NAME"
     private const val EXTRA_SHA256 = "io.host.addon.extra.SHA256"
+    /**
+     * v668: our own server's link to the same APK. The host uses it only when its
+     * own source (GitHub) failed twice or can't serve this version, and installs the
+     * file only if it matches EXTRA_SHA256 and our signing key. Hosts before OGD
+     * 1.81 ignore it.
+     */
+    private const val EXTRA_APK_URL = "io.host.addon.extra.APK_URL"
     private const val EXTRA_ON_UNAVAILABLE = "io.host.addon.extra.ON_UNAVAILABLE"
     private const val EXTRA_ON_CANCELLED = "io.host.addon.extra.ON_CANCELLED"
     private const val EXTRA_ON_FAILED = "io.host.addon.extra.ON_FAILED"
@@ -115,6 +122,11 @@ object HostUpdater {
             .putExtra(EXTRA_VERSION_CODE, manifest.latestVersionCode)
             .putExtra(EXTRA_VERSION_NAME, manifest.latestVersionName)
             .putExtra(EXTRA_SHA256, manifest.sha256.trim().lowercase())
+            .apply {
+                // Only an https link: the host refuses anything else anyway.
+                val link = UpdateManager.downloadUrl(manifest)
+                if (link.startsWith("https://")) putExtra(EXTRA_APK_URL, link)
+            }
             // Unavailable: update yourself, at once (the person already said yes).
             .putExtra(EXTRA_ON_UNAVAILABLE, reply(7701, fallback = true, autoAccept = true))
             // Cancelled: back to the offer, the host may be asked again.
