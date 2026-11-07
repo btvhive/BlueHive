@@ -30,6 +30,10 @@ import com.example.bluehive.auth.AuthActivity
 class PackageReplacedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_MY_PACKAGE_REPLACED) return
+        // v666: rebuild the Fire TV home tile the update may have blanked (FireTvTile).
+        // goAsync keeps the process alive for the few seconds the two messages take.
+        val tilePending = goAsync()
+        FireTvTile.refresh(context) { tilePending.finish() }
         // v665: only after an update BlueHive installed itself. When the host app
         // installed it, the host opens BlueHive; reopening here too started it
         // twice on Android 9 (SelfInstallMark). Log.e: release strips i/w.
