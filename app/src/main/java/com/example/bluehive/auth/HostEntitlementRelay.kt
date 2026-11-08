@@ -69,6 +69,24 @@ object HostEntitlementRelay {
 
     /** Names a CAPABILITY, not a product. Any host implementing it works. */
     private const val PROVIDER_URI = "content://io.host.entitlement.provider/assertion"
+
+    /**
+     * ASK THE HOST FOR AN ANSWER NO OLDER THAN A MINUTE (675, 2026-11-08).
+     *
+     * The sandbox missed-payment test found BlueHive kept working on a lapsed
+     * account. checkNow() read the host's SAVED pass, and the host had missed
+     * the lapse: Android 14 had frozen it behind BlueHive (the onn box), or it
+     * was not running because BlueHive was opened from the TV home (a Fire
+     * Stick). Off-Grid Drive 1.97 reads this parameter and fetches a new pass
+     * first when its saved one is older; an older Off-Grid Drive ignores it and
+     * answers as before. Only the home-screen check and the lock screen's retry
+     * ask for it; BlueHive's own start does not, so a cold start never waits.
+     */
+    internal const val FRESH_WITHIN_MS = 60_000L
+
+    /** The provider address, with the freshness request when there is one. */
+    internal fun providerQuery(freshWithinMs: Long?): String =
+        if (freshWithinMs == null) PROVIDER_URI else "$PROVIDER_URI?fresh_within_ms=$freshWithinMs"
     private const val COLUMN = "assertion"
 
     /**
@@ -312,7 +330,7 @@ object HostEntitlementRelay {
     suspend fun recheckNow(context: Context): String? {
         val app = context.applicationContext
 
-        var standing = postOnce(app, readFromProvider(app) ?: stored(app) ?: return null)
+        var standing = postOnce(app, readFromProvider(app, FRESH_WITHIN_MS) ?: stored(app) ?: return null)
 
         // SECOND PASS, and the button barely works without it.
         //
@@ -457,7 +475,7 @@ object HostEntitlementRelay {
                 return@launch
             }
 
-            val fresh = readFromProvider(app) ?: return@launch
+            val fresh = readFromProvider(app, FRESH_WITHIN_MS) ?: return@launch
             if (fresh == stored(app)) return@launch
             Log.i(TAG, "host assertion changed — re-reporting")
             submit(app, fresh)
@@ -529,8 +547,8 @@ object HostEntitlementRelay {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY, null)?.takeIf { it.isNotBlank() }
 
-    private fun readFromProvider(context: Context): String? = runCatching {
-        context.contentResolver.query(Uri.parse(PROVIDER_URI), null, null, null, null)
+    private fun readFromProvider(context: Context, freshWithinMs: Long? = null): String? = runCatching {
+        context.contentResolver.query(Uri.parse(providerQuery(freshWithinMs)), null, null, null, null)
             ?.use { c ->
                 if (c.moveToFirst()) c.getString(c.getColumnIndexOrThrow(COLUMN)) else null
             }
