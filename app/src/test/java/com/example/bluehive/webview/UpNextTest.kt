@@ -107,12 +107,46 @@ class UpNextTest {
     fun `the next episode comes from the season on show, never past its end`() {
         val season = listOf(ep(1), ep(2), ep(3, airDate = "2099-01-01"))
         val today = 20261031
-        assertEquals(UpNextEpisode(2, "Episode 2", "https://image.tmdb.org/t/p/w300/s2.jpg"),
+        assertEquals(UpNextEpisode(2, "Episode 2", "https://image.tmdb.org/t/p/w300/s2.jpg", 1),
             nextEpisodeIn(season, 1, false, 1, 1, today))
         assertNull(nextEpisodeIn(season, 1, false, 1, 2, today))   // next one unaired
         assertNull(nextEpisodeIn(season, 1, false, 1, 3, today))   // season's end
         assertNull(nextEpisodeIn(season, 2, false, 1, 1, today))   // grid shows another season
         assertNull(nextEpisodeIn(season, 1, true, 1, 1, today))    // still loading
+    }
+
+    @Test
+    fun `a season's last episode leads to the next season's first`() {
+        val season = listOf(ep(1), ep(2))
+        val today = 20261031
+        val s2e1 = ep(1).copy(title = "Next Season", stillImageUrl = "https://image.tmdb.org/t/p/w300/n.jpg")
+        assertEquals(UpNextEpisode(1, "Next Season", "https://image.tmdb.org/t/p/w300/n.jpg", 2),
+            nextEpisodeIn(season, 1, false, 1, 2, today, 2 to s2e1))
+        assertNull(nextEpisodeIn(season, 1, false, 1, 2, today, null))                  // no next season
+        assertNull(nextEpisodeIn(season, 1, false, 1, 2, today, 3 to s2e1))             // not the season after
+        assertNull(nextEpisodeIn(season, 1, false, 1, 2, today,
+            2 to s2e1.copy(airDate = "2099-01-01")))                                    // not aired yet
+        assertEquals(UpNextEpisode(2, "Episode 2", "https://image.tmdb.org/t/p/w300/s2.jpg", 1),
+            nextEpisodeIn(season, 1, false, 1, 1, today, 2 to s2e1))                    // mid-season unchanged
+    }
+
+    @Test
+    fun `the player is told the next episode's season, and opens it there`() {
+        val extras = hls(UpNextEpisode(1, "Next Season", null, 2))
+        assertTrue(PlayerExtra.Whole(HlsPlayerActivity.EXTRA_NEXT_SEASON, 2) in extras)
+        val director = MainSource.code("webview/hls/UpNextDirector.kt")
+        assertTrue(director.contains("getIntExtra(HlsPlayerActivity.EXTRA_NEXT_SEASON, 0)"))
+    }
+
+    @Test
+    fun `anime Up Next finds Miruro through the AniList resolve, not SourceCatalog`() {
+        val anime = MainSource.code("details/shared/playback/AnimePlaybackController.kt")
+        val hop = anime.substring(anime.indexOf("internal fun continueToNextEpisode()"))
+            .substringBefore("fun launchExtract(")
+        assertTrue(hop.contains("buildJapaneseAnimationSources("))
+        assertFalse(hop.contains("SourceCatalog.sources("))
+        val sources = MainSource.code("api/AnimeSources.kt")
+        assertFalse(sources.contains("watch/\${'$'}mid"))
     }
 
     private val body = ExtractResponse(

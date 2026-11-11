@@ -25,7 +25,7 @@ import com.example.bluehive.api.extractStreamAwait
 import com.example.bluehive.auth.SessionManager
 import com.example.bluehive.utilities.ServerOption
 import com.example.bluehive.utilities.launchIfActive
-import com.example.bluehive.api.SourceCatalog
+import com.example.bluehive.api.buildJapaneseAnimationSources
 import com.example.bluehive.webview.hls.HlsPlayerActivity
 import com.example.bluehive.utilities.runCatchingCancellable
 import com.example.bluehive.webview.miruro.MiruroExtractorActivity
@@ -390,17 +390,28 @@ class AnimePlaybackController internal constructor(
         playNextHop = null
         unattended = hop.unattended
         val req = request()
-        val url = SourceCatalog.sources(
-            BlueHiveApplication.appContext, req.apiType, req.tmdbId, req.catalogSeason, req.catalogEpisode,
-        ).firstOrNull { it.name.equals("Miruro", ignoreCase = true) }?.url
-        if (url == null) {
-            Log.e("scraper", "up next: no Miruro url for s${hop.season}e${hop.episode}")
-            return
+        // The Miruro address comes from the AniList resolve the episode card
+        // does, never from SourceCatalog -- which holds no Miruro, so looking
+        // there ended every anime Up Next on the details page (v678).
+        scope.launch {
+            val url = runCatchingCancellable {
+                buildJapaneseAnimationSources(
+                    mediaType     = "tv",
+                    tmdbId        = req.tmdbId,
+                    seasonNumber  = req.catalogSeason,
+                    episodeNumber = req.catalogEpisode,
+                ) { _, name, u -> name to u }
+                    .firstOrNull { it.first.equals("Miruro", ignoreCase = true) }?.second
+            }.getOrNull()
+            if (url == null) {
+                Log.e("scraper", "up next: no Miruro url for s${hop.season}e${hop.episode}")
+                return@launch
+            }
+            Log.e("scraper", "\u23ED up next: s${hop.season}e${hop.episode} ${if (pendingDub) "dub" else "sub"} " +
+                    "(unattended ${hop.unattended})")
+            pendingUrl = url
+            launchExtract(url, pendingDub, null)
         }
-        Log.i("scraper", "\u23ED up next: s${hop.season}e${hop.episode} ${if (pendingDub) "dub" else "sub"} " +
-                "(unattended ${hop.unattended})")
-        pendingUrl = url
-        launchExtract(url, pendingDub, null)
     }
 
     /**
@@ -419,6 +430,10 @@ class AnimePlaybackController internal constructor(
         // provider so its result can mark it tried.
         if (server == null) servers.tried.clear()
         lastExtractServer = server
+        if (session.isExtracting || session.extractPending || isCheckingServers) {
+            Log.e("scraper", "M Extract refused: extracting=${session.isExtracting} " +
+                    "pending=${session.extractPending} checking=$isCheckingServers")
+        }
         if (!session.isExtracting && !session.extractPending && !isCheckingServers) {
             session.extractPending = true
             // HELD IN extractJob, like the source chain, so BACK cancels it. It

@@ -49,6 +49,45 @@ object FireTvTile {
         }, FIRST_DELAY_MS)
     }
 
+    // ── v677: once per install or update, whatever installed it ───────────────────
+    //
+    // Until v677 only the update receiver asked, so a tile stayed blank when nothing
+    // ran it: a FRESH install (2026-11-08, AFTKA .225: reinstalled by the host after
+    // an un-pair, logo missing until the next update), or an update whose process
+    // died within the ~6 s of delays. Now app start asks too, and only the finished
+    // send is remembered, so a send that never happened is retried at the next start.
+
+    private const val PREFS = "firetv_tile"
+    private const val KEY_DONE_FOR = "done_for_update_time"
+    private var inFlight = false                      // main thread only
+    private val waiters = mutableListOf<() -> Unit>() // main thread only
+
+    /** Whether a send is due: [installStamp] = lastUpdateTime, [doneFor] = the stamp last sent for. */
+    fun needsSend(installStamp: Long, doneFor: Long): Boolean = installStamp > 0L && installStamp != doneFor
+
+    /**
+     * [refresh], unless it was already done since this build was installed (keyed by
+     * the package's lastUpdateTime). Main thread; [done] runs when it is finished.
+     */
+    fun refreshOnce(context: Context, done: () -> Unit = {}) {
+        val app = context.applicationContext
+        if (!isFireTv(app)) { done(); return }
+        val stamp = runCatching { app.packageManager.getPackageInfo(app.packageName, 0).lastUpdateTime }
+            .getOrDefault(0L)
+        val prefs = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (!needsSend(stamp, prefs.getLong(KEY_DONE_FOR, 0L))) { done(); return }
+        waiters += done
+        if (inFlight) return
+        inFlight = true
+        refresh(app) {
+            prefs.edit().putLong(KEY_DONE_FOR, stamp).apply()
+            inFlight = false
+            val all = waiters.toList()
+            waiters.clear()
+            all.forEach { it() }
+        }
+    }
+
     // Log.e: release builds strip d/i/w.
     private fun send(context: Context, action: String) {
         try {

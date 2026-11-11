@@ -1943,6 +1943,8 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         const val RESULT_PLAY_NEXT = android.app.Activity.RESULT_FIRST_USER + 1
         /** In: the next episode's number in this season, its title and its small still. */
         const val EXTRA_NEXT_EPISODE = "NEXT_EPISODE_NUMBER"
+        /** The next episode's season when it is in the next season (v678); absent = this season. */
+        const val EXTRA_NEXT_SEASON = "NEXT_EPISODE_SEASON"
         const val EXTRA_NEXT_TITLE = "NEXT_EPISODE_TITLE"
         const val EXTRA_NEXT_STILL = "NEXT_EPISODE_STILL"
         /** In: episodes in a row before this one with no remote press. Out: the count for the next one. */

@@ -61,4 +61,6 @@ data class UpNextEpisode(
     val episode: Int,
     val title: String?,
     val stillUrl: String?,
+    /** Its season when that is not the one playing -- a season's last episode leads to the next season's first (v678); 0 = the same season. */
+    val season: Int = 0,
 )

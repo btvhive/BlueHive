@@ -202,7 +202,8 @@ internal class UpNextDirector(
             tag = tag,
             next = intent.getIntExtra(HlsPlayerActivity.EXTRA_NEXT_EPISODE, 0).takeIf { it > 0 }?.let {
                 NextEpisode(
-                    season   = intent.getIntExtra("SEASON_NUMBER", 0),
+                    season   = intent.getIntExtra(HlsPlayerActivity.EXTRA_NEXT_SEASON, 0).takeIf { s -> s > 0 }
+                        ?: intent.getIntExtra("SEASON_NUMBER", 0),
                     episode  = it,
                     title    = intent.getStringExtra(HlsPlayerActivity.EXTRA_NEXT_TITLE),
                     stillUrl = intent.getStringExtra(HlsPlayerActivity.EXTRA_NEXT_STILL),

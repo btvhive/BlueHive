@@ -990,6 +990,10 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         // this fires, a definite "inactive" has already been confirmed.
         HostEntitlementRelay.init(this)
 
+        // v677: a Fire TV tile blanked by an install nothing repaired (a fresh
+        // install by the host, say) comes back at the first start of this build.
+        com.example.bluehive.update.FireTvTile.refreshOnce(this)
+
         EntitlementLockBus.register {
             // RAISE IT OVER OURSELVES ONLY, NEVER OVER THE HOST.
             //

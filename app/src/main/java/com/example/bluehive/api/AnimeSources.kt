@@ -109,8 +109,8 @@ suspend fun <T> buildJapaneseAnimationSources(
     // AniList id as a fallback — that URL is a guaranteed 404, and offering it
     // would put a source in the list that cannot work.
     val miruroUrl = resolved?.miruroId?.let { mid ->
-        if (mediaType == "movie") "https://www.miruro.tv/watch/${'$'}mid"
-        else "https://www.miruro.tv/watch/${'$'}mid?ep=${'$'}{resolved.anilistEpisode ?: 1}"
+        if (mediaType == "movie") "https://www.miruro.tv/watch/$mid"
+        else "https://www.miruro.tv/watch/$mid?ep=${resolved.anilistEpisode ?: 1}"
     }
 
     // 1) Miruro

@@ -127,6 +127,9 @@ object PlayerIntents {
             PlayerExtra.Whole(HlsPlayerActivity.EXTRA_NEXT_EPISODE, next.episode),
             PlayerExtra.Text(HlsPlayerActivity.EXTRA_NEXT_TITLE, next.title),
             PlayerExtra.Text(HlsPlayerActivity.EXTRA_NEXT_STILL, next.stillUrl),
+        ) + (if (next.season > 0) listOf(
+            PlayerExtra.Whole(HlsPlayerActivity.EXTRA_NEXT_SEASON, next.season),
+        ) else emptyList()) + listOf(
             PlayerExtra.Whole(HlsPlayerActivity.EXTRA_UNATTENDED, unattended),
         )
 

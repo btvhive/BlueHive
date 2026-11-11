@@ -196,6 +196,16 @@ fun Modifier.hiveBackdropBlur(active: Boolean): Modifier =
  * [KEYBOARD_WARM_DELAY_MS] after the screen opens -- out of the way of the
  * screen's own first frames -- and a press only shows it. A press before
  * then builds it on the spot, as it always did.
+ *
+ * ANDROID 12+ ONLY (v676). On the Fire TVs (Android 7 and 9) the hidden
+ * window is a second layer the display hardware composes over the screen,
+ * and their display chip mishandles it: after a sidebar page was opened and
+ * closed, the HDMI picture came out shifted ~260 px with the right edge
+ * wrapped round to the left (AFTKA .225, 2026-11-08). adb screenshots were
+ * normal, because they are composed by the GPU, not that hardware.
+ * `dumpsys SurfaceFlinger` showed the cause: two hardware layers, home and a
+ * 950x954 "Pop-Up Window" (buffer stride 960) with nothing on screen. There
+ * the keyboard is built on a press instead, as before v627.
  */
 @Composable
 fun HoneycombKeyboardPopup(
@@ -204,9 +214,11 @@ fun HoneycombKeyboardPopup(
     onDismiss: () -> Unit,
 ) {
     var warm by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(KEYBOARD_WARM_DELAY_MS)
-        warm = true
+    if (KEEP_KEYBOARD_WARM) {
+        LaunchedEffect(Unit) {
+            delay(KEYBOARD_WARM_DELAY_MS)
+            warm = true
+        }
     }
     if (!warm && !visible) return
     CardPopup(onDismiss, focusable = visible) {
@@ -216,6 +228,9 @@ fun HoneycombKeyboardPopup(
 
 /** How long after a screen opens its search keyboard is built, hidden. */
 private const val KEYBOARD_WARM_DELAY_MS = 2_000L
+
+/** Whether the hidden, ready-built keyboard is kept at all -- see HoneycombKeyboardPopup. */
+private val KEEP_KEYBOARD_WARM = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
 /**
  * A profile name. [onChange] follows every key, so a screen that shows the

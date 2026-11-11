@@ -100,6 +100,32 @@ class EpisodesState internal constructor(
     private var seasonLoadSeq by mutableIntStateOf(0)
     private var seasonLoadJob by mutableStateOf<Job?>(null)
 
+    // ── The next season's first episode, for Up Next at a season's end (v678) ──
+    // (season, its first episode). Fetched once the season on show has loaded,
+    // only when the season list goes past it; a failure leaves it null and the
+    // card simply does not show at the season's end, as before.
+    var nextSeasonFirst by mutableStateOf<Pair<Int, Episode>?>(null)
+        private set
+    private var nextSeasonJob: Job? = null
+
+    /** Fetches the first episode of the season after the one on show, when [listedSeasons] has one. */
+    fun prefetchNextSeason(listedSeasons: Int?) {
+        val next = selectedSeason + 1
+        if (listedSeasons == null || next > listedSeasons) return
+        if (nextSeasonFirst?.first == next || nextSeasonJob?.isActive == true) return
+        nextSeasonJob = scope.launch {
+            try {
+                val first = repository.getSeasonEpisodes(tmdbId = tmdbId, seasonNumber = next)
+                    .episodes.minByOrNull { it.episodeNumber }
+                if (first != null) nextSeasonFirst = next to first
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e("TVEpisodes", "up next: S$next not loaded: ${e.message}")
+            }
+        }
+    }
+
     /** 🔹 Load the episodes for a given season -- serialised, see above. */
     fun loadSeasonEpisodes(seasonNumber: Int) {
         seasonLoadJob?.cancel()
@@ -289,6 +315,12 @@ internal fun SeasonLoadEffects(
                 episodesState.loadSeasonEpisodes(episodesState.selectedSeason)
             }
         }
+    }
+
+    // Up Next past a season's last episode (v678): once the season on show has
+    // loaded, fetch the next one's first episode if the season list has it.
+    LaunchedEffect(episodesState.selectedSeason, episodesState.isLoadingEpisodes, listedSeasons) {
+        if (!episodesState.isLoadingEpisodes) episodesState.prefetchNextSeason(listedSeasons)
     }
 
     // The season check can leave off the selected season -- the screen was
