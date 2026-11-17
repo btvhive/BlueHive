@@ -101,12 +101,14 @@ class IdleInputCallback(private val delegate: Window.Callback) : Window.Callback
     @Suppress("DEPRECATION")
     override fun onSearchRequested(): Boolean = delegate.onSearchRequested()
 
+    @androidx.annotation.RequiresApi(23)   // Android 5 never calls this overload
     override fun onSearchRequested(searchEvent: android.view.SearchEvent?): Boolean =
         delegate.onSearchRequested(searchEvent)
 
     override fun onWindowStartingActionMode(callback: android.view.ActionMode.Callback?): android.view.ActionMode? =
         delegate.onWindowStartingActionMode(callback)
 
+    @androidx.annotation.RequiresApi(23)   // Android 5 never calls this overload
     override fun onWindowStartingActionMode(
         callback: android.view.ActionMode.Callback?,
         type: Int,

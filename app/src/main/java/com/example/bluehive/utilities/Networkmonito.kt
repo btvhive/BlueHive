@@ -15,6 +15,7 @@ package com.example.bluehive.utilities
 // ─────────────────────────────────────────────────────────────────────────────
 
 import android.content.Context
+import android.os.Build
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
@@ -41,6 +42,11 @@ object NetworkMonitor {
         }
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
             ?: return false
+        if (Build.VERSION.SDK_INT < 23) {
+            // Android 5: no activeNetwork yet (2026-11-17).
+            @Suppress("DEPRECATION")
+            return cm.activeNetworkInfo?.isConnected == true
+        }
         val network = cm.activeNetwork ?: return false
         val caps    = cm.getNetworkCapabilities(network) ?: return false
         return caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)

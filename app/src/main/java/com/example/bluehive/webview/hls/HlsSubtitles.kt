@@ -9,6 +9,7 @@ import okhttp3.Request
 import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.zip.GZIPInputStream
+import com.example.bluehive.net.android5Tls
 
 /**
  * English subtitles for the sideloaded player. vaplayer ships none, so we source
@@ -45,7 +46,7 @@ object HlsSubtitles {
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 
     private val http: OkHttpClient by lazy {
-        OkHttpClient.Builder()
+        OkHttpClient.Builder().android5Tls()
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .followRedirects(true)

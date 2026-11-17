@@ -1,5 +1,6 @@
 package com.example.bluehive.favorites
 
+import com.example.bluehive.utilities.SnapEffect
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Column
@@ -73,7 +74,8 @@ internal fun FavoriteCard(
 
     // Each card gets its own VanishController so only the tapped
     // card plays the disintegration effect, not the whole grid.
-    val vanishController = rememberVanishController(glSurfaceView.value)
+    // None below Android 7 (SnapEffect): the card simply goes.
+    val vanishController = if (SnapEffect.available()) rememberVanishController(glSurfaceView.value) else null
 
     // MutableState, not a delegated var: runTitleCardPress flips
     // these from a coroutine after this composition.
@@ -147,7 +149,7 @@ internal fun FavoriteCard(
                 scaleY = cardScale
             }
             .then(
-                if (data.removeMode) Modifier.vanishable(
+                if (data.removeMode && vanishController != null) Modifier.vanishable(
                     vanishController,
                     backgroundColor = Color.Transparent
                 )
@@ -231,7 +233,7 @@ internal fun FavoriteCard(
                             if (data.removeMode) {
                                 // A second OK while this card is leaving does nothing.
                                 if (!data.startRemoval(entry)) return@onKeyEvent true
-                                vanishController.vanish()
+                                vanishController?.vanish()
                                 coroutineScope.launch {
                                     delay(150)
                                     // Pre-move focus to the neighboring card BEFORE

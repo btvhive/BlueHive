@@ -16,6 +16,7 @@ import org.json.JSONObject
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import java.util.concurrent.TimeUnit
+import com.example.bluehive.net.android5Tls
 
 private const val TAG = "ApiClient"
 
@@ -95,7 +96,7 @@ object ApiClient {
 
     // ── 1. TMDB / Media API  (X-API-Key, no user tokens) ─────────────────────
 
-    private val tmdbHttpClient: OkHttpClient = OkHttpClient.Builder()
+    private val tmdbHttpClient: OkHttpClient = OkHttpClient.Builder().android5Tls()
         .addInterceptor { chain ->
             val req = chain.request().newBuilder()
             val key = BuildConfig.API_KEY
@@ -298,7 +299,7 @@ object ApiClient {
     // mismatch — true while tokens came from Off-Grid Drive over AIDL. BlueHive
     // owns its own refresh token now and spends it on its own backend, so
     // self-refresh is not merely allowed, it is the only mechanism left.
-    private val bluehiveHttpClient: OkHttpClient = OkHttpClient.Builder()
+    private val bluehiveHttpClient: OkHttpClient = OkHttpClient.Builder().android5Tls()
         .addInterceptor { chain ->
             val session = SessionManager.get()
             val req = chain.request().newBuilder()
@@ -398,7 +399,7 @@ object ApiClient {
 
 
 
-    private val platformHttpClient: OkHttpClient = OkHttpClient.Builder()
+    private val platformHttpClient: OkHttpClient = OkHttpClient.Builder().android5Tls()
         .addInterceptor { chain ->
             // Attach both tokens on every outgoing platform request:
             //   Authorization: Bearer <access_token>  — for authentication

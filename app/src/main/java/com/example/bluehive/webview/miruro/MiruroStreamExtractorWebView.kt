@@ -423,11 +423,13 @@ class MiruroStreamExtractorWebView private constructor() {
         try {
             CookieManager.getInstance().apply { removeAllCookies(null); flush() }
             WebStorage.getInstance().deleteAllData()
-            ServiceWorkerController.getInstance().setServiceWorkerClient(
-                object : ServiceWorkerClient() {
-                    override fun shouldInterceptRequest(request: WebResourceRequest) = null
-                }
-            )
+            if (android.os.Build.VERSION.SDK_INT >= 24) {
+                ServiceWorkerController.getInstance().setServiceWorkerClient(
+                    object : ServiceWorkerClient() {
+                        override fun shouldInterceptRequest(request: WebResourceRequest) = null
+                    }
+                )
+            }
             Log.d(sCRAPE, "🧼 wiped cookies + web storage + neutralised service worker")
         } catch (e: Exception) {
             Log.w(sCRAPE, "⚠️ state wipe failed (non-fatal): ${e.message}")
@@ -480,6 +482,7 @@ class MiruroStreamExtractorWebView private constructor() {
             Log.d(sCRAPE, "▶️ page STARTED: ${truncate(url)} [${elapsed}ms]")
         }
 
+        @androidx.annotation.RequiresApi(23)   // only called from Android 6
         override fun onReceivedError(
             view: WebView?, request: WebResourceRequest?, error: WebResourceError?
         ) {

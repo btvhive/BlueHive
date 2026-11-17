@@ -263,7 +263,7 @@ class AuthActivity : ComponentActivity() {
                 BhHostProvisionRequest(
                     assertion         = assertion,
                     deviceFingerprint = DeviceIdentity.fingerprint(this@AuthActivity),
-                    publicKey         = DeviceIdentity.publicKeyBase64(),
+                    publicKey         = DeviceIdentity.publicKeyBase64(this@AuthActivity),
                     installSource     = DeviceIdentity.installSource(this@AuthActivity),
                     deviceName        = DeviceIdentity.deviceName(),
                 )
@@ -364,7 +364,7 @@ class AuthActivity : ComponentActivity() {
                         // devices, and a null key must not be baked in for the
                         // lifetime of the process.
                         val fp = DeviceIdentity.fingerprint(context)
-                        val pk = DeviceIdentity.publicKeyBase64()
+                        val pk = DeviceIdentity.publicKeyBase64(context)
                         val src = DeviceIdentity.installSource(context)
                         val name = DeviceIdentity.deviceName()
 

@@ -1,5 +1,6 @@
 package com.example.bluehive.details.tvshowdetails
 
+import com.example.bluehive.utilities.SnapEffect
 import android.graphics.Bitmap
 import android.os.Build
 import android.util.Log
@@ -311,6 +312,8 @@ private suspend fun startDustOn(
     layer: GraphicsLayer?,
     bounds: Rect?,
 ): Boolean {
+    // No dust below Android 7 (SnapEffect): the card or row simply goes.
+    if (!SnapEffect.available()) return false
     // The surface is made on the press (rendererWanted): wait for it.
     val gl = snapshotFlow { rendererOf() }.first { it != null }!!
     layer ?: return false
@@ -490,6 +493,7 @@ internal fun Modifier.blockFocusWhileSnapping(snap: EpisodeSnapState): Modifier 
  */
 @Composable
 internal fun EpisodeSnapRenderer(snap: EpisodeSnapState) {
+    if (!SnapEffect.available()) return
     DisposableEffect(snap) { onDispose { snap.renderer = null } }
     VanishContainer(
         modifier = Modifier.fillMaxSize(),

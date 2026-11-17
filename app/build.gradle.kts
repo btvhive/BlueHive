@@ -154,7 +154,11 @@ android {
 
     defaultConfig {
         applicationId = "com.bluehive.tv"
-        minSdk = 25
+        // Android 5.1 (Fire OS 5, e.g. the 2016 Fire TV Stick AFTT) since 2026-11-17.
+        // The manifest merge fails the build if any library needs more (only the
+        // ones listed in AndroidManifest's tools:overrideLibrary are let through),
+        // and the library ceiling at the bottom keeps the rest at Android-5 versions.
+        minSdk = 22
         targetSdk = 35
         versionCode = appVersionCode
         versionName = appVersionName
@@ -761,7 +765,15 @@ dependencies {
 
     implementation("androidx.media3:media3-datasource-okhttp:1.9.0")
 
-    implementation("com.github.exjunk:ThanosEffect:1.0.2")
+    // The "snap to dust" effect. minSdk 24 with no older version, so it is only
+    // used from Android 7 (utilities/SnapEffect.kt) and let through the manifest
+    // merge by tools:overrideLibrary. Its navigation3/navigationevent dependencies
+    // need Android 6 and it never references them (checked 2026-11-17), so they
+    // are excluded.
+    implementation("com.github.exjunk:ThanosEffect:1.0.2") {
+        exclude(group = "androidx.navigation3")
+        exclude(group = "androidx.navigationevent")
+    }
 
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
@@ -787,7 +799,7 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
-    implementation("androidx.activity:activity-compose:1.12.2")
+    implementation("androidx.activity:activity-compose:1.11.0")   // 1.12 needs Android 6
 
     implementation("androidx.tv:tv-foundation:1.0.0-alpha10")
     implementation("androidx.tv:tv-material:1.0.0-alpha10")
@@ -803,7 +815,7 @@ dependencies {
     // ═══════════════════════════════════════════════════════════
     // MEDIA3 (ExoPlayer)
     // ═══════════════════════════════════════════════════════════
-    val media3Version = "1.9.0"
+    val media3Version = "1.8.1"   // the last Media3 for Android 5 (1.9 needs Android 6)
     implementation("androidx.media3:media3-exoplayer:$media3Version")
     implementation("androidx.media3:media3-ui:$media3Version")
     implementation("androidx.media3:media3-common:$media3Version")
@@ -864,8 +876,8 @@ dependencies {
     // ═══════════════════════════════════════════════════════════
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
-    implementation("androidx.lifecycle:lifecycle-process:2.10.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.9.4")   // 2.10 needs Android 6
+    implementation("androidx.lifecycle:lifecycle-process:2.9.4")
 
     // ═══════════════════════════════════════════════════════════
     // ANDROID CORE
@@ -882,7 +894,7 @@ dependencies {
     // ═══════════════════════════════════════════════════════════
     implementation(libs.common)
     implementation(libs.app.update.ktx)
-    implementation(libs.androidx.viewfinder.core)
+    // viewfinder-core removed 2026-11-17: never used in the code, and it needs Android 6.
 
     // ═══════════════════════════════════════════════════════════
     // TESTING
@@ -896,4 +908,36 @@ dependencies {
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+}
+
+// ── Android 5 library ceiling (2026-11-17) ──────────────────────────────────
+// Late 2025 AndroidX raised these libraries to Android 6. Each is held at the
+// last version that still runs on Android 5.1 (read from the libraries' own
+// manifests). A newer one arriving through a transitive dependency would fail
+// the manifest merge anyway; this keeps the build from getting there.
+// espresso: ui-test (an implementation dependency) and androidTest must agree.
+val android5Ceiling = mapOf(
+    "androidx.compose.runtime" to "1.9.5",
+    "androidx.compose.ui" to "1.9.5",
+    "androidx.compose.foundation" to "1.9.5",
+    "androidx.compose.animation" to "1.9.5",
+    "androidx.compose.material3" to "1.4.0",
+    "androidx.media3" to "1.8.1",
+    "androidx.activity" to "1.11.0",
+    "androidx.lifecycle" to "2.9.4",
+    "androidx.savedstate" to "1.3.3",
+    "androidx.window" to "1.4.0",
+    "androidx.test.espresso" to "3.7.0",
+)
+configurations.configureEach {
+    resolutionStrategy.eachDependency {
+        val pin = android5Ceiling[requested.group]
+        // material3's adaptive artifacts version separately; leave them alone.
+        val separatelyVersioned = requested.group == "androidx.compose.material3" &&
+            (requested.name.contains("adaptive") || requested.name.contains("window-size"))
+        if (pin != null && !separatelyVersioned) {
+            useVersion(pin)
+            because("Android 5 support: newer versions need Android 6")
+        }
+    }
 }

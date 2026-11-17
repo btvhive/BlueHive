@@ -30,6 +30,7 @@ import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.ServiceList
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import java.util.concurrent.TimeUnit
+import com.example.bluehive.net.android5Tls
 
 // Seek amount in milliseconds
 private const val SEEK_INCREMENT_MS = 10_000L  // 10 seconds
@@ -286,7 +287,7 @@ private suspend fun tryInvidiousExtraction(videoId: String): String? {
                 val url = "$instance/api/v1/videos/$videoId"
                 Log.d("DetailsTrailerPlayer", "Trying Invidious: $url")
 
-                val client = OkHttpClient.Builder()
+                val client = OkHttpClient.Builder().android5Tls()
                     .connectTimeout(10, TimeUnit.SECONDS)
                     .readTimeout(10, TimeUnit.SECONDS)
                     .build()

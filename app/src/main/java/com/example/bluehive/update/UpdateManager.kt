@@ -16,6 +16,7 @@ import org.json.JSONObject
 import java.io.File
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
+import com.example.bluehive.net.android5Tls
 
 /**
  * BlueHive self-update (#5).
@@ -69,7 +70,7 @@ object UpdateManager {
     // So the launch-path worst case is now one number, 8s, instead of an open-ended
     // sum -- and 8s only elapses against a black-holed network, since a refused or
     // unroutable connection still fails immediately.
-    private val manifestHttp: OkHttpClient = OkHttpClient.Builder()
+    private val manifestHttp: OkHttpClient = OkHttpClient.Builder().android5Tls()
         // 4s, UNCHANGED FROM THE ORIGINAL, and deliberately so after measuring.
         //
         // This call still blocks the launch, and AuthActivity draws nothing while
@@ -105,7 +106,7 @@ object UpdateManager {
         .build()
 
     // Long timeouts: the APK is large (~200MB).
-    private val downloadHttp: OkHttpClient = OkHttpClient.Builder()
+    private val downloadHttp: OkHttpClient = OkHttpClient.Builder().android5Tls()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(120, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)

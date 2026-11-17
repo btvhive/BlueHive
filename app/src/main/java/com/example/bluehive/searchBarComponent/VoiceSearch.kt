@@ -123,7 +123,7 @@ internal class VoiceSearchState(
 
     private fun start() {
         if (!available) return
-        if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO)
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO)
             != PackageManager.PERMISSION_GRANTED) {
             askPermission()      // comes back through listenNow() if allowed
             return

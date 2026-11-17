@@ -17,6 +17,7 @@ import org.schabi.newpipe.extractor.downloader.Response as ExtractorResponse
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import com.example.bluehive.net.android5Tls
 
 class DownloaderImpl : Downloader() {
 
@@ -31,7 +32,7 @@ class DownloaderImpl : Downloader() {
         PersistentCookieJar(getAppContext())
     }
 
-    private val client = OkHttpClient.Builder()
+    private val client = OkHttpClient.Builder().android5Tls()
         .connectTimeout(30, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)

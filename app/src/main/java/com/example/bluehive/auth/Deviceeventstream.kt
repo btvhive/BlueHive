@@ -26,6 +26,7 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import com.example.bluehive.net.android5Tls
 
 /**
  * DeviceEventStream
@@ -141,7 +142,7 @@ object DeviceEventStream {
     //   - No authenticator: we handle reconnection + 401 ourselves via ensureFreshToken().
     //   - readTimeout = 0: stream is infinite; OkHttp must never time out reads.
     //   - retryOnConnectionFailure = false: our coroutine loop handles retries.
-    private val sseClient: OkHttpClient = OkHttpClient.Builder()
+    private val sseClient: OkHttpClient = OkHttpClient.Builder().android5Tls()
         .connectTimeout(15, TimeUnit.SECONDS)
         // readTimeout MUST be greater than the server's keepalive interval (30s)
         // but small enough to detect dead TCP within a reasonable window. With

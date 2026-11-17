@@ -2,11 +2,11 @@
 
 [versions]
 coil = "2.7.0"
-media3ExoplayerHlsVersion = "1.9.0"
+media3ExoplayerHlsVersion = "1.8.1"
 okhttp = "5.3.2"
 agp = "9.3.1"  # Android Gradle Plugin version
 converterGson = "3.0.0"
-ui = "1.10.0"
+ui = "1.9.5"
 
 
 
@@ -22,7 +22,7 @@ kotlinKsp = "2.3.6"
 # Coroutines & Lifecycle
 retrofit = "3.0.0"
 kotlinxCoroutines = "1.10.2"
-androidxLifecycle = "2.10.0"
+androidxLifecycle = "2.9.4"
 
 # Testing
 junit = "4.13.2"
@@ -34,17 +34,17 @@ appUpdateKtx = "2.1.0"
 recyclerview = "1.4.0"
 common = "0.10.0"
 viewfinderCore = "1.5.2"
-animationCore = "1.10.0"
-uiUnit = "1.10.0"
-foundation = "1.9.4"
-uiTest = "1.10.0"
-uiGraphics = "1.10.0"
-foundationLayout = "1.10.3"
-runtime = "1.10.5"
-foundationVersion = "1.10.6"
-foundationLayoutVersion = "1.10.6"
-androidxFoundation = "1.11.0"
-androidxFoundationVersion = "1.11.2"
+animationCore = "1.9.5"
+uiUnit = "1.9.5"
+foundation = "1.9.5"
+uiTest = "1.9.5"
+uiGraphics = "1.9.5"
+foundationLayout = "1.9.5"
+runtime = "1.9.5"
+foundationVersion = "1.9.5"
+foundationLayoutVersion = "1.9.5"
+androidxFoundation = "1.9.5"
+androidxFoundationVersion = "1.9.5"
 
 # Baseline Profile / Macrobenchmark
 baselineprofile = "1.4.0"

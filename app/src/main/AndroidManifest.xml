@@ -76,6 +76,11 @@
         android:name="android.software.leanback"
         android:required="true" />
 
+    <!-- Android 5 support (2026-11-17): ThanosEffect needs Android 7 and is only
+         used from Android 7 (utilities/SnapEffect.kt). Every other library must
+         support Android 5.1, or the manifest merge fails the build. -->
+    <uses-sdk tools:overrideLibrary="com.exjunk.lib.thanos.vanish" />
+
     <application
         android:name=".BlueHiveApplication"
         android:networkSecurityConfig="@xml/${netSecConfig}"

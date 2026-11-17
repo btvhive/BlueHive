@@ -152,7 +152,9 @@ private val OVERVIEW_WIDTH: Dp = 400.dp
 internal fun flattenOverview(overview: String): String =
     overview.replace(LINE_BREAKS, " ").trim()
 
-private val LINE_BREAKS = Regex("\\s*\\R\\s*")
+// The same as \s*\R\s*, spelled out: Android 5's pattern engine has no \R
+// and threw on it, crashing every details page (Android 5.1 emulator, 2026-11-17).
+private val LINE_BREAKS = Regex("\\s*(?:\\r\\n|[\\n\\u000B\\u000C\\r\\u0085\\u2028\\u2029])\\s*")
 
 /** The movie page's two sizes: 16 / 13.7 past five lines (or out of height), else 18 / 14. */
 internal val MOVIE_OVERVIEW_FULL = OverviewSize(18.sp, 14.sp)

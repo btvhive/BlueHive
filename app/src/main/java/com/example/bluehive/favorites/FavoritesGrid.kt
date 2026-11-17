@@ -1,5 +1,6 @@
 package com.example.bluehive.favorites
 
+import com.example.bluehive.utilities.SnapEffect
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -56,16 +57,9 @@ internal fun BoxScope.FavoritesGrid(
     // ── Media card grid ───────────────────────────────────────────────
     // VanishContainer provides the OpenGL surface layer that the
     // particle disintegration effect renders onto when a card is removed.
-    VanishContainer(
-        modifier = Modifier.fillMaxSize(),
-        onGLSurfaceViewCreated = {
-            glSurfaceView.value = it
-            it.setAnimationConfig(
-                duration = 2500f,
-                particleSize = 2f
-            )
-        }
-    ) {
+    // Below Android 7 there is no dust (SnapEffect): a plain Box, and a removed
+    // card simply goes.
+    val grid: @Composable BoxScope.() -> Unit = {
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -119,5 +113,20 @@ internal fun BoxScope.FavoritesGrid(
             }
         }
         }   // closes inner Box
-    }       // closes VanishContainer
+    }       // closes grid
+    if (SnapEffect.available()) {
+        VanishContainer(
+            modifier = Modifier.fillMaxSize(),
+            onGLSurfaceViewCreated = {
+                glSurfaceView.value = it
+                it.setAnimationConfig(
+                    duration = 2500f,
+                    particleSize = 2f
+                )
+            },
+            content = grid,
+        )
+    } else {
+        Box(Modifier.fillMaxSize(), content = grid)
+    }
 }

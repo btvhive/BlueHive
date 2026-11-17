@@ -40,6 +40,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import com.example.bluehive.net.android5Tls
 
 
 /**
@@ -660,6 +661,8 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         appContext = applicationContext
+        // Android 5-7.0 only: trust the bundled Let's Encrypt roots (no-op from 7.1.1).
+        com.example.bluehive.net.Android5Tls.install()
 
         // Deliberately BEFORE the multi-process guard and before any networking.
         // Backend clients ask LanNetwork for a socket at connect time, and until
@@ -1116,6 +1119,13 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         val lowRam = activityManager.isLowRamDevice ||
                 (totalRamBytes in 1 until SMALL_RAM_BYTES)
         val imageLoader = ImageLoader.Builder(this)
+            // Below Android 7.1.1 only: Coil's client with the bundled roots. From
+            // 7.1.1 Coil keeps building its own default client, as before.
+            .apply {
+                if (com.example.bluehive.net.Android5Tls.needsBundledRoots()) {
+                    okHttpClient { okhttp3.OkHttpClient.Builder().android5Tls().build() }
+                }
+            }
             .components {
                 add(SvgDecoder.Factory())
             }

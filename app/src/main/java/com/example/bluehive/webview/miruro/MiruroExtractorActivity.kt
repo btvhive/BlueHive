@@ -40,6 +40,10 @@ class MiruroExtractorActivity : ComponentActivity() {
         // Shared failure flags (RESULT_CANCELED)
         const val RESULT_NO_DUB = "RESULT_NO_DUB"   // requested audio track not available
         const val RESULT_FAILED = "RESULT_FAILED"   // real error (not a user cancel)
+
+        /** The on-device WebView fallback runs from Android 7 (see onCreate). */
+        const val ON_DEVICE_MIN_SDK = 24
+        fun onDeviceAvailable(sdk: Int = android.os.Build.VERSION.SDK_INT): Boolean = sdk >= ON_DEVICE_MIN_SDK
     }
 
     private var done = false
@@ -53,6 +57,16 @@ class MiruroExtractorActivity : ComponentActivity() {
         val url = intent.getStringExtra(EXTRA_URL)
         if (url.isNullOrBlank()) {
             Log.e(TAG, "MiruroExtractorActivity: missing URL")
+            finishAndKill(RESULT_CANCELED, Intent().putExtra(RESULT_FAILED, true))
+            return
+        }
+
+        // Android 5 (2026-11-17): no on-device fallback below Android 7. Anime is
+        // extracted on the backend first; this activity only runs when that missed,
+        // and the WebView path needs Android 7's ServiceWorkerController. Report it
+        // like any failed extraction, so the player moves on as it already does.
+        if (!onDeviceAvailable()) {
+            Log.w(TAG, "on-device extractor needs Android 7; reporting a failed extraction")
             finishAndKill(RESULT_CANCELED, Intent().putExtra(RESULT_FAILED, true))
             return
         }

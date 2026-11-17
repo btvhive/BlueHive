@@ -26,6 +26,7 @@ import okhttp3.dnsoverhttps.DnsOverHttps
 import java.net.InetAddress
 import java.util.concurrent.TimeUnit
 import com.example.bluehive.BlueHiveApplication
+import com.example.bluehive.net.android5Tls
 
 /**
  * ONE place for every ExoPlayer setting shared by the site-specific players
@@ -1001,7 +1002,7 @@ object ExoPlayerConfig {
         // system resolver has to look up cloudflare-dns.com first, which is
         // exactly the lookup a DNS filter would intercept — self-defeating.
         val doh = DnsOverHttps.Builder()
-            .client(OkHttpClient.Builder().build())
+            .client(OkHttpClient.Builder().android5Tls().build())
             .url(DOH_URL.toHttpUrl())
             .bootstrapDnsHosts(
                 InetAddress.getByName("1.1.1.1"),
@@ -1022,7 +1023,7 @@ object ExoPlayerConfig {
     // OkHttpClient is immutable and built to be shared; a caller that needs
     // different timeouts can newBuilder() this one and share its pools.
     private val sharedOkHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
+        OkHttpClient.Builder().android5Tls()
             .dns(dohResolver)
             .followRedirects(true)
             .followSslRedirects(true)
@@ -1076,6 +1077,10 @@ object ExoPlayerConfig {
     @Volatile private var cronetEngine: org.chromium.net.CronetEngine? = null
 
     private fun cronet(context: Context): org.chromium.net.CronetEngine? {
+        // Android 5-7.0 (2026-11-17): Cronet checks certificates against the TV's
+        // own roots, which can lack Let's Encrypt there; OkHttp has the bundled
+        // ones (Android5Tls). No engine means the OkHttp path, as when one fails.
+        if (com.example.bluehive.net.Android5Tls.needsBundledRoots()) return null
         if (cronetTried) return cronetEngine
         synchronized(this) {
             if (cronetTried) return cronetEngine

@@ -4,6 +4,7 @@ import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
+import android.os.Build
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.SystemClock
@@ -418,20 +419,22 @@ object IdleWatcher {
     private fun scheduleCloseAlarm() {
         val ctx = appContext ?: return
         runCatching {
-            val am = ctx.getSystemService(AlarmManager::class.java)
+            val am = ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             // Inexact on purpose: no exact-alarm permission needed, and a few
-            // minutes late does not matter four hours out.
-            am.setAndAllowWhileIdle(
-                AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                lastInputAt + CLOSE_AFTER_IDLE_MS,
-                closeAlarmIntent(ctx),
-            )
+            // minutes late does not matter four hours out. Android 5 has no Doze,
+            // so a plain alarm fires the same way there.
+            val at = lastInputAt + CLOSE_AFTER_IDLE_MS
+            if (Build.VERSION.SDK_INT >= 23) {
+                am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, closeAlarmIntent(ctx))
+            } else {
+                am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, closeAlarmIntent(ctx))
+            }
         }.onFailure { Log.e(TAG, "close alarm not set: $it") }
     }
 
     private fun cancelCloseAlarm() {
         val ctx = appContext ?: return
-        runCatching { ctx.getSystemService(AlarmManager::class.java).cancel(closeAlarmIntent(ctx)) }
+        runCatching { (ctx.getSystemService(Context.ALARM_SERVICE) as AlarmManager).cancel(closeAlarmIntent(ctx)) }
     }
 
     /**

@@ -111,25 +111,36 @@ object DeviceIdentity {
      * throw — a device that cannot hold a key still deserves to sign in. The
      * backend stores public_key as nullable for exactly this reason.
      */
-    fun publicKeyBase64(): String? = runCatching {
+    fun publicKeyBase64(context: Context): String? = runCatching {
         val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
 
-        if (!ks.containsAlias(KEY_ALIAS)) {
-            val spec = KeyGenParameterSpec.Builder(
-                KEY_ALIAS,
-                KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY,
-            )
-                .setDigests(KeyProperties.DIGEST_SHA256)
-                .setAlgorithmParameterSpec(java.security.spec.ECGenParameterSpec("secp256r1"))
-                // Deliberately NOT setUserAuthenticationRequired(true): a TV has
-                // no lock screen in most living rooms, and requiring auth would
-                // make the key unusable on the devices we actually ship to.
-                .build()
+        if (!ks.containsAlias(KEY_ALIAS)) when (keyPath()) {
+            KeyPath.NONE -> {
+                Log.i(TAG, "Android ${Build.VERSION.SDK_INT}: no Keystore EC keys, registering without a key")
+                return@runCatching null
+            }
+            KeyPath.LEGACY -> {
+                createLegacyKey(context)
+                Log.i(TAG, "device keypair created in Keystore (Android ${Build.VERSION.SDK_INT}, legacy spec)")
+            }
+            // keyPath() already said Android 6+; the check repeats it for Lint.
+            KeyPath.MODERN -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val spec = KeyGenParameterSpec.Builder(
+                    KEY_ALIAS,
+                    KeyProperties.PURPOSE_SIGN or KeyProperties.PURPOSE_VERIFY,
+                )
+                    .setDigests(KeyProperties.DIGEST_SHA256)
+                    .setAlgorithmParameterSpec(java.security.spec.ECGenParameterSpec("secp256r1"))
+                    // Deliberately NOT setUserAuthenticationRequired(true): a TV has
+                    // no lock screen in most living rooms, and requiring auth would
+                    // make the key unusable on the devices we actually ship to.
+                    .build()
 
-            KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
-                .apply { initialize(spec) }
-                .generateKeyPair()
-            Log.i(TAG, "device keypair created in Keystore")
+                KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore")
+                    .apply { initialize(spec) }
+                    .generateKeyPair()
+                Log.i(TAG, "device keypair created in Keystore")
+            }
         }
 
         val cert = ks.getCertificate(KEY_ALIAS) ?: return@runCatching null
@@ -137,6 +148,47 @@ object DeviceIdentity {
     }.onFailure {
         Log.w(TAG, "no usable keystore (${it.message}) — registering without a key")
     }.getOrNull()
+
+    /**
+     * How this Android version makes the device key (Android 5 support, 2026-11-17).
+     * MODERN: KeyGenParameterSpec, Android 6+, unchanged. LEGACY: Android 4.4-5.1,
+     * the older KeyPairGeneratorSpec, which can also make an EC P-256 key in the
+     * Android Keystore (EC arrived in 4.4), so the server receives the same kind
+     * of public key. NONE: older still; register without one. Pure, so it is tested.
+     */
+    enum class KeyPath { MODERN, LEGACY, NONE }
+
+    fun keyPath(sdk: Int = Build.VERSION.SDK_INT): KeyPath = when {
+        sdk >= Build.VERSION_CODES.M -> KeyPath.MODERN
+        sdk >= Build.VERSION_CODES.KITKAT -> KeyPath.LEGACY
+        else -> KeyPath.NONE
+    }
+
+    /** Android 4.4-5.1: the same EC P-256 key, made with the pre-Android-6 spec. */
+    @Suppress("DEPRECATION")
+    private fun createLegacyKey(context: Context) {
+        val now = java.util.Calendar.getInstance()
+        // 20 years, ending before 2050: older keystores mishandle certificate
+        // dates written in the post-2049 format.
+        val end = (now.clone() as java.util.Calendar).apply { add(java.util.Calendar.YEAR, 20) }
+        val spec = android.security.KeyPairGeneratorSpec.Builder(context.applicationContext)
+            .setAlias(KEY_ALIAS)
+            .setKeyType("EC")
+            .setKeySize(256)
+            .setSubject(javax.security.auth.x500.X500Principal("CN=$KEY_ALIAS"))
+            .setSerialNumber(java.math.BigInteger.ONE)
+            .setStartDate(now.time)
+            .setEndDate(end.time)
+            .build()
+        // "RSA" IS RIGHT EVEN FOR AN EC KEY. Before Android 6 the AndroidKeyStore
+        // provider registers its generator only as KeyPairGenerator.RSA; the key
+        // type comes from setKeyType("EC") above. getInstance("EC", ...) throws
+        // "KeyPairGenerator EC implementation not found" (Android 5.1 emulator,
+        // 2026-11-17), which left the TV with no key at all.
+        KeyPairGenerator.getInstance("RSA", "AndroidKeyStore")
+            .apply { initialize(spec) }
+            .generateKeyPair()
+    }
 
     /**
      * Which app installed this APK, or null when nothing claimed it (adb, or an
