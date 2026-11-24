@@ -18,6 +18,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.layout.layout
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -305,11 +307,15 @@ fun ShelfStack(
             else -> ContentShelf.entries.filter {
                 it != ContentShelf.ANIME_SERIES &&
                         it != ContentShelf.ANIME_MOVIES &&
-                        it != ContentShelf.ANIME_NEW_SEASON
+                        it != ContentShelf.ANIME_NEW_SEASON &&
+                        // Top Rated lives inside What's Popular now (one and one).
+                        it != ContentShelf.TOP_RATED
             }
         }
     }
     val repository = remember { ShelfRepository() }
+    // The red tabs on cards anywhere in the app come from this list (both types).
+    LaunchedEffect(Unit) { NewContent.ensureLoaded() }
 
     // Visual position of the focused row.  Lives here (not in the tracker)
     // because it's rememberSaveable — survives rotation.
@@ -772,13 +778,17 @@ fun ShelfStack(
                             isFocused            = isFocused,
                             cardFocusEpoch       = tracker.cardFocusEpoch(shelf),
                             stackHasFocus        = stackHasFocus,
+                            // THE FIRST ROW, whichever it is (Fresh Picks since
+                            // 2026-11-20, Popular before): Continue Watching sits
+                            // beside it and the loading cover waits for it.
                             showContinueWatching = showContinueWatching
-                                    && shelf == ContentShelf.POPULAR,
+                                    && shelf == shelves.first(),
                             reserveContinueWatching = reserveContinueWatching,
                             onMediaClick         = onMediaClick,
                             profileId            = profileId,
-                            onFirstPageReady     = if (shelf == ContentShelf.POPULAR) onFirstPageReady else ({ }),
+                            onFirstPageReady     = if (shelf == shelves.first()) onFirstPageReady else ({ }),
                             onExitLeft           = onExitLeft,
+                            isFirstShelf         = shelf == shelves.first(),
                         )
                     }
                 }
@@ -792,13 +802,41 @@ fun ShelfStack(
         // 21sp since v551 (23 before, the owner's call), and 1dp lower so the
         // smaller line keeps its centre beside the MOVIES / TV SHOWS / ANIME tabs.
         // Filled with SHELF_TITLE_BRUSH since v552.
-        Text(
-            text = focusedShelfTitle,
-            style = SHELF_TITLE_STYLE,
+        // THE TITLE SHRANK (fixed 2026-11-21). MEASURED on the Fire TV Stick 4K:
+        // going back to a title the same Text had already shown, it was laid
+        // out with fontSize = Unspecified -- the 14sp default, 113x30 px
+        // instead of 167x46 -- although SHELF_TITLE_STYLE never changes. So the
+        // size and font are also passed directly, and each title gets a fresh
+        // Text (key), so the reused-node path that lost them is never taken.
+        androidx.compose.runtime.key(focusedShelfTitle) {
+        // The title, and for Fresh Picks the "24" refresh badge right after it
+        // (owner's pick 2026-11-21, mock-up refresh 9), fading with the title.
+        androidx.compose.foundation.layout.Row(
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
             modifier = Modifier
                 .offset(x = (-29).dp, y = (-69).dp)
                 .graphicsLayer { alpha = headerAlpha },
-        )
+        ) {
+            Text(
+                text = focusedShelfTitle,
+                style = SHELF_TITLE_STYLE,
+                fontSize = SHELF_TITLE_SIZE,
+                fontFamily = AppTypography.passionRegular,
+            )
+            if (focusedShelf == ContentShelf.FRESH_PICKS) {
+                androidx.compose.foundation.layout.Spacer(Modifier.width(7.dp))
+                // ZERO HEIGHT IN THE ROW, drawn centred on its middle line:
+                // the 28dp badge is taller than the title's line, and letting
+                // it size the Row pushed "Fresh Picks" 10 px down (measured).
+                FreshPicksBadge(Modifier.layout { m, c ->
+                    val p = m.measure(c)
+                    layout(p.width, 0) { p.place(0, -p.height / 2) }
+                })
+            }
+        }
+        }
+        // No "New picks in 1 day" line beside the tabs: tried 2026-11-21 and
+        // dropped at the owner's call ("looks clustered").
     }
 }
 
@@ -823,6 +861,8 @@ private fun ShelfRowContent(
     onFirstPageReady: () -> Unit = {},
     onExitLeft: () -> Unit = {},
     reserveContinueWatching: Boolean = true,
+    /** The tab's first row: the narrow 610.dp viewport beside Continue Watching. */
+    isFirstShelf: Boolean = false,
 ) {
     // Pagination knobs — unchanged from the old HomeSingleShelf.
     val pageSize        = 20
@@ -941,6 +981,10 @@ private fun ShelfRowContent(
             }
 
             if (prefetched != null && prefetched.items.isNotEmpty()) {
+                // Used as is: the loading screen's prefetch (Appwarmup) goes
+                // through ShelfRepository.loadPage, so What's Popular's first
+                // page already has Top Rated mixed in. Mixing it here again
+                // (tried 2026-11-21) read popular, top, top, popular...
                 pageWindow.loadedPages[0]   = prefetched.items
                 pageWindow.windowStartPage  = 0
                 pageWindow.windowEndPage    = 0
@@ -1066,8 +1110,10 @@ private fun ShelfRowContent(
     // it. POPULAR is the first shelf for Movies/TV; ANIME_NEW_SEASON is the
     // first shelf for the Anime tab. Both need the 610.dp viewport. Gating on
     // shelf identity (not showContinueWatching) keeps the structure stable so
-    // the search-bar focus bug stays fixed.
-    if (shelf == ContentShelf.POPULAR || shelf == ContentShelf.ANIME_NEW_SEASON) {
+    // the search-bar focus bug stays fixed. Since 2026-11-20 the first shelf of
+    // Movies/TV is FRESH_PICKS, so this is "the tab's first shelf", passed in
+    // (still a fixed property of the shelf, so the structure stays stable).
+    if (isFirstShelf) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Start,

@@ -128,10 +128,12 @@ private val GOLD         = Color(0xFFD19814)
 // Search and Done, the keys that hand the text on: the details pages' Search
 // button's amethyst, read from it so the two cannot drift, with white on it
 // (the user's calls: Search 2026-10-28, Done -- the profile name keyboard --
-// 2026-10-29, both gold with dark text before; forest green until v625). A
-// flat key, so it takes the button's band -- the brighter purple the button
-// reads as -- not its darker top.
-private val FINISH_PURPLE = SearchButtonColors.band
+// 2026-10-29, both gold with dark text before; forest green until v625). The
+// button is ONE colour since 2026-11-20, so this is its face. It read the old
+// split's `band` until then -- and when the band was removed that silently
+// became Unspecified: Search drew as bare text with no purple (caught on the
+// TV the same day). mainDefault always exists.
+private val FINISH_PURPLE = SearchButtonColors.mainDefault
 private val VOICE_BLUE   = Color(0xFF4C63AC)
 private val VOICE_LIT    = Color(0xFF7C93DC)
 private val PLACEHOLDER  = Color(0x806F7482)       // the hint in the empty box, at half opacity

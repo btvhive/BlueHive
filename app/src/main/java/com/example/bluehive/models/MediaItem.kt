@@ -80,6 +80,19 @@ data class MediaItem(
     // and nullable because Gson would otherwise read a missing field as false.
     @SerializedName("on_streaming")
     val onStreaming: Boolean? = null,
+
+    // New content (2026-11-21): "NEW RELEASE"/"HD", "NEW SEASON"/"S3",
+    // "NEW EPISODE"/"S2 E5". Only /api/new-content sets them; other rows find
+    // their red tab through NewContent.tabFor.
+    @SerializedName("new_label")
+    val newLabel: String? = null,
+    @SerializedName("new_detail")
+    val newDetail: String? = null,
+
+    // Set by the app on the New Releases row's own cards: no red tab there
+    // (the whole row is new). Never sent or read by the server.
+    @Transient
+    val hideNewTab: Boolean = false,
 )
 
 data class GenreDto(
@@ -110,7 +123,11 @@ data class MediaBrowseResponse(
     val count: Int,
     val limit: Int,
     val offset: Int,
-    val items: List<MediaItem>
+    val items: List<MediaItem>,
+
+    /** Fresh Picks only: when this day's set is replaced (ISO-8601, UTC). */
+    @SerializedName("window_ends_at")
+    val windowEndsAt: String? = null,
 )
 
 

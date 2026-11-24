@@ -1,6 +1,7 @@
 package com.example.bluehive.livetv
 
 import android.content.Context
+import com.example.bluehive.BuildConfig
 import com.example.bluehive.api.ApiClient
 import com.example.bluehive.api.LiveRowDto
 import com.example.bluehive.utilities.runCatchingCancellable
@@ -18,6 +19,10 @@ import kotlinx.coroutines.coroutineScope
  */
 internal object LiveTvData {
 
+    /** X-Live-Test on a LIVE_TEST build's Live TV requests (the test server); nothing otherwise. */
+    fun testHeaders(): Map<String, String> =
+        if (BuildConfig.LIVE_TEST) mapOf("X-Live-Test" to "1") else emptyMap()
+
     const val RECENT_ROW = "Recently watched"
     const val KIDS_ROW = "Kids"
     private const val RECENT_MAX = 10
@@ -31,6 +36,17 @@ internal object LiveTvData {
     // The last list from the server, so picking a state rebuilds the rows at once.
     @Volatile private var lastServer: List<LiveRowDto> = emptyList()
     @Volatile private var lastKids = false
+    // Whose list [lastServer] is: only that profile's page may open on it.
+    @Volatile private var lastProfile: Int? = null
+
+    /**
+     * The last list again for [profileId], built with no network: the page opens
+     * on it at once while the fresh one loads. Null before the first load in this
+     * app run, or when the last list was another profile's (a kids profile never
+     * opens on a list loaded for someone else).
+     */
+    fun cached(context: Context, profileId: Int): List<Row>? =
+        if (lastProfile == profileId && lastServer.isNotEmpty()) rebuild(context, profileId) else null
 
     data class Channel(
         val id: String,
@@ -110,6 +126,7 @@ internal object LiveTvData {
         }
         lastServer = channels.await().rows
         lastKids = kids.await()
+        lastProfile = profileId
         rebuild(context, profileId)
     }
 

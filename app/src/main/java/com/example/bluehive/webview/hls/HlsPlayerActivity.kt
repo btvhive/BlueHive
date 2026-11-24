@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,6 +102,31 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
     // player and playerView now live in SubtitlePlayerActivity.
     private var trackSelector: DefaultTrackSelector? = null
 
+    /**
+     * QUALITY, LEFT OF SUBTITLES (owner, 2026-11-20): design #2 -- the sliders
+     * and "Quality: 4K" -- in a pill twin to Subtitles, inserted directly
+     * before it. Runs for each new PlayerView (a fresh-surface rebuild makes
+     * one), so the pill is rebuilt with the bar.
+     */
+    override fun onSubtitlesPillAdded(bar: android.widget.LinearLayout, subtitles: View) {
+        if (!quality.enabled) return
+        val pill = LayoutInflater.from(bar.context).inflate(R.layout.vidapi_quality_button, bar, false)
+        bar.addView(pill, bar.indexOfChild(subtitles))
+        quality.bindButton(pill) { hideBarAfterThisKey() }
+    }
+
+    // Quality: Auto (4K where the TV shows it, stepping down when playback is
+    // choppy) or the viewer's pick from the Quality button. VidNest only for
+    // now; every other source keeps the old 1080p policy. See QualityRules.
+    private val quality by lazy {
+        HlsQualityController(
+            activity = this,
+            tag = TAG,
+            enabled = intent.getStringExtra("SOURCE_NAME") in HlsQualityController.SOURCES,
+            notify = { showToast(it) },
+        )
+    }
+
     // What the backend times a subtitle against. currentM3u8 is whichever URL is
     // actually playing — direct or relay — so a measurement always describes the
     // stream the viewer is hearing.
@@ -114,6 +140,14 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
     // Decided on DOWN and reused on UP, so the controls appearing between the two
     // can't split one press across both paths.
     private var centerWentToController = false
+    /** A bar button OK was pressed on while the bar was fading out; clicked on the UP. */
+    private var centerFadeTarget: View? = null
+
+    private fun isInside(v: View, ancestor: View): Boolean {
+        var p = v.parent
+        while (p != null) { if (p === ancestor) return true; p = p.parent }
+        return false
+    }
 
     private var loggedDuration = false
     private var extractRetries = 0
@@ -842,7 +876,10 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         //
         // It only surfaced once a re-extraction actually SUCCEEDED and got as far
         // as rebuilding; every earlier failure died before this line.
-        val selector = ExoPlayerConfig.trackSelector(this).also { trackSelector = it }
+        // VidNest: the quality controller's adaptive selector (Auto steps land at
+        // a chunk boundary, buffer kept). Every other source: the shared one.
+        val selector = (if (quality.enabled) quality.trackSelector() else ExoPlayerConfig.trackSelector(this))
+            .also { trackSelector = it }
         ExoPlayerConfig.applyVideoPolicy(selector)
 
         player = ExoPlayerConfig.buildPlayer(this, selector)
@@ -852,6 +889,9 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
                 val builtPlayer: ExoPlayer = this
                 // Diagnostic only: logs the rung actually selected + all rungs offered.
                 ExoPlayerConfig.attachVideoTrackLog(this, TAG)
+                // The quality cap (Auto or the viewer's pick), carried across
+                // every rebuild of the player.
+                quality.attach(this)
                 // Hold the display awake while playback is intended (incl. stalls).
                 // Attached here, not at the PlayerView, so a mid-play re-extract
                 // that rebuilds the player re-arms it.
@@ -1357,12 +1397,27 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
                                 // Inject our subtitle CC + timing buttons into the
                                 // control bar each time it appears (guarded to once).
                                 attachBandChrome(this)
+                                // The Quality pill is added beside Subtitles in
+                                // onSubtitlesPillAdded; the shared bar's bare
+                                // sliders button stays GONE here (anime's own).
                             }
                         }
                     )
                     }
 
                     SubtitleLayer()
+
+                    // The Quality picker, over the captions; the anime player's own.
+                    if (quality.overlayOpen.value) {
+                        val v = quality.version.intValue
+                        val labels = remember(v) { quality.options() }
+                        com.example.bluehive.utilities.VideoQualityOverlay(
+                            options = labels,
+                            selectedIndex = remember(v) { quality.selectedIndex() },
+                            onSelect = { quality.select(it) },
+                            highlightedIndex = quality.highlight.intValue,
+                        )
+                    }
 
                     // UP NEXT, LAST: over the player, its control bar and the
                     // captions alike.
@@ -1443,6 +1498,14 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         } catch (_: Exception) { "https://cinesrc.st" }
 
         val factory = streamDataSourceFactory(url, ua, referer)
+
+        // DASH first (2026-11-23, Website 4's Lyra). Before this a ".mpd" URL
+        // fell into the HLS branch below; DASH never reached this player until now.
+        if (ExoPlayerConfig.looksDash(url)) {
+            lastUsedHls = false
+            Log.e(TAG, "🎞 source=dash url=${url.take(80)}")
+            return ExoPlayerConfig.dashMediaSource(url, factory)
+        }
 
         // Decided from the URL, NOT from the backend's is_hls flag. The player is
         // handed a URL from several places — the relay, a mid-play re-extraction,
@@ -1794,6 +1857,9 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         if (pickerOpen || subMenuOpen || fixSeqOpen || styleOpen) {
             return super.dispatchKeyEvent(event)
         }
+        // The Quality picker owns the remote while it is up, driven here rather
+        // than by Compose focus (see VideoQualityOverlay's highlightedIndex).
+        if (quality.overlayOpen.value) return quality.handleKey(event)
         // Up Next's card and prompt take the remote while they are up.
         if (upNext?.handleKey(
                 event,
@@ -1837,13 +1903,33 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
             // raise the controls.
             if (ExoPlayerConfig.isCenterKey(event.keyCode)) {
                 if (event.action == KeyEvent.ACTION_DOWN) {
+                    centerFadeTarget = null
                     if (playerView?.isControllerFullyVisible == true) {
                         centerWentToController = true
                         return super.dispatchKeyEvent(event)   // activate focused control
                     }
                     centerWentToController = false
+                    // THE BAR IS FADING OUT, BUT IT IS STILL ON SCREEN WITH A
+                    // BUTTON LIT. MEASURED on the Fire TV Stick 4K: "fully
+                    // visible" turns false the moment the 3 s fade starts, so an
+                    // OK aimed at Subtitles in that window paused the film
+                    // instead (5 of 5 at 2.2-3.0 s). The lit button gets the
+                    // press. Clicked directly, not through PlayerView, which
+                    // would spend the press re-showing the bar.
+                    val ctrl = playerView?.findViewById<View>(androidx.media3.ui.R.id.exo_controller)
+                    val lit = window.decorView.findFocus()
+                    if (ctrl != null && lit != null && lit !== ctrl &&
+                        ExoPlayerConfig.isControllerShowing(playerView) && isInside(lit, ctrl)) {
+                        centerFadeTarget = lit
+                        return true
+                    }
                     ExoPlayerConfig.togglePlayPause(p)
                     Log.d(TAG, "⏯ centre key → playWhenReady=${p.playWhenReady}")
+                    return true
+                }
+                centerFadeTarget?.let { target ->
+                    centerFadeTarget = null
+                    target.performClick()
                     return true
                 }
                 // Mirror the DOWN decision on the UP so a focused button gets a
@@ -1889,6 +1975,7 @@ class HlsPlayerActivity : SubtitlePlayerActivity() {
         // mid-playback leaked engines until Cronet stopped building at all.
         ExoPlayerConfig.applyPendingQuicHints()
         Log.d(TAG, "🧹 onDestroy — releasing player")
+        quality.detach()
         // Unconditionally, and before anything can throw. onIsPlayingChanged is not
         // guaranteed to fire false on the way out — a process kill, a crash during
         // teardown, or release() while paused all skip it — and a source left

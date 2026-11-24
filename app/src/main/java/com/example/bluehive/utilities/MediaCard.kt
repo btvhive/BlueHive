@@ -149,6 +149,16 @@ fun MediaCard(
             val goodCopy = remember(mediaItem) { GoodCopyCountdown.labelFor(mediaItem) }
             if (goodCopy != null) {
                 GoodCopyBadge(goodCopy, Modifier.align(Alignment.TopStart))
+            } else if (!mediaItem.hideNewTab) {
+                // 🔹 New content – the red tab hanging from the poster's top edge,
+                // on this title wherever it already is (any row, search...) except
+                // the New Releases row itself. Looked up, never inserted: no row
+                // changes because of it. Never together with the countdown: a
+                // title still counting down to HD is never new (server + eligible).
+                val tab = com.example.bluehive.singleShelfComponents.NewContent.tabFor(mediaItem)
+                if (tab != null) {
+                    NewContentTab(tab.first, tab.second, Modifier.align(Alignment.TopCenter))
+                }
             }
         }
 

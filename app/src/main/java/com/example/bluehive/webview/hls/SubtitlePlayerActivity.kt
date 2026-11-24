@@ -145,6 +145,9 @@ abstract class SubtitlePlayerActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Every film, episode and anime player (HLS and Miruro) opens here, from
+        // a details page, Continue Watching or Up Next alike.
+        BlueHiveApplication.freeImageMemory("player opened")
         onBackPressedDispatcher.addCallback(this, backOutCallback)
     }
 
@@ -874,8 +877,29 @@ abstract class SubtitlePlayerActivity : ComponentActivity() {
      * Undone only by closeAllSubtitleUi, which is the single way out.
      */
     protected fun claimRemoteForSubtitleUi() {
-        playerView?.hideController()
         playerView?.setControllerAutoShow(false)
+        hideBarAfterThisKey()
+    }
+
+    /**
+     * Hide the control bar once the key press that is running now is finished.
+     *
+     * NOT hideController() HERE AND NOW. MEASURED on the Fire TV Stick 4K
+     * (2026-11-20, focus trace with the real remote): a bar button's click runs
+     * INSIDE PlayerView.dispatchKeyEvent, and when the click returns, media3
+     * calls maybeShowController(true) for that same key ("handled, so show the
+     * controls or extend their timeout"). With the bar already fading out, media3
+     * queues the show (needToShowBars) and the bar came BACK behind the panel
+     * with a fresh 3 s timer. When that timer faded it out, the bar went GONE
+     * while it held focus; Android re-placed focus through Compose into the
+     * player (the hidden scrubber) and the panel's one focus request went with
+     * it -- the Subtitles menu sat on screen with nothing highlighted.
+     * Posted, the hide runs after media3's "extend the timeout", so nothing is
+     * queued and the bar stays down.
+     */
+    protected fun hideBarAfterThisKey() {
+        val pv = playerView ?: return
+        pv.post { pv.hideController() }
     }
 
     /** Leave the track list for the menu, resuming what the list paused. */
@@ -1616,7 +1640,15 @@ abstract class SubtitlePlayerActivity : ComponentActivity() {
         // Log.e: R8 strips Log.d from release, and this is the one line that
         // proves the custom control bar still carries the subtitle entry point.
         Log.e(TAG, "subs: injected subtitles button into control bar")
+        onSubtitlesPillAdded(bar, button)
     }
+
+    /**
+     * The Subtitles pill has just been added to [bar] (once per PlayerView).
+     * A player places its own pills relative to it here -- the website player
+     * puts Quality immediately to its LEFT (owner, 2026-11-20).
+     */
+    protected open fun onSubtitlesPillAdded(bar: LinearLayout, subtitles: View) {}
 
     /**
      * The whole drift feature, with no UI attached.

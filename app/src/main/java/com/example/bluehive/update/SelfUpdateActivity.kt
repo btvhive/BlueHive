@@ -34,6 +34,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -1026,7 +1029,14 @@ private fun UpdateScreen(
     // ANIMATED, because the raw value arrives in bursts. Progress is emitted per
     // 64KB chunk over a LAN, so the unsmoothed bar jumps in visible steps and
     // reads as stuttering rather than downloading.
-    val shown by animateFloatAsState(
+    //
+    // READ ONLY WHILE DRAWING (2026-11-19), like spin and halo below: these are
+    // States read inside the dial's own draw layers, never while composing.
+    // Read here (`by`), every frame of the spin, the halo or the bar rebuilt
+    // and redrew this whole screen -- the Fire TV Stick 4K (Android 7) problem
+    // that held the movie loader's globe to ~10 fps. The percentage is the one
+    // composed read, and it changes only when the whole number does.
+    val shown = animateFloatAsState(
         targetValue = progress.coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
         label = "progress",
@@ -1035,7 +1045,9 @@ private fun UpdateScreen(
     val motion = rememberInfiniteTransition(label = "dial")
 
     // The chasing arc for the unknown-duration case.
-    val spin by motion.animateFloat(
+    val percent by remember(shown) { derivedStateOf { (shown.value * 100).toInt() } }
+
+    val spin = motion.animateFloat(
         initialValue = -90f,
         targetValue = 270f,
         animationSpec = infiniteRepeatable(
@@ -1047,7 +1059,7 @@ private fun UpdateScreen(
 
     // A slow pulse on the halo. The one moving thing on an otherwise still
     // screen, so a stalled download still looks alive rather than frozen.
-    val halo by motion.animateFloat(
+    val halo = motion.animateFloat(
         initialValue = 0.25f,
         targetValue = 0.7f,
         animationSpec = infiniteRepeatable(
@@ -1074,21 +1086,23 @@ private fun UpdateScreen(
                 // Halo. Drawn behind everything and kept very low alpha: it is
                 // depth, not decoration, and a TV panel crushes dark blues badly
                 // enough that anything stronger bands.
-                Box(
+                // Its pulse is the paint's alpha: 0.16 x halo at the centre
+                // fading to nothing, the same as the old per-frame brush.
+                Spacer(
                     modifier = Modifier
                         .size(RING_DIAMETER)
-                        .clip(CircleShape)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    accent.copy(alpha = 0.16f * halo),
-                                    Color.Transparent,
-                                ),
+                        .graphicsLayer()
+                        .drawWithCache {
+                            val brush = Brush.radialGradient(
+                                colors = listOf(accent.copy(alpha = 0.16f), Color.Transparent),
                             )
-                        )
+                            onDrawBehind { drawCircle(brush, alpha = halo.value) }
+                        }
                 )
 
-                Canvas(modifier = Modifier.size(RING_DIAMETER)) {
+                Canvas(modifier = Modifier.size(RING_DIAMETER).graphicsLayer()) {
+                    val spin = spin.value
+                    val shown = shown.value
                     val stroke = RING_STROKE_WIDTH.toPx()
                     // Inset by half the stroke, otherwise a round cap is clipped
                     // by the canvas edge and the ring looks flattened at 0 and
@@ -1160,7 +1174,7 @@ private fun UpdateScreen(
             // the same weight the indeterminate state uses.
             if (!indeterminate && !stopped) {
                 Text(
-                    text = "${(shown * 100).toInt()}%",
+                    text = "$percent%",
                     color = textPrimary,
                     fontSize = 36.sp,
                     fontWeight = FontWeight.Medium,

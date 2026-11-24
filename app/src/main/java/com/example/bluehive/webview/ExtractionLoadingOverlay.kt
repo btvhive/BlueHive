@@ -16,6 +16,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.*
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -376,36 +377,44 @@ internal val BAR_GAP = 16.dp
 internal val TOP_SPACE = 98.dp
 internal val NOTE_SLOT = 36.dp
 
+/**
+ * The faint honeycomb. Built ONCE per size as a single path (drawWithCache) and
+ * kept in its own layer: it was ~700 separate hexagon paths rebuilt on every
+ * frame while the globe turned (see GlobeLoader's layer note).
+ */
 @Composable
 private fun HoneycombBackground() {
-    Canvas(Modifier.fillMaxSize()) {
-        val hexSize = 34.dp.toPx()
-        val hexW    = hexSize * sqrt(3f)
-        val hexH    = hexSize * 2f
-        val cols    = (size.width  / hexW).toInt() + 2
-        val rows    = (size.height / (hexH * 0.75f)).toInt() + 2
-
-        for (row in -1..rows) {
-            for (col in -1..cols) {
-                val xOff = if (row % 2 == 0) 0f else hexW / 2f
-                val cx   = col * hexW + xOff
-                val cy   = row * hexH * 0.75f
-
-                val path = Path().apply {
-                    for (i in 0 until 6) {
-                        val a = Math.toRadians((60.0 * i) - 30.0)
-                        val x = cx + hexSize * cos(a).toFloat()
-                        val y = cy + hexSize * sin(a).toFloat()
-                        if (i == 0) moveTo(x, y) else lineTo(x, y)
+    Spacer(
+        Modifier
+            .fillMaxSize()
+            .graphicsLayer()
+            .drawWithCache {
+                val hexSize = 34.dp.toPx()
+                val hexW    = hexSize * sqrt(3f)
+                val hexH    = hexSize * 2f
+                val cols    = (size.width  / hexW).toInt() + 2
+                val rows    = (size.height / (hexH * 0.75f)).toInt() + 2
+                val stroke  = Stroke(0.6.dp.toPx())
+                // Every edge is shared by two hexagons. Drawn hexagon by hexagon
+                // (as before) each edge was painted twice at 0.045; one path
+                // paints it once, so 0.088 = 1 - (1 - 0.045)^2 keeps the look.
+                val color   = Color(0xFF3355FF).copy(alpha = 0.088f)
+                val path    = Path()
+                for (row in -1..rows) {
+                    for (col in -1..cols) {
+                        val xOff = if (row % 2 == 0) 0f else hexW / 2f
+                        val cx   = col * hexW + xOff
+                        val cy   = row * hexH * 0.75f
+                        for (i in 0 until 6) {
+                            val a = Math.toRadians((60.0 * i) - 30.0)
+                            val x = cx + hexSize * cos(a).toFloat()
+                            val y = cy + hexSize * sin(a).toFloat()
+                            if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                        }
+                        path.close()
                     }
-                    close()
                 }
-                drawPath(
-                    path,
-                    Color(0xFF3355FF).copy(alpha = 0.045f),
-                    style = Stroke(0.6.dp.toPx())
-                )
+                onDrawBehind { drawPath(path, color, style = stroke) }
             }
-        }
-    }
+    )
 }

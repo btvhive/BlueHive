@@ -112,6 +112,40 @@ object CrashReporter {
 
     // ── 2. Upload on next launch ──────────────────────────────────────────────
 
+    /**
+     * ONE report per lock, naming the request the server refused (2026-11-18).
+     *
+     * The lock screen says only "Connection trouble", on purpose, and release
+     * builds strip warning logs, so a lock was undiagnosable from the TV: on
+     * 2026-11-18 it took the server's logs to find that Live TV's
+     * GET /api/live/channels had been refused 403 entitlement_inactive.
+     *
+     * A locked account cannot upload (the report endpoint is gated like the
+     * rest), so this is saved to disk like a crash and goes up with the next
+     * flush: when the lock clears (ServiceLockoutActivity) or at the next start.
+     * A lock already waiting to be sent is not written again, however many
+     * refusals follow it. No log lines: just what was refused and why.
+     */
+    fun noteLockout(context: Context, refused: String, why: String) {
+        try {
+            val dir = File(context.filesDir, DIR_NAME).apply { mkdirs() }
+            if (dir.listFiles { f -> f.name.startsWith("lockout-") }?.isNotEmpty() == true) return
+            val body = buildReport(
+                context = context,
+                reportType = "diagnostic",
+                extraMeta = mapOf(
+                    "event" to "lockout",
+                    "refused_request" to refused,
+                    "refused_why" to why,
+                    "screen" to "Connection trouble",
+                ),
+            ).copy(log_lines = null, exception_message = "lockout: $refused ($why)")
+            File(dir, "lockout-${System.currentTimeMillis()}.json").writeText(gson.toJson(body))
+        } catch (t: Throwable) {
+            Log.w(TAG, "lockout note failed: ${t.message}")
+        }
+    }
+
     /** Fire-and-forget: call from Application.onCreate after SessionManager.init. */
     fun flushPendingAsync(context: Context) {
         ioScope.launch {

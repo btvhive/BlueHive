@@ -58,11 +58,14 @@ class ChunkUnwrapTest {
         width: Int = 64,
         colour: Int = 2,
         tag: String = "TIKTIKPX",
+        gzip: Boolean = tag != "KWP1",
+        sizeOverride: Int? = null,
         filterFor: (Int) -> Int = { it % 5 },
     ): ByteArray {
         val bpp = mapOf(0 to 1, 4 to 2, 2 to 3, 6 to 4).getValue(colour)
-        val gz = ByteArrayOutputStream().also { GZIPOutputStream(it).use { g -> g.write(payload) } }.toByteArray()
-        val data = tag.toByteArray(Charsets.ISO_8859_1) + be(gz.size) + gz
+        val gz = if (!gzip) payload
+            else ByteArrayOutputStream().also { GZIPOutputStream(it).use { g -> g.write(payload) } }.toByteArray()
+        val data = tag.toByteArray(Charsets.ISO_8859_1) + be(sizeOverride ?: gz.size) + gz
         val stride = width * bpp
         val rows = (data.size + stride - 1) / stride
         val px = data + ByteArray(rows * stride - data.size)
@@ -112,9 +115,42 @@ class ChunkUnwrapTest {
         assertArrayEquals(payload, unwrap(bytes).stream.readBytes())
     }
 
-    @Test(expected = IOException::class)
-    fun webp_withNoVideoChunk_failsLoudly() {
-        unwrap(webp(riffChunk("VP8L", ByteArray(13)))).stream.readBytes()
+    @Test
+    fun webp_withNoVideoChunk_isAnUnreadableImage() {
+        // Was an IOException; since 2026-11-18 it goes to the server relay instead.
+        assertEquals(ChunkUnwrap.Kind.UNREADABLE_IMAGE, unwrap(webp(riffChunk("VP8L", ByteArray(13)))).kind)
+    }
+
+    @Test
+    fun kwp1_asMeasured_673WideRgbEveryRowFilter_givesTheExactTs() {
+        // zlive 2026-11-18: b"KWP1" + u32 size + the TS itself, no gzip.
+        val payload = ts(7000)
+        val out = unwrap(pixelPng(payload, width = 673, colour = 2, tag = "KWP1"))
+        assertEquals(ChunkUnwrap.Kind.PIXEL_PNG, out.kind)
+        assertArrayEquals(payload, out.stream.readBytes())
+    }
+
+    @Test
+    fun kwp1_greyAndRgba_andResumedAtAnOffset() {
+        val payload = ts(300)
+        assertArrayEquals(payload, ChunkUnwrap.decodePixelPng(pixelPng(payload, width = 100, colour = 0, tag = "KWP1")))
+        val out = unwrap(pixelPng(payload, width = 37, colour = 6, tag = "KWP1"))
+        ChunkUnwrap.skipFully(out.stream, 1880)
+        assertArrayEquals(payload.copyOfRange(1880, payload.size), out.stream.readBytes())
+    }
+
+    @Test
+    fun kwp1_aSizeLargerThanThePicture_isNotDecoded() {
+        assertNull(ChunkUnwrap.decodePixelPng(pixelPng(ts(10), tag = "KWP1", sizeOverride = 1_000_000)))
+        assertNull(ChunkUnwrap.decodePixelPng(pixelPng(ts(10), tag = "KWP1", sizeOverride = 0)))
+    }
+
+    @Test
+    fun otherPictures_areUnreadableImages_soTheRelayGetsThem() {
+        val jpeg = byteArrayOf(0xff.toByte(), 0xd8.toByte(), 0xff.toByte(), 0xe0.toByte()) + ByteArray(500)
+        val gif = "GIF89a".toByteArray() + ByteArray(500)
+        val avif = byteArrayOf(0, 0, 0, 0x1c) + "ftypavif".toByteArray() + ByteArray(500)
+        for (b in listOf(jpeg, gif, avif)) assertEquals(ChunkUnwrap.Kind.UNREADABLE_IMAGE, unwrap(b).kind)
     }
 
     @Test
@@ -176,11 +212,12 @@ class ChunkUnwrapTest {
     }
 
     @Test
-    fun ordinaryPng_passesThroughUntouched() {
+    fun aPngInAnUnknownWrapping_isAnUnreadableImage_bytesIntact() {
+        // Was PASSTHROUGH (and failed in ExoPlayer); since 2026-11-18 the relay gets it.
         val picture = pixelPng(ts(10), tag = "NOTVIDEO")
         assertNull(ChunkUnwrap.decodePixelPng(picture))
         val out = unwrap(picture)
-        assertEquals(ChunkUnwrap.Kind.PASSTHROUGH, out.kind)
+        assertEquals(ChunkUnwrap.Kind.UNREADABLE_IMAGE, out.kind)
         assertArrayEquals(picture, out.stream.readBytes())
     }
 

@@ -435,7 +435,7 @@ fun start() {
                     // this. The SSE path simply never got the same treatment.
                     if (detail?.optString("code") == "entitlement_inactive") {
                         Log.w(TAG, "SSE connect 403 entitlement_inactive — entitlement lock")
-                        HostEntitlementRelay.markInactiveFromServer()
+                        HostEntitlementRelay.markInactiveFromServer("SSE connect (device event stream)")
                         return@withContext ConnectResult.REVOKED
                     }
 

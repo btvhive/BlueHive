@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.api.ApiClient
+import com.example.bluehive.api.LyraResolver
 import com.example.bluehive.api.SourceCatalog
 import com.example.bluehive.api.extractStreamAwait
 import com.example.bluehive.auth.SessionManager
@@ -149,9 +150,17 @@ class SourcePlaybackController internal constructor(
         val sourceKey = src.name.lowercase()
 
         val startedAt = System.currentTimeMillis()
+        // WEBSITE 4: Lyra first, asked by the TV itself (it hands our server a
+        // decoy, the TV the real stream -- see LyraResolver). Nothing usable ->
+        // the server's Website 4 lookup below, exactly as before.
+        val lyra = if (sourceKey == "vidora") {
+            runCatchingCancellable {
+                LyraResolver.resolve(req.apiType, req.tmdbId, req.apiSeason, req.apiEpisode)
+            }.getOrNull()
+        } else null
         // Cancellable: leaving the page mid-extract must stop here, not read as
         // a miss and walk on to the next source (see PageCoroutines.kt).
-        val result = runCatchingCancellable {
+        val result = if (lyra != null) Result.success(retrofit2.Response.success(lyra)) else runCatchingCancellable {
             ApiClient.bluehiveApi.extractStreamAwait(
                 type    = req.apiType,
                 tmdbId  = req.tmdbId,

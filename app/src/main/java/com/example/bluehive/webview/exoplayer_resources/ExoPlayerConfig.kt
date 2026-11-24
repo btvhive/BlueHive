@@ -15,6 +15,8 @@ import androidx.media3.exoplayer.upstream.LoadErrorHandlingPolicy
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.LoadControl
 import androidx.media3.exoplayer.hls.HlsMediaSource
+import androidx.media3.exoplayer.dash.DashMediaSource
+import androidx.media3.common.MimeTypes
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import kotlinx.coroutines.delay
@@ -318,6 +320,13 @@ object ExoPlayerConfig {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (playWhenReady) return
                 playerView.post {
+                    // ONLY ONTO A BAR THAT IS FULLY UP, AND NOT UNDER A PANEL.
+                    // MEASURED on the Fire TV Stick 4K: the subtitle list pauses
+                    // the picture while the bar is fading out under it; isShown
+                    // is still true mid-fade, so this put focus INTO the fading
+                    // bar, and the bar going GONE then threw it away. A panel
+                    // that owns the remote turns auto-show off (claimRemote).
+                    if (!playerView.isControllerFullyVisible || !playerView.controllerAutoShow) return@post
                     playerView
                         .findViewById<android.view.View>(androidx.media3.ui.R.id.exo_play_pause)
                         ?.takeIf { it.isShown && it.isFocusable }
@@ -2466,7 +2475,12 @@ object ExoPlayerConfig {
         // Wrapped so a handshake the NETWORK refuses gets a second chance
         // through an SNI-safe path — see SniSafeDataSource. Pass-through until
         // a fetcher is installed, so this changes nothing today.
-        return SniSafeDataSource.Factory(http)
+        // Throttled only in a LIVE_TEST build, on demand (ThrottledDataSource):
+        // how the quality step-down is tested on a real TV.
+        // ByteMeter counts what arrives, for Auto quality's slow-start choice.
+        // DataUriSource reads data: addresses (Fermat's inline init segment),
+        // which Cronet cannot -- see DataUriSource.
+        return DataUriSource.wrap(ByteMeter.wrap(ThrottledDataSource.wrap(SniSafeDataSource.Factory(http))))
     }
 
     /** HLS media source from an m3u8 URL. */
@@ -2517,10 +2531,31 @@ object ExoPlayerConfig {
         }
     }
 
-    fun hlsMediaSource(url: String, factory: DataSource.Factory): HlsMediaSource =
+    /** [mediaId]: tells apart two sources for one URL (Live TV's preloads). */
+    fun hlsMediaSource(url: String, factory: DataSource.Factory, mediaId: String? = null): HlsMediaSource =
         HlsMediaSource.Factory(factory)
             .setLoadErrorHandlingPolicy(noRenditionFallback)
-            .createMediaSource(MediaItem.fromUri(url))
+            .createMediaSource(
+                MediaItem.Builder().setUri(url).apply { if (mediaId != null) setMediaId(mediaId) }.build()
+            )
+
+    /**
+     * DASH (2026-11-23): Website 4's Lyra server (MovieBox, HEVC 1080p) serves
+     * a DASH manifest from an extensionless URL (stream.hls.lol/mbox/mpd?q=),
+     * so the MIME type is set explicitly rather than guessed.
+     */
+    fun dashMediaSource(url: String, factory: DataSource.Factory): DashMediaSource =
+        DashMediaSource.Factory(factory)
+            .setLoadErrorHandlingPolicy(noRenditionFallback)
+            .createMediaSource(
+                MediaItem.Builder().setUri(url).setMimeType(MimeTypes.APPLICATION_MPD).build()
+            )
+
+    /** A DASH manifest URL: a ".mpd" path, or Lyra's extensionless /mbox/mpd. */
+    fun looksDash(url: String): Boolean = runCatching {
+        val lower = url.lowercase()
+        android.net.Uri.parse(url).path.orEmpty().lowercase().endsWith(".mpd") || "/mbox/mpd" in lower
+    }.getOrDefault(false)
 
     /**
      * Whole-file (non-segmented) source, for sources that hand back a video file
@@ -2547,16 +2582,28 @@ object ExoPlayerConfig {
     fun buildPlayer(
         context: Context,
         selector: DefaultTrackSelector = trackSelector(context),
-    ): ExoPlayer =
-        ExoPlayer.Builder(
-            context,
-            // DECODER FALLBACK: a player rebuilt after a frozen decoder may find
-            // the hardware decoder still held by the stuck one. Fallback lets it
-            // take the next decoder on the list instead of failing to start.
-            // Changes nothing while the first decoder initialises normally.
-            androidx.media3.exoplayer.DefaultRenderersFactory(context)
-                .setEnableDecoderFallback(true),
-        )
+    ): ExoPlayer = playerBuilder(context, selector).build()
+
+    /**
+     * DECODER FALLBACK: a player rebuilt after a frozen decoder may find the
+     * hardware decoder still held by the stuck one. Fallback lets it take the
+     * next decoder on the list instead of failing to start. Changes nothing
+     * while the first decoder initialises normally.
+     */
+    fun renderersFactory(context: Context): androidx.media3.exoplayer.RenderersFactory =
+        androidx.media3.exoplayer.DefaultRenderersFactory(context).setEnableDecoderFallback(true)
+
+    /**
+     * [buildPlayer] before its build(): Live TV hands it to a preload manager,
+     * whose buildExoPlayer() replaces the renderers, load control and track
+     * selector with its own (so it is given [renderersFactory], [loadControl]
+     * and [trackSelector] too).
+     */
+    fun playerBuilder(
+        context: Context,
+        selector: DefaultTrackSelector = trackSelector(context),
+    ): ExoPlayer.Builder =
+        ExoPlayer.Builder(context, renderersFactory(context))
             .setTrackSelector(selector)
             .setLoadControl(loadControl(context))
             // THE CONTROL BAR'S SEEK BUTTONS READ THESE, not SEEK_INCREMENT_MS.
@@ -2569,7 +2616,6 @@ object ExoPlayerConfig {
             // which control you used.
             .setSeekBackIncrementMs(SEEK_INCREMENT_MS)
             .setSeekForwardIncrementMs(SEEK_INCREMENT_MS)
-            .build()
 
     // ── Header helpers (shared shape, per-site values) ────────────────────────
 

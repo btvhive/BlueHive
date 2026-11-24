@@ -208,7 +208,7 @@ object HostEntitlementRelay {
                     )
                 )
                 val standing = resp.body()?.standing?.trim()?.lowercase()
-                if (resp.isSuccessful && standing != null) applyStanding(app, standing)
+                if (resp.isSuccessful && standing != null) applyStanding(app, standing, HOST_ENTITLEMENT_CALL)
                 else Log.w(TAG, "relay HTTP ${resp.code()} — standing unchanged")
             }.onFailure { Log.w(TAG, "relay failed: ${it.message}") }
         }
@@ -234,9 +234,16 @@ object HostEntitlementRelay {
      * If you ever change this to lock on a broader set, you are choosing to lock
      * people out when the network hiccups. Do not.
      */
-    private fun applyStanding(context: Context, standing: String) {
+    private fun applyStanding(context: Context, standing: String, refused: String) {
         val app = context.applicationContext
         val locked = standing == STANDING_INACTIVE
+        if (locked) {
+            com.example.bluehive.diagnostics.CrashReporter.noteLockout(
+                app, refused,
+                if (refused == HOST_ENTITLEMENT_CALL) "server answered standing=inactive"
+                else "403 entitlement_inactive",
+            )
+        }
         val was = app.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             .getString(KEY_STANDING, null)
 
@@ -286,14 +293,17 @@ object HostEntitlementRelay {
      * gone, the app opens, and then the very first gated call comes back refused
      * and puts the lock straight back up.
      */
-    fun markInactiveFromServer() {
+    fun markInactiveFromServer(refused: String = "unknown request") {
         val ctx = appCtx
         if (ctx == null) {
             Log.w(TAG, "server reported inactive before init() — cannot lock yet")
             return
         }
-        applyStanding(ctx, STANDING_INACTIVE)
+        applyStanding(ctx, STANDING_INACTIVE, refused)
     }
+
+    /** How the host-entitlement report is named in a lockout report. */
+    private const val HOST_ENTITLEMENT_CALL = "POST /api/bluehive/host-entitlement"
 
     /** Last verdict the server gave us, or null if it has never answered. */
     fun lastStanding(context: Context): String? =
@@ -375,7 +385,7 @@ object HostEntitlementRelay {
             )
             val standing = resp.body()?.standing?.trim()?.lowercase()
             if (resp.isSuccessful && standing != null) {
-                applyStanding(app, standing)
+                applyStanding(app, standing, HOST_ENTITLEMENT_CALL)
                 standing
             } else null
         }.getOrNull()

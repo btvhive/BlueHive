@@ -101,6 +101,13 @@ object ApiClient {
             val req = chain.request().newBuilder()
             val key = BuildConfig.API_KEY
             if (key.isNotBlank()) req.addHeader("X-API-Key", key)
+            // A LIVE_TEST build's catalog browsing goes to the test movie server
+            // (decades + Lowest Rated, 2026-11-23). browseMedia is on THIS client,
+            // not bluehiveHttpClient, so the header has to be added here too --
+            // without it the decade requests went to live, which ignores year_from.
+            if (BuildConfig.LIVE_TEST && chain.request().url.encodedPath == "/api/media/browse") {
+                req.header("X-BH-Test", "1")
+            }
             chain.proceed(req.build())
         }
         .addInterceptor(loggingInterceptor)
@@ -314,6 +321,18 @@ object ApiClient {
             // change with zero client update. Sent ONLY here — never on platform or
             // TMDB clients. versionCode is the integer the update manifest compares.
             req.header("X-BlueHive-Version", BuildConfig.VERSION_CODE.toString())
+            // A LIVE_TEST build's Live TV calls go to the test Live TV server
+            // (the edge proxy routes on this header). Off in every real build.
+            if (BuildConfig.LIVE_TEST && chain.request().url.encodedPath.startsWith("/api/live/")) {
+                req.header("X-Live-Test", "1")
+            }
+            // ...and its movie/TV lookups go to the test movie server (the fixed
+            // extractor, /root/bh-movie-test-20261119). Off in every real build.
+            if (BuildConfig.LIVE_TEST && chain.request().url.encodedPath.let {
+                    it.startsWith("/api/extract") || it == "/api/sources" || it == "/api/fresh-picks" ||
+                    it == "/api/new-content" || it == "/api/media/browse" }) {   // browse: catalog decades + Lowest Rated (2026-11-23)
+                req.header("X-BH-Test", "1")
+            }
             // The profile this TV is on ("none" on the picker), so the server can
             // tell a locked-out TV who holds each slot. See ActiveProfile.
             req.header("X-Profile-Id", ActiveProfile.headerValue())
@@ -372,7 +391,9 @@ object ApiClient {
                 if (code == "entitlement_inactive") {
                     Log.w(TAG, "403 entitlement_inactive from " +
                             "${chain.request().url.encodedPath} — locking")
-                    HostEntitlementRelay.markInactiveFromServer()
+                    HostEntitlementRelay.markInactiveFromServer(
+                        "${chain.request().method} ${chain.request().url.encodedPath}"
+                    )
                 }
             }
             response
@@ -383,6 +404,12 @@ object ApiClient {
         .readTimeout(30, TimeUnit.SECONDS)
         .writeTimeout(30, TimeUnit.SECONDS)
         .retryOnConnectionFailure(true)
+        // Every call shares one HTTP/2 connection. 2026-11-19 it stalled ~25 s
+        // on a Fire Stick (the server answered in 1 s; another connection from the
+        // same TV was fine): profiles, entitlement and the Live TV list all waited.
+        // An unanswered ping now ends such a connection after 10 s and the next
+        // call opens a new one.
+        .pingInterval(10, TimeUnit.SECONDS)
         // :8000 is on the LAN. Without this a connected VPN routes profiles and
         // watch history into the tunnel, where 192.168.1.136 does not exist.
         .pinToLan(BLUEHIVE_API_BASE_URL)

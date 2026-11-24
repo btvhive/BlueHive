@@ -118,6 +118,25 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         private const val SMALL_RAM_BYTES = 3L * 1024 * 1024 * 1024
 
         lateinit var coilImageLoader: ImageLoader
+
+        /**
+         * Empties the image memory cache (every image in it is also in the disk
+         * cache, so nothing is lost but a re-decode) and says how much it held.
+         *
+         * Called when any player opens (2026-11-18): a 1 GB stick (Zeke's AFTT)
+         * had 166 MB free while playing, and posters held for a home screen
+         * nobody is looking at are the easiest memory to give back. Bitmaps a
+         * screen still shows are not freed by this, only the cache's own hold.
+         */
+        fun freeImageMemory(why: String) {
+            if (!::coilImageLoader.isInitialized) return
+            val cache = coilImageLoader.memoryCache ?: return
+            val heldMb = cache.size / (1024 * 1024)
+            try { cache.clear() } catch (_: Exception) { return }
+            // Log.e: the one level release builds keep; one line per play.
+            Log.e(TAG, "🧹 image cache emptied ($heldMb MB): $why")
+        }
+
         private var soundPool: SoundPool? = null
         private var titleCardNavigationSoundId: Int = 0
         private var buttonNavigationSoundId: Int = 0
@@ -1278,13 +1297,20 @@ class BlueHiveApplication : Application(), ImageLoaderFactory {
         super.onTrimMemory(level)
         if (!isMainProcess()) return   // helper processes never init the image loader
 
-        val underPressure = level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
+        // RUNNING_MODERATE is Android's FIRST warning while we're on screen
+        // (added 2026-11-18): on a 1 GB stick waiting for RUNNING_LOW left too
+        // little time, so the cache goes at the first sign of trouble.
+        val underPressure = level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_MODERATE ||
+                level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW ||
                 level == ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL ||
                 level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND
-        if (underPressure) {
-            Log.w(TAG, "🧹 onTrimMemory(level=$level) — clearing image memory cache to dodge the LMK")
-            coilImageLoader.memoryCache?.clear()
-        }
+        if (underPressure) freeImageMemory("Android asked for memory (onTrimMemory level $level)")
+    }
+
+    /** Android 5-6's last call before killing apps; newer ones send onTrimMemory too. */
+    override fun onLowMemory() {
+        super.onLowMemory()
+        if (isMainProcess()) freeImageMemory("Android is out of memory (onLowMemory)")
     }
 
     override fun onTerminate() {

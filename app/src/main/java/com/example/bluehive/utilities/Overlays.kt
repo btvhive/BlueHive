@@ -97,6 +97,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.scale
 
 
@@ -535,6 +537,14 @@ fun VideoQualityOverlay(
     options:       List<String>,
     selectedIndex: Int,
     onSelect:      (Int) -> Unit,
+    /**
+     * Driven by the caller instead of by focus (2026-11-19): the row drawn as
+     * focused, moved by the activity's own key handling. MEASURED on the Fire
+     * Stick's website player: opened from a control-bar button, Compose focus
+     * never reached the rows however often it was requested, and the remote
+     * was dead. Null (the anime player) keeps the focus-driven card.
+     */
+    highlightedIndex: Int? = null,
 ) {
     // ── Scrim ───────────────────────────────────────────────────────────────────
     Box(
@@ -577,7 +587,8 @@ fun VideoQualityOverlay(
                     .verticalScroll(rememberScrollState()),
             ) {
                 options.forEachIndexed { i, label ->
-                    var focused by remember { mutableStateOf(false) }
+                    var hasFocus by remember { mutableStateOf(false) }
+                    val focused = if (highlightedIndex != null) i == highlightedIndex else hasFocus
                     val fr = remember { FocusRequester() }
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -586,7 +597,7 @@ fun VideoQualityOverlay(
                             .padding(vertical = 3.dp)
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (focused) Color(0xFF2644A6) else Color.Transparent)
-                            .onFocusChanged { focused = it.isFocused }
+                            .onFocusChanged { hasFocus = it.isFocused }
                             .focusRequester(fr)
                             .clickable { onSelect(i) }   // clickable is already focusable — a second .focusable() ate the first press
                             .padding(horizontal = 14.dp, vertical = 11.dp),
@@ -620,7 +631,8 @@ fun VideoQualityOverlay(
                             }
                         }
                     }
-                    if (i == selectedIndex.coerceIn(0, (options.size - 1).coerceAtLeast(0))) {
+                    if (highlightedIndex == null &&
+                        i == selectedIndex.coerceIn(0, (options.size - 1).coerceAtLeast(0))) {
                         LaunchedEffect(Unit) { awaitFrame(); fr.requestFocus() }
                     }
                 }
@@ -1213,9 +1225,15 @@ fun ProfileEntryOverlay(profileName: String) {
 
     val motion = rememberInfiniteTransition(label = "profileEntry")
 
+    // READ ONLY WHILE DRAWING (2026-11-19). Both values are States read inside
+    // the halo's and the comb's own draw layers, never while composing: read
+    // here (`by`), they rebuilt and redrew this whole screen on every frame,
+    // which on the Fire TV Stick 4K (Android 7) is what made the movie loader's
+    // globe run at ~10 fps. The comb's paths and brushes are built once.
+    //
     // One phase drives the whole comb. Each cell reads it at its own offset, so
     // the wave costs a single animation rather than seven.
-    val phase by motion.animateFloat(
+    val phase = motion.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -1227,7 +1245,7 @@ fun ProfileEntryOverlay(profileName: String) {
 
     // The core breathes on its own clock, slower than the wave, so the middle of
     // the comb never lands in perfect lockstep with the ring travelling round it.
-    val core by motion.animateFloat(
+    val core = motion.animateFloat(
         initialValue = 0.55f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -1249,78 +1267,87 @@ fun ProfileEntryOverlay(profileName: String) {
             Box(contentAlignment = Alignment.Center) {
                 // Halo. Kept faint on purpose: a TV panel bands dark blues badly,
                 // and this only needs to lift the comb off the black.
-                Box(
+                // The halo's breathing is the paint's alpha: 0.16 x core at the
+                // centre fading to nothing, exactly as the old per-frame brush.
+                Spacer(
                     modifier = Modifier
                         .size(PROFILE_COMB_SIZE * 1.8f)
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(
-                                    combBase.copy(alpha = 0.16f * core),
-                                    Color.Transparent,
-                                ),
-                            ),
-                            shape = CircleShape,
-                        )
+                        .graphicsLayer()
+                        .drawWithCache {
+                            val brush = Brush.radialGradient(
+                                colors = listOf(combBase.copy(alpha = 0.16f), Color.Transparent),
+                            )
+                            onDrawBehind { drawCircle(brush, alpha = core.value) }
+                        }
                 )
 
-                Canvas(modifier = Modifier.size(PROFILE_COMB_SIZE)) {
-                    val cx = size.width / 2f
-                    val cy = size.height / 2f
-                    val r = size.width / 5.4f           // cell circumradius
-                    val step = r * 1.732f               // centre-to-centre, pointy-top
-                    val stroke = Stroke(width = r * 0.13f)
+                Spacer(
+                    modifier = Modifier
+                        .size(PROFILE_COMB_SIZE)
+                        .graphicsLayer()
+                        .drawWithCache {
+                            val cx = size.width / 2f
+                            val cy = size.height / 2f
+                            val r = size.width / 5.4f           // cell circumradius
+                            val step = r * 1.732f               // centre-to-centre, pointy-top
+                            val stroke = Stroke(width = r * 0.13f)
 
-                    // HOISTED OUT OF THE CELL LOOP. Both brushes span the whole
-                    // comb, so a cell's colour depends on where it sits in the
-                    // cluster rather than on its own bounds — that is what makes
-                    // this read as one object lit from above instead of seven
-                    // separately-shaded tiles. Building them once per frame
-                    // rather than seven times also keeps the allocation cost of
-                    // this screen where the header promises it is.
-                    val fillBrush = Brush.linearGradient(
-                        colors = listOf(combLift, combBase, combDeep),
-                        start = Offset(0f, 0f),
-                        end = Offset(0f, size.height),
-                    )
-                    val edgeBrush = Brush.linearGradient(
-                        colors = listOf(edgeLift, combBase, edgeDeep),
-                        start = Offset(0f, 0f),
-                        end = Offset(0f, size.height),
-                    )
+                            // ONE GRADIENT PER ROLE, spanning the whole comb, so a
+                            // cell's colour depends on where it sits in the cluster
+                            // rather than on its own bounds -- that is what makes
+                            // this read as one object lit from above instead of
+                            // seven separately-shaded tiles.
+                            val fillBrush = Brush.linearGradient(
+                                colors = listOf(combLift, combBase, combDeep),
+                                start = Offset(0f, 0f),
+                                end = Offset(0f, size.height),
+                            )
+                            val edgeBrush = Brush.linearGradient(
+                                colors = listOf(edgeLift, combBase, edgeDeep),
+                                start = Offset(0f, 0f),
+                                end = Offset(0f, size.height),
+                            )
 
-                    // Centre first, then the ring clockwise from the right.
-                    for (i in 0..6) {
-                        val centre = if (i == 0) {
-                            Offset(cx, cy)
-                        } else {
-                            val a = ((i - 1) * 60f) * PI_OVER_180
-                            Offset(cx + step * cos(a), cy + step * sin(a))
+                            // Centre first, then the ring clockwise from the right.
+                            val cells = List(7) { i ->
+                                val centre = if (i == 0) {
+                                    Offset(cx, cy)
+                                } else {
+                                    val a = ((i - 1) * 60f) * PI_OVER_180
+                                    Offset(cx + step * cos(a), cy + step * sin(a))
+                                }
+                                hexPath(centre, r)
+                            }
+
+                            onDrawBehind {
+                                val ph = phase.value
+                                cells.forEachIndexed { i, path ->
+                                    // Cell brightness. The centre holds steady and
+                                    // breathes; the ring runs a comet -- sharp rise,
+                                    // slow decay -- so the comb reads as filling
+                                    // rather than blinking.
+                                    val lit = if (i == 0) {
+                                        core.value
+                                    } else {
+                                        val t = (((ph - (i - 1) * 0.14f) % 1f) + 1f) % 1f
+                                        val decay = 1f - t
+                                        0.18f + 0.82f * decay * decay * decay
+                                    }
+
+                                    // Brush for the colour, alpha for the animation:
+                                    // one gradient serves every cell while each still
+                                    // pulses on its own clock.
+                                    drawPath(path, brush = fillBrush, alpha = 0.14f + 0.34f * lit)
+                                    drawPath(
+                                        path,
+                                        brush = edgeBrush,
+                                        alpha = 0.24f + 0.76f * lit,
+                                        style = stroke,
+                                    )
+                                }
+                            }
                         }
-
-                        // Cell brightness. The centre holds steady and breathes;
-                        // the ring runs a comet — sharp rise, slow decay — so the
-                        // comb reads as filling rather than blinking.
-                        val lit = if (i == 0) {
-                            core
-                        } else {
-                            val t = (((phase - (i - 1) * 0.14f) % 1f) + 1f) % 1f
-                            val decay = 1f - t
-                            0.18f + 0.82f * decay * decay * decay
-                        }
-
-                        // Brush for the colour, alpha for the animation. Keeping
-                        // those separate is what lets one gradient serve every
-                        // cell while each still pulses on its own clock.
-                        val path = hexPath(centre, r)
-                        drawPath(path, brush = fillBrush, alpha = 0.14f + 0.34f * lit)
-                        drawPath(
-                            path,
-                            brush = edgeBrush,
-                            alpha = 0.24f + 0.76f * lit,
-                            style = stroke,
-                        )
-                    }
-                }
+                )
             }
 
             Spacer(Modifier.height(38.dp))

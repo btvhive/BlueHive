@@ -48,6 +48,9 @@ interface ApiService {
         @Query("list_type")         listType:         String?  = null,
         @Query("genre_id")          genreId:          Int?     = null,
         @Query("year")              year:             Int?     = null,
+        // Inclusive release-year range: the catalog's decade options (2026-11-23).
+        @Query("year_from")         yearFrom:         Int?     = null,
+        @Query("year_to")           yearTo:           Int?     = null,
         @Query("limit")             limit:            Int,
         @Query("offset")            offset:           Int,
         @Query("sort_by")           sortBy:           String,
@@ -833,6 +836,29 @@ interface BluehiveApiService {
         @Query("type") type: String,                     // "tv" | "movie"
     ): retrofit2.Response<com.example.bluehive.api.SourceCatalog.Response>
 
+    /**
+     * FRESH PICKS (2026-11-20): 40 random well-rated titles from 2000 on, the
+     * same for everyone, replaced every day; the server hides what this
+     * profile has watched or favourited and builds a kids-only set for a Kids
+     * profile. Shaped like /api/media/browse plus window_ends_at.
+     */
+    /**
+     * NEW CONTENT (2026-11-21): up to 8 new releases (movies, only once in HD)
+     * or new seasons/episodes (TV), each with new_label + new_detail, for the
+     * front of What's Popular.
+     */
+    @GET("/api/new-content")
+    suspend fun getNewContent(
+        @Query("media_type") mediaType: String,          // "movie" | "tv"
+    ): MediaBrowseResponse
+
+    @GET("/api/fresh-picks")
+    suspend fun getFreshPicks(
+        @Query("media_type") mediaType: String,          // "movie" | "tv"
+        @Query("profile_id") profileId: Int? = null,
+        @Query("limit") limit: Int = 40,
+    ): MediaBrowseResponse
+
     @GET("/api/extract")
     suspend fun extractStream(
         @Query("type")     type:     String,          // "tv" | "movie"
@@ -857,6 +883,9 @@ interface BluehiveApiService {
         // a working stream rather than a bug.
         @Query("audio")    audio:    String? = null,   // "sub" | "dub"
         @Query("server")   server:   String? = null,   // provider name
+        // What this TV plays (PlaybackCaps): the server's VidLove picker chooses
+        // the best server this TV can decode. Part of VidLove's cache key only.
+        @Query("caps")     caps:     String? = PlaybackCaps.value,
     ): Response<ExtractResponse>
 
     /**
@@ -892,6 +921,7 @@ interface BluehiveApiService {
         @Query("device")   device:   String? = null,
         @Query("audio")    audio:    String? = null,
         @Query("server")   server:   String? = null,
+        @Query("caps")     caps:     String? = PlaybackCaps.value,   // see extractStream
     ): Response<ExtractJobResponse>
 
     /**
@@ -1069,7 +1099,12 @@ interface BluehiveApiService {
 
     /** 502 {"detail": {"error": "off_air"}} when neither feed works right now. */
     @POST("/api/live/{channelId}/session")
-    suspend fun startLiveSession(@Path("channelId") channelId: String): Response<LiveSessionResponse>
+    suspend fun startLiveSession(
+        @Path("channelId") channelId: String,
+        /** The channels above and below, "a,b": the server readies their links so
+         *  Up/Down starts at once. Servers before build o2 ignore it. */
+        @Query("warm") warm: String? = null,
+    ): Response<LiveSessionResponse>
 
     /** Own profiles plus everyone else's on the same subscription licence.
      *  Separate from [listProfiles], which returns only what this account may

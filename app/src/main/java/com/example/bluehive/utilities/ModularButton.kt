@@ -219,29 +219,25 @@ val ButtonLabelShadow = Shadow(
 val SOURCE_LABEL_COLOR = Color(0xFFFFE58A)
 
 val StreamSourceButtonColors = ModularButtonColors(
-    // ROYAL SPLIT (the user's pick, v613, back again at v621, mock-up 3): a
-    // deep royal top over a brighter band across the lower part, with a light
-    // 1 dp edge. The split face replaced the pure 0xFF0004FF electric blue,
-    // which glared on a TV and fought the navy page. Focus lifts every part
-    // toward white (top 18%, band 20%, edge 35%, strip 10%), as in the
-    // mock-up. Tried and dropped: charcoal + blue band (v617) top 1C1F2A,
-    // band 1C2A7C, edge 4658A6, strip 14161E; midnight + teal band (v618) top
-    // 10204A, band 155A70, edge 3E92AC, strip 0C1838; halfway between royal
-    // and charcoal (v619) top 1B2655, band 223595, edge 5166BF, strip 131B3C;
-    // royal with the top 8% darker (v620) top 182876.
-    mainDefault   = Color(0xFF1A2C80),
-    mainFocused   = Color(0xFF435297),
-    // Pressed: the same split, darker.
-    mainToggled   = Color(0xFF111D58),
-    band          = Color(0xFF2840AE),
-    bandFocused   = Color(0xFF5366BE),
-    bandToggled   = Color(0xFF1A2C7A),
-    outline       = Color(0xFF5C74D8),
-    outlineFocused = Color(0xFF95A5E6),
+    // ONE COLOUR, BRIGHTER (the user's pick 2026-11-20, mock-up 10 of
+    // docs/mockups/source-buttons): the whole face one royal blue, a notch
+    // lighter than the old split's band, with a light 1 dp edge and the strip
+    // underneath. The split (dark top over a brighter band) looked jarring on
+    // TVs with poorly set-up colour. No band, so drawSplit draws only the edge.
+    // Focus lifts every part toward white (face 20%, edge 35%, strip 10%).
+    // Before: ROYAL SPLIT (v613/v621) top 1A2C80, band 2840AE, edge 5C74D8,
+    // strip 121F5A; earlier tries: charcoal + blue band (v617), midnight +
+    // teal band (v618), halfway royal/charcoal (v619), darker royal (v620).
+    mainDefault   = Color(0xFF3150C4),
+    mainFocused   = Color(0xFF5A73D0),
+    // Pressed: the same face, darker.
+    mainToggled   = Color(0xFF213685),
+    outline       = Color(0xFF6C84E0),
+    outlineFocused = Color(0xFF9FAFEB),
     // The strip under the face.
-    secondDefault = Color(0xFF121F5A),
-    secondFocused = Color(0xFF2A356B),
-    secondToggled = Color(0xFF0C1540),
+    secondDefault = Color(0xFF16246A),
+    secondFocused = Color(0xFF2D3A79),
+    secondToggled = Color(0xFF0F1848),
     // The face's shadow on the strip (v616): black at 60%, fading out.
     faceShadow    = Color(0x99000000),
     textUnfocusedToggled = Color(0xFF3C4A78),
@@ -304,21 +300,21 @@ fun animeLanguageLabel(language: String) = streamSourceLabel(language).copy(subT
  * control. This one is desaturated and darker: clearly red, clearly secondary.
  */
 val TrailerControlButtonColors = ModularButtonColors(
-    // THE SAME RED, NOW SPLIT (v623, mock-up 8g): the idle face is still
-    // 0xFF9E2B2B; a brighter band across its lower part, a 1 dp edge and the
-    // face's shadow on the strip build it like the Website buttons. Focus
-    // lifts every part toward white (top 18%, band 20%, edge 35%, strip 10%).
-    mainDefault   = Color(0xFF9E2B2B),
-    mainFocused   = Color(0xFFAF5151),
-    mainToggled   = Color(0xFF6B1D1D),
-    band          = Color(0xFFC23A3A),
-    bandFocused   = Color(0xFFCE6161),
-    bandToggled   = Color(0xFF842727),
-    outline       = Color(0xFFDC7474),
-    outlineFocused = Color(0xFFE8A5A5),
-    secondDefault = Color(0xFF741F1F),
-    secondFocused = Color(0xFF823535),
-    secondToggled = Color(0xFF4F1515),
+    // ONE SATURATED COLOUR (the user's pick 2026-11-20, docs/mockups/
+    // top-row-buttons, saturated variant 2): the old split's lighter band,
+    // +20 points saturation and 5% darker, fills the face; edge = face +30%
+    // white, strip = face 46% darker. FOCUS = the face 15% LIGHTER AT FULL
+    // SATURATION (user 2026-11-20: mixing with white, 20% or 12%, washed it out
+    // or barely showed). Design 1 (same day) was the plain band C23A3A, too pale;
+    // before that a split, top 9E2B2B over band C23A3A.
+    mainDefault   = Color(0xFFC51D1D),
+    mainFocused   = Color(0xFFE44A4A),
+    mainToggled   = Color(0xFF861414),
+    outline       = Color(0xFFD66161),
+    outlineFocused = Color(0xFFE49898),
+    secondDefault = Color(0xFF6A1010),
+    secondFocused = Color(0xFF792828),
+    secondToggled = Color(0xFF4A0B0B),
     faceShadow    = Color(0x99000000),
     textUnfocusedToggled = Color(0xFF804444),
     textFocused   = Color.White,
@@ -331,17 +327,21 @@ val TrailerControlButtonColors = ModularButtonColors(
  * trailer red. Hot pink (v623) read as candy.
  */
 val SearchButtonColors = ModularButtonColors(
-    mainDefault   = Color(0xFF582277),
-    mainFocused   = Color(0xFF764A8F),
-    mainToggled   = Color(0xFF3C1751),
-    band          = Color(0xFF7B30A6),
-    bandFocused   = Color(0xFF9559B8),
-    bandToggled   = Color(0xFF542171),
-    outline       = Color(0xFFAB6ECF),
-    outlineFocused = Color(0xFFC8A1E0),
-    secondDefault = Color(0xFF3D1853),
-    secondFocused = Color(0xFF502F64),
-    secondToggled = Color(0xFF291038),
+    // ONE SATURATED COLOUR (the user's pick 2026-11-20, docs/mockups/
+    // top-row-buttons, saturated variant 2): the old split's lighter band,
+    // +20 points saturation and 5% darker, fills the face; edge = face +30%
+    // white, strip = face 46% darker. FOCUS = the face 15% LIGHTER AT FULL
+    // SATURATION (user 2026-11-20: mixing with white, 20% or 12%, washed it out
+    // or barely showed). Design 1 (same day) was the plain band 7B30A6, too pale;
+    // before that a split, top 582277 over band 7B30A6.
+    mainDefault   = Color(0xFF7117A5),
+    mainFocused   = Color(0xFF9D28E1),
+    mainToggled   = Color(0xFF4D1070),
+    outline       = Color(0xFF9C5DC0),
+    outlineFocused = Color(0xFFBF96D6),
+    secondDefault = Color(0xFF3D0C59),
+    secondFocused = Color(0xFF50246A),
+    secondToggled = Color(0xFF2B083E),
     faceShadow    = Color(0x99000000),
     textFocused   = Color.White,
     textUnfocused = Color.White,
@@ -353,17 +353,21 @@ val SearchButtonColors = ModularButtonColors(
  * filled star. Lime (v623) read as candy; gold and bronze before that.
  */
 val FavoriteButtonColors = ModularButtonColors(
-    mainDefault   = Color(0xFF1278DE),
-    mainFocused   = Color(0xFF388EE3),
-    mainToggled   = Color(0xFF0C5297),
-    band          = Color(0xFF3491EF),
-    bandFocused   = Color(0xFF59A5F2),
-    bandToggled   = Color(0xFF2363A3),
-    outline       = Color(0xFF73B0EC),
-    outlineFocused = Color(0xFFA4CCF3),
-    secondDefault = Color(0xFF0D549C),
-    secondFocused = Color(0xFF2565A6),
-    secondToggled = Color(0xFF09396A),
+    // ONE SATURATED COLOUR (the user's pick 2026-11-20, docs/mockups/
+    // top-row-buttons, saturated variant 2): the old split's lighter band,
+    // +20 points saturation and 5% darker, fills the face; edge = face +30%
+    // white, strip = face 46% darker. FOCUS = the face 15% LIGHTER AT FULL
+    // SATURATION (user 2026-11-20: mixing with white, 20% or 12%, washed it out
+    // or barely showed). Design 1 (same day) was the plain band 3491EF, too pale;
+    // before that a split, top 1278DE over band 3491EF.
+    mainDefault   = Color(0xFF0A84FF),
+    mainFocused   = Color(0xFF57AAFF),
+    mainToggled   = Color(0xFF075AAD),
+    outline       = Color(0xFF54A9FF),
+    outlineFocused = Color(0xFF90C7FF),
+    secondDefault = Color(0xFF05478A),
+    secondFocused = Color(0xFF1E5996),
+    secondToggled = Color(0xFF043261),
     faceShadow    = Color(0x99000000),
     textFocused   = Color.White,
     textUnfocused = Color.White,
@@ -374,17 +378,21 @@ val FavoriteButtonColors = ModularButtonColors(
  * azure dropped to a deep navy-azure, the words and star in pale ice blue.
  */
 val FavoriteSavedButtonColors = ModularButtonColors(
-    mainDefault   = Color(0xFF0F488A),
-    mainFocused   = Color(0xFF35659D),
-    mainToggled   = Color(0xFF0A315E),
-    band          = Color(0xFF1461B8),
-    bandFocused   = Color(0xFF3E7DC5),
-    bandToggled   = Color(0xFF0E427D),
-    outline       = Color(0xFF2C7FDD),
-    outlineFocused = Color(0xFF76ACE9),
-    secondDefault = Color(0xFF082749),
-    secondFocused = Color(0xFF213D5B),
-    secondToggled = Color(0xFF051B32),
+    // ONE SATURATED COLOUR (the user's pick 2026-11-20, docs/mockups/
+    // top-row-buttons, saturated variant 2): the old split's lighter band,
+    // +20 points saturation and 5% darker, fills the face; edge = face +30%
+    // white, strip = face 46% darker. FOCUS = the face 15% LIGHTER AT FULL
+    // SATURATION (user 2026-11-20: mixing with white, 20% or 12%, washed it out
+    // or barely showed). Design 1 (same day) was the plain band 1461B8, too pale;
+    // before that a split, top 0F488A over band 1461B8.
+    mainDefault   = Color(0xFF0054B3),
+    mainFocused   = Color(0xFF0078FF),
+    mainToggled   = Color(0xFF00397A),
+    outline       = Color(0xFF4D87CA),
+    outlineFocused = Color(0xFF8BB1DD),
+    secondDefault = Color(0xFF002D61),
+    secondFocused = Color(0xFF1A4271),
+    secondToggled = Color(0xFF001F44),
     faceShadow    = Color(0x99000000),
     textFocused   = Color(0xFFA9D3FF),
     textUnfocused = Color(0xFFA9D3FF),

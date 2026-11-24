@@ -195,18 +195,65 @@ private const val WINDOW_PAGES   = 7           // pages kept in memory around fo
 private const val PREFETCH_AHEAD = 3           // pages to fetch ahead of focus
 private const val PREFETCH_BEHIND = 3          // pages to fetch behind focus
 
-private val GENRE_OPTIONS = listOf(
+// ONE GENRE LIST PER TAB (2026-11-23). TMDB names movie and TV genres
+// differently, and the single shared list left 8 genres always empty under
+// Movies (Kids, News, Reality, Soap, Talk and the "X & Y" TV names) and 9 under
+// TV Shows (Action, Adventure, Fantasy, Horror, Music, Science Fiction, Thriller,
+// TV Movie, War). Measured on the test server; History has 9 shows, so it is
+// left off the TV list too. Anime is cross-type and stays on both.
+private val MOVIE_GENRE_OPTIONS = listOf(
     ASSORTED_OPTION,
     "Action", ANIME_OPTION, "Adventure", "Animation", "Comedy", "Crime",
     "Documentary", "Drama", "Family", "Fantasy", "History",
     "Horror", "Music", "Mystery", "Romance", "Science Fiction",
     "TV Movie", "Thriller", "War", "Western",
-    "Action & Adventure", "Kids", "News", "Reality",
-    "Sci-Fi & Fantasy", "Soap", "Talk", "War & Politics",
+)
+private val TV_GENRE_OPTIONS = listOf(
+    ASSORTED_OPTION,
+    "Action & Adventure", ANIME_OPTION, "Animation", "Comedy", "Crime",
+    "Documentary", "Drama", "Family", "Kids", "Mystery", "News", "Reality",
+    "Romance", "Sci-Fi & Fantasy", "Soap", "Talk", "War & Politics", "Western",
 )
 
+private fun genreOptionsFor(mediaType: String): List<String> =
+    if (mediaType == "tv") TV_GENRE_OPTIONS else MOVIE_GENRE_OPTIONS
+
+/**
+ * The genre to keep when the tab changes: the same one if the new tab has it,
+ * else its nearest equivalent there (Action -> Action & Adventure and back,
+ * Kids -> Family), else Assorted -- never a genre that is empty on that tab.
+ */
+private fun genreForTab(genre: String, mediaType: String): String {
+    val options = genreOptionsFor(mediaType)
+    if (genre in options) return genre
+    val nearest = if (mediaType == "tv") when (genre) {
+        "Action", "Adventure"         -> "Action & Adventure"
+        "Science Fiction", "Fantasy"   -> "Sci-Fi & Fantasy"
+        "War"                         -> "War & Politics"
+        else                          -> null
+    } else when (genre) {
+        "Action & Adventure"          -> "Action"
+        "Sci-Fi & Fantasy"            -> "Science Fiction"
+        "War & Politics"              -> "War"
+        "Kids"                        -> "Family"
+        else                          -> null
+    }
+    return nearest?.takeIf { it in options } ?: ASSORTED_OPTION
+}
+
 private val SORT_OPTIONS = listOf("Most Popular", "By Release Date", "A–Z", "Z–A", "Highest Rated", "Lowest Rated")
-private val YEAR_OPTIONS: List<String> = listOf("Assorted") + (2026 downTo 1999).map { it.toString() }
+// Single years from 2000 up, then the 1990s, 1980s and 1970s (2026-11-23; the
+// owner: "the most it should go back to is 1970s"). The list used to stop at 1999.
+private val YEAR_OPTIONS: List<String> = listOf("Assorted") +
+    (2026 downTo 2000).map { it.toString() } +
+    listOf("1990s", "1980s", "1970s")
+
+/** The inclusive (from, to) years for a decade option, or null for a single year / Assorted. */
+private fun decadeRange(option: String): Pair<Int, Int>? = when {
+    option.length == 5 && option.endsWith("s") ->
+        option.dropLast(1).toIntOrNull()?.let { it to it + 9 }
+    else -> null
+}
 
 // ── Control bar layout (shared by screen + preview) ───────────────────────────
 // AFTER
@@ -366,7 +413,7 @@ fun MediaCatalogScreen(profileId: Int = -1) {
         "A–Z"             -> "title_asc"
         "Z–A"             -> "title_desc"
         "Highest Rated"   -> "rating"
-        "Lowest Rated"    -> "rating"
+        "Lowest Rated"    -> "rating_asc"   // was "rating": the same list as Highest Rated
         else              -> "popularity"
     }
 
@@ -417,11 +464,14 @@ fun MediaCatalogScreen(profileId: Int = -1) {
             // (Animation genre + Japanese language) on top of the selected
             // media_type. Press Movies → anime movies, press TV → anime TV.
             val yearInt = selectedYear.toIntOrNull()
+            val decade = decadeRange(selectedYear)
             val response = ApiClient.trailerApi.browseMedia(
                 mediaType        = selectedMediaType,
                 listType         = null,
                 genreId          = genreId,
                 year             = yearInt,
+                yearFrom         = decade?.first,
+                yearTo           = decade?.second,
                 limit            = PAGE_SIZE,
                 offset           = page * PAGE_SIZE,
                 sortBy           = sortKey(),
@@ -744,8 +794,8 @@ fun MediaCatalogScreen(profileId: Int = -1) {
 
             // ── Filter dropdown ───────────────────────────────────────────────────
             HistoryDropdown(
-                label = "Filter",
-                options = GENRE_OPTIONS,
+                label = "Genre",   // was "Filter" (owner 2026-11-23: "Genre" is clearer)
+                options = genreOptionsFor(selectedMediaType),
                 selectedOption = selectedGenre,
                 onOptionSelected = { selectedGenre = it },
                 buttonWidth = 160.dp,
@@ -829,6 +879,7 @@ fun MediaCatalogScreen(profileId: Int = -1) {
                 fontFamily = AppTypography.interBold,
                 focusRequester = moviesFocus,
                 onClick = {
+                    selectedGenre = genreForTab(selectedGenre, "movie")
                     selectedMediaType = "movie"
                     suppressNextHover = true
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
@@ -883,6 +934,7 @@ fun MediaCatalogScreen(profileId: Int = -1) {
                 fontFamily = AppTypography.interBold,
                 focusRequester = tvShowsFocus,
                 onClick = {
+                    selectedGenre = genreForTab(selectedGenre, "tv")
                     selectedMediaType = "tv"
                     suppressNextHover = true
                     android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
@@ -1385,7 +1437,7 @@ private fun PreviewCatalogControlBar() {
     Box(modifier = Modifier.fillMaxSize().background(Color(0xFF0A0E1A))) {
 
         HistoryDropdown(
-            label = "Filter", options = GENRE_OPTIONS,
+            label = "Genre", options = genreOptionsFor(selectedMediaType),
             selectedOption = selectedGenre, onOptionSelected = { selectedGenre = it },
             buttonWidth = 160.dp, dropdownMaxHeight = 237.dp,
             externalFocusRequester = filterFR,

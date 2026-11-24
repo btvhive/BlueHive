@@ -39,13 +39,19 @@ internal val passionFont = AppTypography.passionRegular
  * Tried the same day: split sapphire / electric / halfway / A1 (v629-v632),
  * flat dusty blue (v633-v635), violet (v636-v637), emerald (v638), bright
  * cobalt (v639), bright cornflower (v640).
+ *
+ * SATURATED COBALT (the user's pick 2026-11-20, docs/mockups/catalog-tabs
+ * variant 7): hue 220, 90% saturation; face at 52% lightness, focus 66%
+ * (clearly lighter, still full colour), lower layer at half the face's
+ * lightness. The PRESSED state is unchanged on purpose ("it looks perfect").
+ * Was: face 5A6CE2, focus 8693EA, layer 182686 / 1D2FA5.
  */
 internal val RADIO_COLORS = ModularButtonColors(
-    mainDefault          = Color(0xFF5A6CE2),
-    mainFocused          = Color(0xFF8693EA),
+    mainDefault          = Color(0xFF1660F3),
+    mainFocused          = Color(0xFF5A8EF6),
     mainToggled          = Color(0xFF141729),
-    secondDefault        = Color(0xFF182686),
-    secondFocused        = Color(0xFF1D2FA5),
+    secondDefault        = Color(0xFF072E7E),
+    secondFocused        = Color(0xFF093DA6),
     secondToggled        = Color(0xFF1C1F36),
     textFocused          = Color.White,
     textUnfocused        = Color.White,

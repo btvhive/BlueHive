@@ -26,6 +26,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.C
+import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
@@ -34,12 +35,16 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.analytics.AnalyticsListener
 import androidx.media3.exoplayer.source.LoadEventInfo
 import androidx.media3.exoplayer.source.MediaLoadData
+import androidx.media3.exoplayer.source.MediaSource
+import androidx.media3.exoplayer.source.preload.DefaultPreloadManager
+import androidx.media3.exoplayer.source.preload.TargetPreloadStatusControl
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.bluehive.BlueHiveApplication
 import com.example.bluehive.BuildConfig
 import com.example.bluehive.IdleWatcher
 import com.example.bluehive.api.ApiClient
+import com.example.bluehive.api.LiveSessionResponse
 import com.example.bluehive.utilities.runCatchingCancellable
 import com.example.bluehive.webview.BeeLogo
 import com.example.bluehive.webview.exoplayer_resources.ExoPlayerConfig
@@ -61,7 +66,7 @@ import java.io.IOException
  * nothing here resumes, seeks, re-extracts or reports progress, and the film
  * player stays exactly as it was.
  *
- * Remote: Up/Down change channel (a run of presses settles for 600 ms and tunes
+ * Remote: Up/Down change channel (a run of presses settles for 300 ms and tunes
  * once), Click opens the channel list, Back leaves. Any key shows the banner.
  *
  * A channel that freezes without ExoPlayer raising an error (Comedy Central,
@@ -115,22 +120,144 @@ class LivePlayerActivity : ComponentActivity() {
     private val timelineWindow = Timeline.Window()
     /** When the current tune's media source was prepared; 0 once a picture shows. */
     private var preparedAt = 0L
+    /** When the press (or list pick) behind the current tune happened, for [mark]. */
+    private var markT0 = 0L
+
+    /**
+     * Test builds only (BLUEHIVE_LIVE_TEST=1): where a zap's time goes, at Log.e
+     * so the release-style build keeps it. `adb logcat -s LIVEZAP`.
+     */
+    private fun mark(what: String) {
+        if (!BuildConfig.LIVE_TEST) return
+        Log.e("LIVEZAP", "+${SystemClock.elapsedRealtime() - markT0} ms ${channels[shown].id}: $what")
+    }
+
+    // ── Neighbour preloading (2026-11-18) ─────────────────────────────────────
+    //
+    // MEASURED on .241 (Fire TV Stick 4K) with warm server links: a zap still took
+    // 1.8-2.5 s, all of it on the TV -- the session call, the playlist, and ~2 MB
+    // of first chunk before a picture. So while a channel plays, the ones above
+    // and below get their session and their first [PRELOAD_MS] loaded by a
+    // DefaultPreloadManager (no second decoder; the bytes sit in the player's
+    // allocator), and Up/Down onto one starts from memory.
+    //
+    // THE COST IS DATA, so it is bounded: a preload is good for
+    // [PRELOAD_FRESH_MS] (a live window is ~15 s); stale ones are redone only
+    // while the viewer is surfing (a zap in the last [SURF_WINDOW_MS]) and are
+    // dropped once they settle on a channel. Background drops everything.
+
+    /** A neighbour ready to play: its session, and the item the manager preloads. */
+    private class Spare(val session: LiveSessionResponse, val item: MediaItem, val at: Long)
+
+    private lateinit var preloads: DefaultPreloadManager
+    /** Channel index -> its preloaded start. */
+    private val spares = HashMap<Int, Spare>()
+    /** Channel id -> (session, when it was answered): a tune or a spare reuses it. */
+    private val sessionCache = HashMap<String, Pair<LiveSessionResponse, Long>>()
+    /** The indexes the manager should load; read on its thread. */
+    @Volatile private var preloadTargets: Set<Int> = emptySet()
+    /** The preloaded item the player is playing, released from the manager once replaced. */
+    private var inPlayer: MediaItem? = null
+    private var preloadJob: Job? = null
+    private var preloadSeq = 0
+    private var lastZapAt = 0L
+    /** +1 Down, -1 Up: a refresh keeps only the next channel that way fresh. */
+    private var lastZapDirection = 1
+
+    private val preloadTarget = TargetPreloadStatusControl<Int, DefaultPreloadManager.PreloadStatus> { index ->
+        if (index in preloadTargets) DefaultPreloadManager.PreloadStatus.specifiedRangeLoaded(PRELOAD_MS) else null
+    }
+
+    private fun neighbours(i: Int): List<Int> =
+        if (channels.size < 2) emptyList()
+        else listOf((i - 1).mod(channels.size), (i + 1).mod(channels.size)).distinct().filter { it != i }
+
+    private fun cachedSession(id: String): LiveSessionResponse? =
+        sessionCache[id]?.takeIf { SystemClock.elapsedRealtime() - it.second < SESSION_CACHE_MS }?.first
+
+    private fun freshSpare(index: Int): Spare? =
+        spares[index]?.takeIf { SystemClock.elapsedRealtime() - it.at <= PRELOAD_FRESH_MS }
+
+    private fun dropSpare(index: Int) {
+        spares.remove(index)?.let { preloads.remove(it.item) }
+    }
+
+    private fun dropAllSpares() {
+        preloadJob?.cancel()
+        spares.keys.toList().forEach(::dropSpare)
+        preloadTargets = emptySet()
+    }
+
+    /** After a picture: get the channels above and below [center] ready. */
+    private fun preloadNeighbours(center: Int, after: Long = PRELOAD_AFTER_PICTURE_MS, only: Int? = null) {
+        if (!PRELOAD_ON) return
+        preloadJob?.cancel()
+        preloadJob = lifecycleScope.launch {
+            delay(after)                        // the channel on screen fills its buffer first
+            val want = only?.let { listOf(it) } ?: neighbours(center)
+            spares.keys.filter { it !in want }.forEach(::dropSpare)
+            for (n in want) {
+                if (freshSpare(n) != null) continue
+                dropSpare(n)
+                val ch = channels[n]
+                val session = cachedSession(ch.id) ?: runCatchingCancellable {
+                    ApiClient.bluehiveApi.startLiveSession(ch.id)
+                }.getOrNull()?.let { r -> r.body()?.takeIf { r.isSuccessful } }
+                    ?.also { sessionCache[ch.id] = it to SystemClock.elapsedRealtime() }
+                    ?: continue                 // off air right now: tuned the slow way if chosen
+                val playlist = BuildConfig.API_BASE_URL.trimEnd('/') + session.playlist
+                val source = ExoPlayerConfig.hlsMediaSource(
+                    playlist, dataSourcesFor(session.headers, playlist), mediaId = "${ch.id}#${++preloadSeq}",
+                )
+                spares[n] = Spare(session, source.mediaItem, SystemClock.elapsedRealtime())
+                preloads.add(source, n)
+                mark("preloading ${ch.id}")
+            }
+            preloadTargets = spares.keys.toSet()
+            preloads.setCurrentPlayingIndex(center)
+            preloads.invalidate()
+        }
+    }
+
+    /** Once a second while playing: keep spares fresh while surfing, drop them once settled. */
+    private fun preloadTick() {
+        if (!PRELOAD_ON || phase != Phase.PLAYING || spares.isEmpty()) return
+        val now = SystemClock.elapsedRealtime()
+        if (spares.values.none { now - it.at > PRELOAD_FRESH_MS }) return
+        if (now - lastZapAt < SURF_WINDOW_MS) {
+            // Still surfing: keep the next channel the way they are going fresh
+            // (half the data of refreshing both); the other one is let go.
+            if (preloadJob?.isActive != true && channels.size > 1) {
+                preloadNeighbours(shown, after = 0L, only = (shown + lastZapDirection).mod(channels.size))
+            }
+        } else {
+            mark("settled: dropping preloads")
+            dropAllSpares()
+        }
+    }
 
     /**
      * Built per session: the headers come from the server's answer. zlive's own
      * player sends Origin/Referer, its transcode.cfd proxy refuses chunks without
      * them, and the other hosts (TikTok, our API) accept them.
      */
-    private fun dataSourcesFor(headers: Map<String, String>?) = ChunkUnwrapDataSource.Factory(
-        ExoPlayerConfig.dataSourceFactory(ExoPlayerConfig.CHROME_USER_AGENT, headers ?: SITE_HEADERS, context = this)
+    private fun dataSourcesFor(headers: Map<String, String>?, playlist: String) = ChunkUnwrapDataSource.Factory(
+        ExoPlayerConfig.dataSourceFactory(
+            ExoPlayerConfig.CHROME_USER_AGENT,
+            (headers ?: SITE_HEADERS) + LiveTvData.testHeaders(),
+            context = this,
+        ),
+        relay = ChunkUnwrapDataSource.relayFor(android.net.Uri.parse(playlist)),
     )
 
     private val listener = object : Player.Listener {
         override fun onRenderedFirstFrame() {
             if (phase != Phase.TUNING) return
+            mark("FIRST FRAME")
             phase = Phase.PLAYING
             preparedAt = 0L
             showBanner()
+            preloadNeighbours(shown)
         }
 
         override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -152,6 +279,29 @@ class LivePlayerActivity : ComponentActivity() {
         ) {
             Log.w(TAG, "live ${channels[shown].id}: load error from ${loadEventInfo.uri.host}: $error")
         }
+
+        override fun onLoadStarted(
+            eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo,
+            mediaLoadData: MediaLoadData, retryCount: Int,
+        ) {
+            if (phase == Phase.TUNING) mark("load start ${kindOf(mediaLoadData)} ${loadEventInfo.uri.host}")
+        }
+
+        override fun onLoadCompleted(
+            eventTime: AnalyticsListener.EventTime, loadEventInfo: LoadEventInfo,
+            mediaLoadData: MediaLoadData,
+        ) {
+            if (phase == Phase.TUNING) mark(
+                "load done ${kindOf(mediaLoadData)} ${loadEventInfo.uri.host} " +
+                    "${loadEventInfo.bytesLoaded / 1024} KB in ${loadEventInfo.loadDurationMs} ms"
+            )
+        }
+
+        private fun kindOf(d: MediaLoadData) = when (d.dataType) {
+            C.DATA_TYPE_MANIFEST -> "playlist"
+            C.DATA_TYPE_MEDIA -> "chunk"
+            else -> "type${d.dataType}"
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -163,13 +313,18 @@ class LivePlayerActivity : ComponentActivity() {
         }
         profileId = intent.getIntExtra(EXTRA_PROFILE, -1)
         listTitle = intent.getStringExtra(EXTRA_TITLE).orEmpty()
+        BlueHiveApplication.freeImageMemory("Live TV opened")
         shown = intent.getIntExtra(EXTRA_INDEX, 0).coerceIn(channels.indices)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         WindowInsetsControllerCompat(window, window.decorView).hide(WindowInsetsCompat.Type.systemBars())
         // The tuning screen's globe carries the bee; decoded once, before the first tune.
         BeeLogo.prime(this)
 
-        player = ExoPlayerConfig.buildPlayer(this).also {
+        val preloadBuilder = DefaultPreloadManager.Builder(this, preloadTarget)
+            .setRenderersFactory(ExoPlayerConfig.renderersFactory(this))
+            .setLoadControl(ExoPlayerConfig.loadControl(this))
+            .setTrackSelectorFactory { context -> ExoPlayerConfig.trackSelector(context) }
+        player = preloadBuilder.buildExoPlayer(ExoPlayerConfig.playerBuilder(this)).also {
             it.addListener(listener)
             it.addAnalyticsListener(loadErrors)
             // Local News streams list their captions as on by default (Amagi, Wurl;
@@ -178,6 +333,7 @@ class LivePlayerActivity : ComponentActivity() {
                 .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)
                 .build()
         }
+        preloads = preloadBuilder.build()
         ExoPlayerConfig.keepScreenOnWhilePlaying(this, player)
         setContent { PlayerScreen() }
         tune(shown)
@@ -187,6 +343,7 @@ class LivePlayerActivity : ComponentActivity() {
                     delay(1_000)
                     stillWatchingTick()
                     stallTick()
+                    preloadTick()
                 }
             }
         }
@@ -229,6 +386,9 @@ class LivePlayerActivity : ComponentActivity() {
         zapJob?.cancel()
         tuneJob?.cancel()
         shown = index
+        // A tune not started by Up/Down (a list pick, a retry) counts from here.
+        if (SystemClock.elapsedRealtime() - markT0 > ZAP_SETTLE_MS + 200) markT0 = SystemClock.elapsedRealtime()
+        mark("tune")
         phase = Phase.TUNING
         tuneStage = 1
         preparedAt = 0L
@@ -236,28 +396,57 @@ class LivePlayerActivity : ComponentActivity() {
         bannerVisible = false
         player.stop()
         val channel = channels[index]
+        // A retry (afterDrop) asks the server afresh: the stored session or the
+        // preloaded start may be what just failed.
+        val spare = if (afterDrop) null else freshSpare(index)
+        val spareSource = spare?.let { preloads.getMediaSource(it.item) }
+        spares.remove(index)
+        if (spareSource == null) spare?.let { preloads.remove(it.item) }
+        if (afterDrop) sessionCache.remove(channel.id)
+        // Any tune the viewer made (a zap, a list pick, the first channel) starts the
+        // surf window: without it the first channel's spares went stale unused.
+        if (!afterDrop) lastZapAt = SystemClock.elapsedRealtime()
         tuneJob = lifecycleScope.launch {
-            val response = runCatchingCancellable { ApiClient.bluehiveApi.startLiveSession(channel.id) }.getOrNull()
-            val session = response?.body()?.takeIf { response.isSuccessful }
-            if (session == null) {
-                Log.e(TAG, "live ${channel.id}: no session (HTTP ${response?.code() ?: "unreachable"})")
-                offAir()
-                return@launch
-            }
+            val session = spare?.takeIf { spareSource != null }?.session
+                ?: (if (afterDrop) null else cachedSession(channel.id))
+                ?: run {
+                    // The neighbours Up/Down would tune next, warmed by the server meanwhile.
+                    val warm = neighbours(index).joinToString(",") { channels[it].id }.ifEmpty { null }
+                    mark("session sent")
+                    val response = runCatchingCancellable {
+                        ApiClient.bluehiveApi.startLiveSession(channel.id, warm)
+                    }.getOrNull()
+                    mark("session back HTTP ${response?.code()}")
+                    val answer = response?.body()?.takeIf { response.isSuccessful }
+                    if (answer == null) {
+                        Log.e(TAG, "live ${channel.id}: no session (HTTP ${response?.code() ?: "unreachable"})")
+                        offAir()
+                        return@launch
+                    }
+                    sessionCache[channel.id] = answer to SystemClock.elapsedRealtime()
+                    answer
+                }
             tuned = index
             tuneStage = 2
             when {
                 session.backup && afterDrop -> showNotice("${channel.name} dropped, switched to the backup feed")
                 session.backup -> showNotice("${channel.name}'s main feed is down, playing the backup feed")
             }
+            val playlist = BuildConfig.API_BASE_URL.trimEnd('/') + session.playlist
             player.setMediaSource(
-                ExoPlayerConfig.hlsMediaSource(
-                    BuildConfig.API_BASE_URL.trimEnd('/') + session.playlist, dataSourcesFor(session.headers)
-                )
+                spareSource ?: ExoPlayerConfig.hlsMediaSource(playlist, dataSourcesFor(session.headers, playlist))
+            )
+            // The preloaded source the player just let go of leaves the manager too.
+            inPlayer?.let { preloads.remove(it) }
+            inPlayer = spare?.item?.takeIf { spareSource != null }
+            mark(
+                if (spareSource != null) "source set: PRELOADED (${SystemClock.elapsedRealtime() - (spare?.at ?: 0L)} ms old)"
+                else "source set"
             )
             player.prepare()
             player.playWhenReady = true
             preparedAt = SystemClock.elapsedRealtime()
+            mark("prepared")
             LiveTvData.noteWatched(this@LivePlayerActivity, profileId, channel.id)
         }
     }
@@ -269,12 +458,16 @@ class LivePlayerActivity : ComponentActivity() {
         tuneJob?.cancel()
         player.stop()
         shown = (shown + delta).mod(channels.size)
+        markT0 = SystemClock.elapsedRealtime()
+        mark("press")
         phase = Phase.TUNING
         tuneStage = 1
         preparedAt = 0L
         zapJob?.cancel()
+        lastZapAt = SystemClock.elapsedRealtime()
+        lastZapDirection = if (delta < 0) -1 else 1
         zapJob = lifecycleScope.launch {
-            delay(ZAP_SETTLE_MS)
+            delay(if (freshSpare(shown) != null) PRELOADED_SETTLE_MS else ZAP_SETTLE_MS)
             tune(shown)
         }
     }
@@ -494,6 +687,7 @@ class LivePlayerActivity : ComponentActivity() {
             zapJob?.cancel()
             tuneJob?.cancel()
             player.stop()
+            dropAllSpares()
         }
     }
 
@@ -501,6 +695,7 @@ class LivePlayerActivity : ComponentActivity() {
         super.onDestroy()
         IdleWatcher.setPlaying(IdleWatcher.SOURCE_LIVE, false)
         if (::player.isInitialized) player.release()
+        if (::preloads.isInitialized) preloads.release()
     }
 
     companion object {
@@ -520,7 +715,35 @@ class LivePlayerActivity : ComponentActivity() {
 
         private const val BANNER_MS = 4_000L
         private const val NOTICE_MS = 5_000L
-        private const val ZAP_SETTLE_MS = 600L
+        /** Up/Down presses closer than this are one zap (was 600 ms until 2026-11-18). */
+        private const val ZAP_SETTLE_MS = 300L
+        /** Onto a preloaded channel the tune costs little, so a run of presses settles sooner. */
+        private const val PRELOADED_SETTLE_MS = 150L
+
+        /** Neighbour preloading on/off (2026-11-18). */
+        private const val PRELOAD_ON = true
+        /**
+         * How much of a neighbour is loaded. HLS loads whole chunks, so 1 s is the
+         * chunk the start falls in (zlive: ~3.8 s, ~2 MB). 4 s often spanned two:
+         * 59 MB in 47 s of surfing on .241 (2026-11-18).
+         */
+        private const val PRELOAD_MS = 1_000L
+        /** After a channel's picture, before its neighbours start loading. */
+        private const val PRELOAD_AFTER_PICTURE_MS = 1_500L
+        /**
+         * A preloaded start older than this is not used. MEASURED on .241: 3-8 s
+         * old started in 0.6-1.0 s; 11-13 s old in 1.0-2.4 s (its chunk had left
+         * the ~15 s live window, so it was fetched again).
+         */
+        private const val PRELOAD_FRESH_MS = 8_000L
+        /**
+         * Stale preloads are redone only this long after the last tune; then dropped.
+         * 30 s cost 13 MB of refreshes per settled channel on .241 (2026-11-18); 16 s
+         * allows one refresh, covering a 16 s look at a channel before moving on.
+         */
+        private const val SURF_WINDOW_MS = 16_000L
+        /** A session answer reused by a tune (its grant lasts 6 h; the link is the server's to keep). */
+        private const val SESSION_CACHE_MS = 5 * 60_000L
         private const val RECOVERY_WINDOW_MS = 60_000L
         private const val MAX_RECOVERIES = 2
         /** A tune with no picture this long after its source was prepared is retried. */

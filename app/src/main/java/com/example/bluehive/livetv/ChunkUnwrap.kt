@@ -21,6 +21,11 @@ import java.util.zip.Inflater
 //  MEASURED 2026-11-01, a third, on a new host (enterprise.content.tenovos.io),
 //  which took most channels off air until it was handled: a PNG whose IDAT
 //  holds the MPEG-TS UNCOMPRESSED (IHDR width = the payload size, height 1).
+//  MEASURED 2026-11-18, a fourth (zlive's links since about 2026-11-12, which
+//  took ~200 channels off air): a 673x673 RGB PNG whose pixels are b"KWP1" +
+//  u32 big-endian size + the MPEG-TS itself, no gzip. Same decode as TIKTIKPX.
+//  An image in a wrapping not listed here comes back as [Kind.UNREADABLE_IMAGE],
+//  and ChunkUnwrapDataSource fetches that chunk through the server's relay.
 //  ExoPlayer can parse none of them, so [unwrapping] turns each back into plain
 //  MPEG-TS and passes everything else (the playlist itself, plain TS) through
 //  untouched. Pure JVM code on streams, no Android types, so the unit tests
@@ -29,7 +34,7 @@ import java.util.zip.Inflater
 
 internal object ChunkUnwrap {
 
-    enum class Kind { WEBP, PIXEL_PNG, RAW_PNG, PASSTHROUGH }
+    enum class Kind { WEBP, PIXEL_PNG, RAW_PNG, PASSTHROUGH, UNREADABLE_IMAGE }
 
     class Unwrapped(val kind: Kind, val stream: InputStream)
 
@@ -38,6 +43,9 @@ internal object ChunkUnwrap {
 
     /** The tag at the start of a pixel-packed PNG's data. */
     private val PIXEL_TAG = "TIKTIKPX".toByteArray(Charsets.ISO_8859_1)
+
+    /** zlive's 2026-11-18 tag: the MPEG-TS follows the size uncompressed. */
+    private val KWP_TAG = "KWP1".toByteArray(Charsets.ISO_8859_1)
 
     /** A wrapped chunk is a few MB; a PNG claiming more than this is not one. */
     private const val MAX_PIXEL_BYTES = 64 * 1024 * 1024
@@ -52,13 +60,18 @@ internal object ChunkUnwrap {
         val head = readUpTo(pb, 12)
         pb.unread(head)
         return when {
-            isWebp(head) -> Unwrapped(Kind.WEBP, webpPayload(pb))
+            isWebp(head) -> try {
+                Unwrapped(Kind.WEBP, webpPayload(pb))
+            } catch (e: EOFException) {
+                Unwrapped(Kind.UNREADABLE_IMAGE, ByteArrayInputStream(ByteArray(0)))
+            }
             isPng(head) -> {
                 val bytes = pb.readBytes()
                 rawTsInPng(bytes)?.let { Unwrapped(Kind.RAW_PNG, it) }
                     ?: decodePixelPng(bytes)?.let { Unwrapped(Kind.PIXEL_PNG, ByteArrayInputStream(it)) }
-                    ?: Unwrapped(Kind.PASSTHROUGH, ByteArrayInputStream(bytes))
+                    ?: Unwrapped(Kind.UNREADABLE_IMAGE, ByteArrayInputStream(bytes))
             }
+            isOtherImage(head) -> Unwrapped(Kind.UNREADABLE_IMAGE, pb)
             else -> Unwrapped(Kind.PASSTHROUGH, pb)
         }
     }
@@ -68,6 +81,14 @@ internal object ChunkUnwrap {
             b[2] == 'F'.code.toByte() && b[3] == 'F'.code.toByte() &&
             b[8] == 'W'.code.toByte() && b[9] == 'E'.code.toByte() &&
             b[10] == 'B'.code.toByte() && b[11] == 'P'.code.toByte()
+
+    /** JPEG, GIF, AVIF/HEIF: pictures no Live TV wrapping has used so far. */
+    fun isOtherImage(b: ByteArray): Boolean =
+        (b.size >= 3 && (b[0].toInt() and 0xff) == 0xff && (b[1].toInt() and 0xff) == 0xd8 &&
+            (b[2].toInt() and 0xff) == 0xff) ||
+            (b.size >= 4 && String(b, 0, 4, Charsets.ISO_8859_1) == "GIF8") ||
+            (b.size >= 12 && String(b, 4, 4, Charsets.ISO_8859_1) == "ftyp" &&
+                String(b, 8, 4, Charsets.ISO_8859_1).let { it == "avif" || it == "heic" || it == "mif1" })
 
     fun isPng(b: ByteArray): Boolean =
         b.size >= 8 && (b[0].toInt() and 0xff) == 0x89 && b[1] == 'P'.code.toByte() &&
@@ -164,6 +185,11 @@ internal object ChunkUnwrap {
         if (rawSize > MAX_PIXEL_BYTES) return null
         val raw = inflate(idat.toByteArray(), rawSize.toInt()) ?: return null
         val px = unfilter(raw, stride.toInt(), height, bpp) ?: return null
+        if (px.size >= 8 && KWP_TAG.indices.all { px[it] == KWP_TAG[it] }) {
+            val size = beInt(px, 4)
+            if (size <= 0 || 8L + size > px.size) return null
+            return px.copyOfRange(8, 8 + size)
+        }
         if (px.size < 12 || !PIXEL_TAG.indices.all { px[it] == PIXEL_TAG[it] }) return null
         val size = beInt(px, 8)
         if (size <= 0 || 12L + size > px.size) return null

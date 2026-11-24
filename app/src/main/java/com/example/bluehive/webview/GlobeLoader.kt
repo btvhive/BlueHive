@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -85,6 +86,13 @@ internal fun GlobeLoader(bee: ImageBitmap?) {
         modifier = Modifier
             // Larger than the 200 dp slot it sits in, so the halo rings are not cut.
             .requiredSize(GLOBE_RADIUS * 2 + 80.dp)
+            // ITS OWN LAYER (2026-11-19): a draw-phase read invalidates the
+            // nearest layer, and without one that was the whole movie loader --
+            // its full-screen honeycomb was rebuilt and the page behind it
+            // re-recorded on every frame of the turn. The Fire TV Stick 4K
+            // (AFTMM) stuttered on the movie loader but not on Live TV, whose
+            // tuning screen already wrapped the globe in a layer.
+            .graphicsLayer()
             .drawWithCache {
                 val c = Offset(size.width / 2f, size.height / 2f)
                 val r = GLOBE_RADIUS.toPx()

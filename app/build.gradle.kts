@@ -163,6 +163,12 @@ android {
         versionCode = appVersionCode
         versionName = appVersionName
         buildConfigField("String", "BUILD_DATE", "\"$appBuildDate\"")
+        // TEST ONLY: -PBLUEHIVE_LIVE_TEST=1 sends Live TV to the test Live TV
+        // server (X-Live-Test header). Never set for a build that is published.
+        buildConfigField(
+            "boolean", "LIVE_TEST",
+            (project.findProperty("BLUEHIVE_LIVE_TEST")?.toString() == "1").toString(),
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

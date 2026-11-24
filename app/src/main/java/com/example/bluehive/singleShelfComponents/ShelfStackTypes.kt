@@ -17,6 +17,12 @@ enum class MediaType {
  * Shared across all media types
  */
 enum class ContentShelf {
+    // The shelf order on the Movies and TV Shows tabs is this enum's order
+    // (2026-11-21): New Releases first (NewContent.kt), then Fresh Picks
+    // (FreshPicks.kt), then What's Popular -- which now mixes in Top Rated one
+    // and one, so TOP_RATED is no longer a row of its own there (ShelfStack).
+    NEW_RELEASES,
+    FRESH_PICKS,
     POPULAR,
     TOP_RATED,
     NETFLIX,

@@ -178,34 +178,53 @@ internal class LiveTvPageState {
     fun shown(row: LiveTvData.Row): LiveTvData.Row =
         if (row.name != LiveGames.ROW || sport == null) row else row.copy(channels = LiveGames.shown(row.channels, sport))
 
+    /**
+     * A page opened again in the same app run shows the last list at once
+     * (LiveTvData.cached) and swaps in the fresh one quietly, cursor kept: no
+     * "Loading channels…" while the network is slow (2026-11-19: one return took
+     * 22 s on a stalled connection).
+     */
     suspend fun load(context: Context, profileId: Int, keepPlace: Boolean) {
-        val keepRow = rows?.getOrNull(selectedRow)?.name
-        runCatchingCancellable { LiveTvData.load(context, profileId) }
-            .onSuccess { fresh ->
-                rows = fresh
-                localState = LiveTvData.localState(context)
-                failed = false
-                // A fresh start is All; so is a sport whose games have all ended.
-                val games = fresh.firstOrNull { it.name == LiveGames.ROW }?.channels.orEmpty()
-                if (!keepPlace || LiveGames.shown(games, sport).isEmpty()) sport = null
-                if (fresh.isEmpty()) return@onSuccess
-                val row = if (keepPlace) fresh.indexOfFirst { it.name == keepRow }.takeIf { it >= 0 } ?: 0 else 0
-                val channels = shown(fresh[row]).channels
-                val watched = channels.indexOfFirst { it.id == LiveTvData.lastWatchedId }
-                selectedRow = row
-                focused = when {
-                    keepPlace && watched >= 0 -> watched
-                    keepPlace -> focused.coerceIn(0, channels.lastIndex.coerceAtLeast(0))
-                    else -> 0
-                }
-                if (!keepPlace) {
-                    onBar = false
-                    onPill = false
-                    onPills = false
-                }
-                search.reconcile()
+        var quiet = false
+        if (rows == null) {
+            LiveTvData.cached(context, profileId)?.let {
+                show(context, it, keepPlace, quiet = false)
+                quiet = true
             }
+        }
+        runCatchingCancellable { LiveTvData.load(context, profileId) }
+            .onSuccess { fresh -> show(context, fresh, keepPlace, quiet) }
             .onFailure { if (rows == null) failed = true }
+    }
+
+    /** [quiet]: the page already shows a list; the fresh one keeps the row and the channel under the cursor. */
+    private fun show(context: Context, fresh: List<LiveTvData.Row>, keepPlace: Boolean, quiet: Boolean) {
+        val keepRow = rows?.getOrNull(selectedRow)?.name
+        val keepId = rows?.getOrNull(selectedRow)?.let { shown(it).channels.getOrNull(focused)?.id }
+        val keep = keepPlace || quiet
+        rows = fresh
+        localState = LiveTvData.localState(context)
+        failed = false
+        // A fresh start is All; so is a sport whose games have all ended.
+        val games = fresh.firstOrNull { it.name == LiveGames.ROW }?.channels.orEmpty()
+        if (!keep || LiveGames.shown(games, sport).isEmpty()) sport = null
+        if (fresh.isEmpty()) return
+        val row = if (keep) fresh.indexOfFirst { it.name == keepRow }.takeIf { it >= 0 } ?: 0 else 0
+        val channels = shown(fresh[row]).channels
+        val target = if (quiet) keepId else LiveTvData.lastWatchedId
+        val at = channels.indexOfFirst { it.id == target }
+        selectedRow = row
+        focused = when {
+            keep && at >= 0 -> at
+            keep -> focused.coerceIn(0, channels.lastIndex.coerceAtLeast(0))
+            else -> 0
+        }
+        if (!keep) {
+            onBar = false
+            onPill = false
+            onPills = false
+        }
+        search.reconcile()
     }
 
     /**

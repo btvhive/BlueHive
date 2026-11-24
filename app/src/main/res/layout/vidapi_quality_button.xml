@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The website player's Quality pill: design #2 of the owner's ten
+    (docs/mockups/quality-button, 2026-11-20): the sliders icon and
+    "Quality: 4K", the level playing now.
+
+    A TWIN OF vidapi_subtitles_button.xml on purpose: same height, padding,
+    pill background with the blue focus ring, text colour, size and weight. It
+    sits immediately to the LEFT of Subtitles (HlsPlayerActivity places it
+    there when the Subtitles pill is injected), so the two read as a pair.
+
+    The bare sliders icon it replaces (player_controls.xml quality_button)
+    stays for the anime player, which still owns that one.
+-->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/quality_pill"
+    android:layout_width="wrap_content"
+    android:layout_height="40dp"
+    android:layout_gravity="center_vertical"
+    android:layout_marginEnd="10dp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:background="@drawable/player_pill_bg"
+    android:textColor="#FFDBE4F6"
+    android:textSize="14sp"
+    android:fontFamily="sans-serif-medium"
+    android:includeFontPadding="false"
+    android:gravity="center"
+    android:drawableStart="@drawable/ic_player_quality"
+    android:drawablePadding="9dp"
+    android:maxLines="1"
+    android:ellipsize="end"
+    android:maxWidth="220dp"
+    android:focusable="true"
+    android:clickable="true"
+    android:visibility="gone"
+    android:text="Quality" />

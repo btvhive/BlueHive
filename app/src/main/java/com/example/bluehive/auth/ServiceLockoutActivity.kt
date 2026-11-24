@@ -129,6 +129,8 @@ class ServiceLockoutActivity : ComponentActivity() {
                     // than AuthActivity: the session was never cleared, so there
                     // is nothing to sign in to.
                     DeviceEventStream.startAfterUserReturn()
+                    // The lock's report (CrashReporter.noteLockout) can go up now.
+                    com.example.bluehive.diagnostics.CrashReporter.flushPendingAsync(this)
                     startActivity(
                         Intent(this, ProfileScreenActivity::class.java)
                             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
